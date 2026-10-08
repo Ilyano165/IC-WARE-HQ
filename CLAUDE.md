@@ -117,6 +117,23 @@ docs/          Architektur, Setup, Konfiguration, Migrationen, Tests, ADRs
 - **TOTP-Wiederverwendungsschutz:** Nach Einrichtung (Schritt t) und Login (t+1) gibt es im selben
   30-s-Fenster keinen weiteren gültigen Code. In Tests Zeit simulieren, nicht den Schutz abschwächen.
 
+## Steuerfunktionen — nicht verhandelbar
+
+Quelle: `docs/produktvision-v2.md`, Abschnitt 2 (Entwurf; diese Regeln verschärfen nur und gelten deshalb sofort).
+
+1. **Kein Steuerwert ohne amtliche Quelle.** Beträge, Sätze, Grenzen, Fristen nur als versionierte Daten mit
+   Gültigkeit von–bis, Fundstelle und Prüfdatum — nie als Konstante im Code. Ohne bestätigte Fundstelle:
+   „nicht amtlich bestätigt" anzeigen, nicht rechnen. Stand der Prüfung: `docs/steuerwerte-pruefung.md`.
+2. **Unveränderbarkeit mit sichtbarer Historie.** Steuerrelevantes nie überschreiben oder löschen; Korrektur =
+   neue Version mit wer/wann/vorher/warum; nach Festschreibung nur Korrekturbuchungen (GoBD Rz. 58).
+   **Fahrtenbuch:** Korrekturen sichtbar **in der Fahrt selbst**, kein separates Protokoll
+   (FG Düsseldorf 24.11.2023, 3 K 1887/22 H(L)); Erfassungszeitpunkt neben Fahrtzeitpunkt zeigen.
+3. **Vorschlag, nicht Entscheidung.** Keine Aussage „steuerlich korrekt"/„GoBD-konform" ohne externe Prüfung.
+4. **Belegprinzip.** Kein steuerrelevanter Eintrag ohne Nachweis; fehlende Nachweise sind sichtbarer Zustand.
+5. **Export statt Insel.** Vollständiger, protokollierter Export für den Steuerberater (Ziel DATEV).
+
+Keine Steuerfunktion geht vor **Tor S** an Kunden (Vision Abschnitt 5).
+
 ## Regeln der Core-Plattform (C0)
 
 - **Fachobjekte nur über `objects`** (ADR-008): erst `create_object`, dann Fachzeile mit

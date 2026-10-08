@@ -79,6 +79,23 @@ Geändert: Plattform-Admins haben in Firmendaten **keinen** Generalschlüssel.
 
 Ein Tor ist erst passiert, wenn sein Kriterium im CI-Protokoll oder in einem Restore-Bericht belegt ist.
 
+### Roadmap-Ergänzung aus Produktvision v2 (Entwurf, ADR-007 vorgeschlagen)
+
+Die Architekturentscheidungen oben bleiben unverändert. Die Vision (`docs/produktvision-v2.md`, Abschnitt 5,
+**unbestätigter Entwurf**) ordnet die Umsetzung neu:
+
+| Schritt | Inhalt |
+| --- | --- |
+| Tor 1 / M3 | wie oben — vor allem anderen |
+| C0 | Core-Plattform (bereits gebaut, ADR-010) |
+| M4 | Rollen & Rechte, Rollenvorlagen |
+| U1 | = M5 UI-Shell (ADR-004 vorher entscheiden) |
+| D0 | Dashboard je Rolle |
+| S1–S8 | Belegeingang, Fahrtenbuch, Reisekosten, Bewirtung, Rechnungen/E-Rechnung, Zahlungen, Steuerberater-Export, Steuertermine |
+| **Tor S** | Steuerfunktionen erst nach: Werte im Volltext amtlich geprüft, Unveränderbarkeit per Test + Mutation bewiesen, Verfahrensdokumentation (Entwurf), fachliche Durchsicht durch Steuerberater, erprobter Export, keine Rechtssicherheits-Versprechen |
+
+M6, M8, M9, M11, M13 werden nur im Umfang gebaut, den S1–S8 brauchen (Vorschlag ADR-007).
+
 ## Größte Risiken
 
 Umfang vs. zwei Personen (verkaufbare Teilmenge zuerst: M1–M8 + M12 + M17–M19) · Mandantenleck
@@ -87,7 +104,7 @@ Einmallizenz → Abo · Wettbewerb gegen Generalisten (Nische schärfen) · AVV 
 
 ## Offene Fragen (Stand M2)
 
-- [ ] Zielgruppe der ersten verkaufbaren Version
+- [ ] Zielgruppe der ersten verkaufbaren Version — Vorschlag: Back-Office kleiner Firmen in DE (ADR-007, unbestätigt)
 - [ ] Lokale Edition behalten?
 - [x] Backend-Rahmen → FastAPI (ADR-003)
 - [ ] Frontend: HTMX oder React (ADR-004, vor M5)
