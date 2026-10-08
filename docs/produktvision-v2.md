@@ -196,6 +196,7 @@ Tor 1. Die M0-Meilensteine bleiben gültig; diese Tabelle ordnet sie neu, wo die
 - [ ] DATEV-Export: Format/Schnittstelle und ob eine DATEV-Partnerschaft nötig ist.
 - [ ] Zeiterfassung (D0 nennt „eigene Zeiterfassung"): Teil von HQ oder Integration? Arbeitszeiterfassung hat
       eigene arbeitsrechtliche Anforderungen — **nicht geprüft**.
+- [ ] Datenschutzkonzept bestätigen (`docs/datenschutzkonzept.md`, Entwurf) — Voraussetzung für das CRM.
 - [ ] Sind Kommentare/Rückfragen GoBD-relevant (Handels-/Geschäftsbriefe, § 147 Abs. 1 AO)? Siehe
       `docs/core-activity-model.md` — fachlich ungeklärt.
 - [ ] Bankanbindung für S6 (FinTS/PSD2-Anbieter) und deren AVV.
