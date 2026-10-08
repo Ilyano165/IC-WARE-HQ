@@ -75,3 +75,6 @@ Gefunden durch die Mutationen in dieser Runde: Der Test für den Passwort-Anglei
 fehlte — sein Aufräumen (`DROP DATABASE` mit weiteren Befehlen in einem `-c`, also in einer Transaktion) scheiterte
 still, und Rollen aus früheren Läufen trugen schon das „richtige" Passwort. Aufräumen jetzt vorher und nachher, mit
 geprüftem Exitcode.
+Zweiter Fund: „Worker sieht fremde Firmen" blieb zunächst unbemerkt — die Isolationsprüfung joinete `documents` mit
+`objects`, und die (intakte) `objects`-Policy verdeckte die offene `documents`-Policy. Jetzt wird jede Tabelle einzeln
+geprüft.

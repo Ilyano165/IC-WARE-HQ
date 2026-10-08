@@ -183,6 +183,7 @@ def test_db_erlaubt_nur_uebergang_aus_der_quarantaene(rw: RbacWorld, clamd: Fake
     with pytest.raises(exc.ProgrammingError), tenant_transaction(rw.engines.app, rw.a) as s:     # Web-App gar nicht
         s.execute(text("UPDATE documents SET scan_status = 'clean'"))
     assert _status(rw, neu_ref) == "quarantined"
-    with tenant_transaction(rw.engines.worker, rw.b) as s:                                      # fremde Firma: nichts
-        assert s.execute(text("SELECT count(*) FROM documents d JOIN objects o ON o.id = d.id "
-                              "WHERE o.public_id = :p"), {"p": neu_ref}).scalar() == 0
+    with tenant_transaction(rw.engines.worker, rw.b) as s:          # fremde Firma: jede Tabelle einzeln leer
+        for tabelle in ("documents", "objects", "audit_events"):
+            assert s.execute(text(f"SELECT count(*) FROM {tabelle} WHERE tenant_id = :a"), {"a": rw.a}).scalar() == 0
+        assert s.execute(text("UPDATE documents SET scan_status = 'clean' WHERE tenant_id = :a"), {"a": rw.a}).rowcount == 0
