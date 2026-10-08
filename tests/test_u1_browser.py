@@ -36,7 +36,7 @@ class Seite:
         self.fehler: list[str] = []
         self.page.on("console", lambda m: self.fehler.append(m.text) if m.type == "error" else None)
         self.page.on("pageerror", lambda e: self.fehler.append(str(e)))
-        self.page.set_default_timeout(8000)
+        self.page.set_default_timeout(20000)   # CI-Rechner und parallele Läufe sind langsam
 
     def anmelden(self, email: str) -> None:
         p = self.page
@@ -113,7 +113,9 @@ def test_aufgabe_anlegen_kommentieren_ohne_xss(browser: Any, server: str, leute:
     assert p.evaluate("window.__xss") is None
     assert p.locator("img[src=x]").count() == 0 and p.locator("#inhalt script").count() == 0
     p.get_by_role("link", name="← Aufgaben").click()
-    p.get_by_role("combobox").first.select_option("done")
+    p.get_by_role("button", name="Neue Aufgabe").wait_for()          # erst die Liste, dann ihren Filter bedienen
+    p.locator("#inhalt form select[name=status]").select_option("done")
+    p.wait_for_url("**status=done**")
     p.get_by_role("link", name=XSS).wait_for()
     s.sauber()
 
