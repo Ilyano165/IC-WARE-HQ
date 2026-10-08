@@ -85,11 +85,15 @@ def _id(engines: Engines, public_id: str) -> object:
 
 def test_zustellung_prueft_mitgliedschaft_und_art(cw: CoreWorld, engines: Engines) -> None:
     t = cw.raw_object(cw.a, "task", "x", by=cw.admin_a)
+    leo = cw._mitglied(cw.a, "leo@alpha.test", "Leo Leser", ["tasks.read", "objects.read_all", "comments.read"])
     db(engines, "UPDATE memberships SET status = 'suspended' WHERE id = %s", (cw.leser,))
     with tenant_transaction(engines.app, cw.a) as s:
         obj = by_id(s, _id(engines, t))
         assert deliver(s, cw.leser, "task.assigned", title="x", obj=obj) is False        # gesperrt
         assert deliver(s, cw.ohne, "task.assigned", title="x", obj=obj) is False         # kein tasks.read
+        # Leser SIEHT das Objekt (tasks.read + read_all), hat aber nicht das Recht der Art (files.update)
+        assert deliver(s, leo, "document.review_pending", title="x", obj=obj) is False
+        assert deliver(s, cw.ohne, "comment.mention", title="ohne Objekt") is False      # kein comments.read
         assert deliver(s, cw.admin_b, "task.assigned", title="x", obj=obj) is False      # fremde Firma
         assert deliver(s, cw.admin_a, "task.assigned", title="x", obj=obj, dedup_key="k") is True
         assert deliver(s, cw.admin_a, "task.assigned", title="x", obj=obj, dedup_key="k") is False

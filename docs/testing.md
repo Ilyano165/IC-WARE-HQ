@@ -41,7 +41,7 @@ diese Passwörter!) und je Lauf eine frische Datenbank. Nur gegen einen eigenen 
 scripts/mutation-check.sh
 ```
 
-Baut 19 gezielte Sicherheitslücken ein (z. B. RLS ohne Schreibschutz, Mandant pro Sitzung statt pro
+Baut 66 gezielte Sicherheitslücken ein (M1: 19, M2: 26, C0: 21) (z. B. RLS ohne Schreibschutz, Mandant pro Sitzung statt pro
 Transaktion, Stacktrace an den Client, Routenprüfung nur auf oberster Ebene) und prüft, ob die Tests
 rot werden. Meldet auch Mutationen, die gar nicht angewendet werden konnten — ein Prüfskript, das
 nichts prüft, darf nicht grün sein.

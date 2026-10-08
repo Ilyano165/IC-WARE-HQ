@@ -133,6 +133,11 @@ def test_loeschen_fremder_kommentare_nur_moderator(cw: CoreWorld) -> None:
     k = ok(cw.client(cw.mitarbeiter).post(f"/api/v1/objects/{t['id']}/comments", json={"body": "Hallo"}), 201)
     for mid in (cw.leser, cw.stb):       # leser: kein comments.create; stb: sieht die Aufgabe nicht
         assert cw.client(mid).delete(f"/api/v1/comments/{k['id']}").status_code in (403, 404)
+    # admin_a schreibt; mitarbeiter sieht das Objekt und hat comments.create, aber kein comments.moderate
+    k2 = ok(cw.client(cw.admin_a).post(f"/api/v1/objects/{t['id']}/comments", json={"body": "Vom Chef"}), 201)
+    r = cw.client(cw.mitarbeiter).delete(f"/api/v1/comments/{k2['id']}")
+    assert r.status_code == 403 and "Moderatoren" in r.json()["detail"]
+    assert ok(cw.client(cw.admin_a).get(f"/api/v1/objects/{t['id']}/comments"))["items"][1]["deleted"] is False
     ok(cw.client(cw.admin_a).delete(f"/api/v1/comments/{k['id']}"), 204)   # admin hat comments.moderate
 
 

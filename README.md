@@ -25,7 +25,7 @@ in [docs/architecture.md](docs/architecture.md#abweichungen-vom-m0-bericht).
 - Core-Plattform (C0): globales Objektmodell mit typisierten Verknüpfungen und Freigaben, Aufgaben,
   Kommentare mit Erwähnungen, Dokumente (Quarantäne), Aktivitätsverlauf getrennt vom Audit, Benachrichtigungen
   mit Rechteprüfung beim Zustellen, globale Suche, Audit-Export — siehe `docs/core-*.md`
-- 321 Tests gegen echtes PostgreSQL (inkl. IDOR-Generator und E2E mit echtem Server), 67 Mutationstests,
+- 321 Tests gegen echtes PostgreSQL (inkl. IDOR-Generator und E2E mit echtem Server), 66 Mutationstests,
   Docker/Compose/Caddy, CI
 
 ## Schnellstart (Entwicklung)
