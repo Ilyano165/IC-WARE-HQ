@@ -1,0 +1,11 @@
+[Unit]
+Description=IC WARE HQ: Anmeldedaten täglich aufräumen
+
+[Timer]
+OnCalendar=*-*-* 03:37:00 Europe/Berlin
+Persistent=true
+RandomizedDelaySec=10min
+Unit=ichq-auth-cleanup.service
+
+[Install]
+WantedBy=timers.target

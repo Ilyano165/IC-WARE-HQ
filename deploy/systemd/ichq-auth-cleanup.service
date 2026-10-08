@@ -1,0 +1,15 @@
+# IC WARE HQ — Anmeldedaten aufräumen (alte Versuche, Sitzungen, Reset-Tokens, benutzte Recovery-Codes).
+# auth_events bleiben. Gestartet von ichq-auth-cleanup.timer. Idempotent.
+[Unit]
+Description=IC WARE HQ: Anmeldedaten aufräumen
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ic-ware-hq/deploy
+ExecStart=/usr/bin/docker compose exec -T app ichq auth-cleanup --days 30
+TimeoutStartSec=15min
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true

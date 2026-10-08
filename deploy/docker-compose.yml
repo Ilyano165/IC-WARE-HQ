@@ -1,0 +1,145 @@
+# Einzelserver-Betrieb (M0, Abschnitt 29). Vorher: deploy/generate-secrets.sh ausführen.
+#   docker compose -f deploy/docker-compose.yml up -d
+name: ichq
+
+x-app-env: &app-env
+  ICHQ_ENV: production
+  ICHQ_DATABASE_URL_FILE: /run/secrets/database_url
+  ICHQ_PLATFORM_DATABASE_URL_FILE: /run/secrets/platform_database_url
+  ICHQ_WORKER_DATABASE_URL_FILE: /run/secrets/worker_database_url
+  ICHQ_AUTH_DATABASE_URL_FILE: /run/secrets/auth_database_url
+  ICHQ_PUBLIC_ORIGIN: https://${ICHQ_DOMAIN:-localhost}
+  ICHQ_TRUSTED_PROXIES: "*"   # nur Caddy erreicht die App (internes Netz); App-Port ist nicht veröffentlicht
+  ICHQ_MIGRATION_DATABASE_URL_FILE: /run/secrets/migration_database_url
+  ICHQ_SECRET_KEY_FILE: /run/secrets/secret_key
+  ICHQ_SESSION_SECRET_FILE: /run/secrets/session_secret
+  ICHQ_STORAGE_BACKEND: s3
+  ICHQ_S3_ENDPOINT_URL: http://minio:9000
+  ICHQ_S3_BUCKET: ichq
+  ICHQ_S3_ACCESS_KEY_FILE: /run/secrets/s3_access_key
+  ICHQ_S3_SECRET_KEY_FILE: /run/secrets/s3_secret_key
+  ICHQ_LOG_FORMAT: json
+
+x-app-secrets: &app-secrets
+  - database_url
+  - platform_database_url
+  - worker_database_url
+  - auth_database_url
+  - migration_database_url
+  - secret_key
+  - session_secret
+  - s3_access_key
+  - s3_secret_key
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_admin_password
+    secrets: [pg_admin_password]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  db-init:          # legt Rollen und Datenbank an (idempotent)
+    image: postgres:16-alpine
+    depends_on: {postgres: {condition: service_healthy}}
+    secrets: [pg_admin_password, pg_owner_password, pg_app_password, pg_platform_password, pg_worker_password,
+              pg_auth_password]
+    volumes: [./postgres/init-roles.sql:/init-roles.sql:ro]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        PGPASSWORD=$$(cat /run/secrets/pg_admin_password) psql -h postgres -U postgres -v ON_ERROR_STOP=1
+        -v owner_pw="$$(cat /run/secrets/pg_owner_password)" -v app_pw="$$(cat /run/secrets/pg_app_password)"
+        -v platform_pw="$$(cat /run/secrets/pg_platform_password)" -v worker_pw="$$(cat /run/secrets/pg_worker_password)"
+        -v auth_pw="$$(cat /run/secrets/pg_auth_password)"
+        -v dbname=ichq -f /init-roles.sql
+    restart: "no"
+
+  migrate:          # Migration vor jedem Start der App
+    image: ic-ware-hq:0.1.0
+    build: {context: .., dockerfile: deploy/Dockerfile}
+    depends_on: {db-init: {condition: service_completed_successfully}}
+    environment: *app-env
+    secrets: *app-secrets
+    command: ["ichq", "migrate"]
+    restart: "no"
+
+  app:
+    image: ic-ware-hq:0.1.0
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      minio: {condition: service_healthy}
+    environment: *app-env
+    secrets: *app-secrets
+    restart: unless-stopped
+
+  worker:
+    image: ic-ware-hq:0.1.0
+    depends_on: {migrate: {condition: service_completed_successfully}}
+    environment: *app-env
+    secrets: *app-secrets
+    command: ["ichq", "worker"]
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/s3_access_key
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/s3_secret_key
+    secrets: [s3_access_key, s3_secret_key]
+    volumes: [miniodata:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio-init:       # privaten Bucket anlegen
+    image: minio/mc:latest
+    depends_on: {minio: {condition: service_healthy}}
+    secrets: [s3_access_key, s3_secret_key]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        mc alias set local http://minio:9000 "$$(cat /run/secrets/s3_access_key)" "$$(cat /run/secrets/s3_secret_key)" &&
+        mc mb --ignore-existing local/ichq && mc anonymous set none local/ichq
+    restart: "no"
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on: {app: {condition: service_healthy}}   # sonst 503, bis der erste Health-Check läuft
+    ports: ["80:80", "443:443"]
+    environment:
+      ICHQ_DOMAIN: ${ICHQ_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    restart: unless-stopped
+
+secrets:
+  pg_admin_password: {file: ../secrets/pg_admin_password}
+  pg_owner_password: {file: ../secrets/pg_owner_password}
+  pg_app_password: {file: ../secrets/pg_app_password}
+  pg_platform_password: {file: ../secrets/pg_platform_password}
+  pg_worker_password: {file: ../secrets/pg_worker_password}
+  pg_auth_password: {file: ../secrets/pg_auth_password}
+  database_url: {file: ../secrets/database_url}
+  platform_database_url: {file: ../secrets/platform_database_url}
+  worker_database_url: {file: ../secrets/worker_database_url}
+  auth_database_url: {file: ../secrets/auth_database_url}
+  migration_database_url: {file: ../secrets/migration_database_url}
+  secret_key: {file: ../secrets/secret_key}
+  session_secret: {file: ../secrets/session_secret}
+  s3_access_key: {file: ../secrets/s3_access_key}
+  s3_secret_key: {file: ../secrets/s3_secret_key}
+
+volumes:
+  pgdata:
+  miniodata:
+  caddydata:
