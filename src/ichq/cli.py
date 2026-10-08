@@ -73,6 +73,9 @@ def main(argv: list[str] | None = None) -> int:
     ns = sub.add_parser("notifications-scan", help="Geplante Benachrichtigungsregeln (z. B. überfällige Aufgaben) "
                                                    "für alle aktiven Firmen ausführen")
     ns.add_argument("--date", help="Stichtag JJJJ-MM-TT (Standard: heute, UTC)")
+    ac = sub.add_parser("auth-cleanup", help="Alte Anmeldeversuche, Sitzungen, Reset-Tokens, benutzte Recovery-Codes "
+                                             "löschen (auth_events bleiben)")
+    ac.add_argument("--days", type=int, default=30, help="Aufbewahrung in Tagen (Standard 30)")
     w = sub.add_parser("worker", help="Outbox-Worker starten")
     w.add_argument("--once", action="store_true")
     sv = sub.add_parser("serve", help="API-Server starten (Produktion: hinter Reverse Proxy)")
@@ -122,6 +125,14 @@ def main(argv: list[str] | None = None) -> int:
             assert_handlers()
         if args.cmd == "notifications-scan":
             return _scan(engines, args.date)
+        if args.cmd == "auth-cleanup":
+            from ichq.auth.cleanup import run_cleanup
+            bericht = run_cleanup(engines, args.days)
+            if bericht.skipped:
+                print("übersprungen: ein anderer Aufräumlauf ist aktiv")
+                return 0
+            print(" · ".join(f"{k} {v}" for k, v in bericht.deleted.items()))
+            return 0
         if args.cmd == "worker":
             from ichq.jobs.worker import run_forever, run_once
             if args.once:

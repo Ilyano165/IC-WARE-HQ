@@ -22,7 +22,17 @@ Standardwert. Fehlermeldungen nennen nie einen Wert. Prüfen mit `ichq check-con
 | `ICHQ_S3_BUCKET` | bei `s3` | Bucket-Name (privat) |
 | `ICHQ_S3_REGION` | nein (`eu-central-1`) | Region |
 | `ICHQ_S3_ACCESS_KEY` / `ICHQ_S3_SECRET_KEY` | bei `s3` | Zugangsdaten |
-| `ICHQ_SMTP_HOST`, `_PORT`, `_USER`, `_PASSWORD`, `_FROM`, `_STARTTLS` | nein | E-Mail — in M1 validiert, aber ungenutzt |
+| `ICHQ_AUTH_DATABASE_URL` | ja | Rolle `ichq_auth` (Anmeldung, Sitzungen, Passwort-Hashes) |
+| `ICHQ_SMTP_HOST`, `_PORT`, `_USER`, `_PASSWORD`, `_FROM`, `_STARTTLS` | für Reset/Einladung | E-Mail-Versand; ohne `HOST`+`FROM` antworten Passwort-Reset und Einladungen mit 503 |
+| `ICHQ_PUBLIC_ORIGIN` | in Produktion | z. B. `https://app.ic-ware.eu` — Basis für Links in Mails und Prüfung des `Origin`-Headers (CSRF) |
+| `ICHQ_COOKIE_SECURE` | nein (in Produktion an) | `Secure`-Cookie mit Namen `__Host-ichq_session` |
+| `ICHQ_TRUSTED_PROXIES` | nein (`127.0.0.1`) | IPs, deren `X-Forwarded-For` vertraut wird (Client-IP für Drosselung/Auth-Ereignisse) |
+| `ICHQ_SESSION_IDLE_MINUTES` / `ICHQ_SESSION_ABSOLUTE_HOURS` | nein (30 / 12) | Leerlauf- und absolute Sitzungsgrenze |
+| `ICHQ_MFA_CHALLENGE_MINUTES` | nein (5) | Gültigkeit des 2FA-Zwischenschritts |
+| `ICHQ_LOGIN_MAX_FAILURES` / `ICHQ_LOCKOUT_MINUTES` | nein (5 / 15) | Kontosperre |
+| `ICHQ_THROTTLE_WINDOW_MINUTES`, `ICHQ_IP_MAX_FAILURES`, `ICHQ_IDENTIFIER_MAX_FAILURES` | nein (15, 30, 10) | Drosselung |
+| `ICHQ_PASSWORD_RESET_MINUTES` | nein (30) | Gültigkeit des Reset-Links |
+| `ICHQ_ARGON2_TIME_COST`, `_MEMORY_KIB`, `_PARALLELISM` | nein (3, 65536, 4) | Argon2id-Parameter |
 | `ICHQ_LOG_LEVEL` | nein (`INFO`) | `DEBUG` … `ERROR` |
 | `ICHQ_LOG_FORMAT` | nein (`json`) | `json` oder `console` |
 | `ICHQ_EXPOSE_DOCS` | nein (`false`) | `/docs` und `/openapi.json` |

@@ -11,6 +11,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql as pg
 
+from ichq.migrations.datenpflege import ohne_force
+
 revision = "0002_authentication"
 down_revision = "0001_foundation"
 branch_labels = None
@@ -44,8 +46,10 @@ def upgrade() -> None:
     # --- Konten ---------------------------------------------------------------
     op.drop_constraint("ck_users_status_valid", "users", type_="check")
     # M1-Konten hatten Status 'active' ohne Passwort bzw. 'disabled'
-    op.execute("UPDATE users SET status = 'pending' WHERE status = 'active' AND password_hash IS NULL")
-    op.execute("UPDATE users SET status = 'deactivated' WHERE status = 'disabled'")
+    # Daten-Pflege: ohne FORCE, sonst sieht ichq_owner wegen RLS keine Zeile (datenpflege.py)
+    with ohne_force("users"):
+        op.execute("UPDATE users SET status = 'pending' WHERE status = 'active' AND password_hash IS NULL")
+        op.execute("UPDATE users SET status = 'deactivated' WHERE status = 'disabled'")
     op.alter_column("users", "status", server_default="pending")
     op.add_column("users", sa.Column("username", sa.String(32)))
     op.add_column("users", sa.Column("password_changed_at", TS))
@@ -214,8 +218,9 @@ def downgrade() -> None:
     for col in ("totp_last_step", "totp_enabled_at", "totp_pending_enc", "totp_secret_enc", "last_login_at",
                 "locked_until", "failed_logins", "password_changed_at", "username"):
         op.drop_column("users", col)
-    op.execute("UPDATE users SET status = 'disabled' WHERE status IN ('locked','suspended','deactivated')")
-    op.execute("UPDATE users SET status = 'active' WHERE status = 'pending'")
+    with ohne_force("users"):
+        op.execute("UPDATE users SET status = 'disabled' WHERE status IN ('locked','suspended','deactivated')")
+        op.execute("UPDATE users SET status = 'active' WHERE status = 'pending'")
     op.alter_column("users", "status", server_default="active")
     op.create_check_constraint("ck_users_status_valid", "users", "status IN ('active','disabled')")
     op.execute("DROP FUNCTION IF EXISTS ichq_current_user()")

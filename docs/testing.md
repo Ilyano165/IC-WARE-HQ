@@ -11,7 +11,7 @@ pytest -q
 Die Testumgebung legt die vier `ichq_*`-Rollen mit **Testpasswörtern** an (bestehende Rollen bekommen
 diese Passwörter!) und je Lauf eine frische Datenbank. Nur gegen einen eigenen Test-Server laufen lassen.
 
-## Was getestet wird (Stand M3: 371 Tests, Zahl aus dem letzten Lauf)
+## Was getestet wird (Stand M2-Abschluss: 378 Tests, Zahl aus dem letzten Lauf)
 
 | Datei | Inhalt |
 | --- | --- |
@@ -36,6 +36,7 @@ diese Passwörter!) und je Lauf eine frische Datenbank. Nur gegen einen eigenen 
 | `test_core_docs.py` | Routentabellen in `docs/core-permissions.md` + `docs/m3-mandanten.md` = jede `/api/v1`-Route (außer `/auth`) |
 | `test_m3_tenancy.py` | M3 mit echten Logins: Firmenprofil, zentraler Pause-Schutz, Einladungen (Missbrauch, Zustimmung, Atomarität), Deaktivieren, Verlassen, Last-Admin, CLI-Übergang |
 | `test_core_followups.py` | eigene Rechte je Objekttyp, Freigabe an Zuweisung gebunden, Kommentar-Tombstones und unveränderbare Historie |
+| `test_auth_cleanup.py` | M2: Aufräum-Job löscht nur Altes, nie `auth_events`; Sperre; CLI; systemd-Units |
 | `test_notifications_job.py` | Fälligkeits-Scan: idempotent, Advisory-Lock, Fehler je Firma isoliert, CLI, systemd-Units (`systemd-analyze verify`) |
 
 ## Mutationstests
@@ -44,7 +45,7 @@ diese Passwörter!) und je Lauf eine frische Datenbank. Nur gegen einen eigenen 
 scripts/mutation-check.sh
 ```
 
-Baut 85 gezielte Sicherheitslücken ein (M1: 19, M2: 26, C0: 21, M3 + Nachträge: 19) (z. B. RLS ohne Schreibschutz, Mandant pro Sitzung statt pro
+Baut 90 gezielte Sicherheitslücken ein (M1: 19, M2: 31, C0: 21, M3 + Nachträge: 19) (z. B. RLS ohne Schreibschutz, Mandant pro Sitzung statt pro
 Transaktion, Stacktrace an den Client, Routenprüfung nur auf oberster Ebene) und prüft, ob die Tests
 rot werden. Meldet auch Mutationen, die gar nicht angewendet werden konnten — ein Prüfskript, das
 nichts prüft, darf nicht grün sein.

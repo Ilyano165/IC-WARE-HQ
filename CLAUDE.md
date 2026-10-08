@@ -7,9 +7,8 @@ Diese Datei liest Claude Code automatisch. Sie ist verbindlich.
 Mandantenfähige B2B-Plattform („digitales Betriebssystem eines Unternehmens") von IC Ware GbR.
 Entwicklung in Meilensteinen M0–M26 (Roadmap: `docs/architecture.md`, M0-Bericht separat).
 
-**Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication — Kern fertig, Abschluss offen
-(siehe „Offene Punkte" unten) · **C0 Core-Plattform** (vor M3/M4 gebaut, ADR-010) · **M3 Mandanten** umgesetzt
-(`docs/m3-mandanten.md`); **Tor 1 lokal belegt, CI-Beleg fehlt** (noch kein PR). Reihenfolge laut Vision:
+**Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication ✅ · **C0 Core-Plattform** (vor M3/M4 gebaut, ADR-010) · **M3 Mandanten** umgesetzt
+(`docs/m3-mandanten.md`); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
 Tor 1/M3 → C0 → U1 → D0 → S1… — **keine D0-/S-Arbeit vor Tor 1.** Produktvision v2 ist ein **unbestätigter
 Entwurf** (`docs/produktvision-v2.md`). Nichts davon ist produktionsreif.
 
@@ -153,16 +152,8 @@ Keine Steuerfunktion geht vor **Tor S** an Kunden (Vision Abschnitt 5).
 - Kommentare nie physisch löschen; Historie schreibt der DB-Trigger, nicht der Code.
 - Zeitgesteuerte Jobs nie im Webprozess: eigener CLI-Einstieg + `deploy/systemd/`, idempotent, mit Advisory-Lock.
 
-## Offene Punkte aus M2 (vor M3 erledigen)
+## M2 abgeschlossen (08.10.2026)
 
-- [ ] Doku: `docs/authentication.md` (Abläufe, Sitzungsregeln, Sperren, Reset, 2FA, Rollen), README,
-      `configuration.md` (neue ICHQ_*-Variablen), `server-setup.md` (ichq_auth, Cookies hinter Caddy)
-- [ ] Migrationstest: M1-Bestand mit Konto `active` ohne Passwort und `disabled` → nach 0002
-      `pending` bzw. `deactivated` (bisher nur ohne Altdaten geprüft)
-- [ ] ADR-006: Brute-Force-Schutz in PostgreSQL statt Redis (Abweichung von M0) begründen
-- [ ] Bekannte Grenzen dokumentieren: Tastaturmuster außerhalb der 10k-Liste kommen durch; Sperr-DoS
-      (5 Fehlversuche sperren fremde Konten 15 min); `ICHQ_TRUSTED_PROXIES="*"` in Compose;
-      Schlüsselwechsel von `ICHQ_SECRET_KEY` macht TOTP-Geheimnisse unlesbar
-- [ ] Job zum Aufräumen alter `login_attempts`/abgelaufener Sitzungen (`throttle.purge_old` existiert, wird
-      nirgends aufgerufen)
-- [ ] Vollständiger M2-Statusbericht (Implemented / Tested / Not Tested / Known Issues / Security Review)
+Statusbericht `docs/m2-statusbericht.md`. Dabei gefunden: Daten-Pflege in Migrationen sah wegen FORCE RLS keine Zeile —
+**Daten-Änderungen in Migrationen immer in `with ohne_force(...)`** (`ichq.migrations.datenpflege`).
+Noch offen aus M2: Compose-Smoke-Test (Prompt-Abschnitt 2), echter SMTP-Versand.

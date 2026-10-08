@@ -2,8 +2,7 @@
 
 Mandantenfähige Unternehmensplattform von IC Ware GbR.
 
-**Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication — Kern fertig und getestet,
-Doku und Abschluss offen (siehe `CLAUDE.md`) · C0 Core-Plattform (Objektmodell, Aufgaben, Kommentare,
+**Stand:** M0 ✅ · M1 ✅ · M2 Authentication ✅ · M3 Mandanten ✅ · **Tor 1 erreicht** · C0 Core-Plattform (Objektmodell, Aufgaben, Kommentare,
 Dokumente, Aktivität, Benachrichtigungen, Suche). Keine Oberfläche (M5), noch keine Fachmodule.
 **Nicht produktionsreif.**
 
@@ -26,7 +25,7 @@ in [docs/architecture.md](docs/architecture.md#abweichungen-vom-m0-bericht).
   Kommentare mit Erwähnungen, Dokumente (Quarantäne), Aktivitätsverlauf getrennt vom Audit, Benachrichtigungen
   mit Rechteprüfung beim Zustellen, globale Suche, Audit-Export — siehe `docs/core-*.md`
 - M3 Mandanten: Firmenprofil, Mitglieder, Einladungen, Last-Admin-Schutz, zentraler Schreibschutz bei Pause
-- 371 Tests gegen echtes PostgreSQL (inkl. IDOR-Generator über alle Routen und E2E mit echtem Server), 85 Mutationstests,
+- 378 Tests gegen echtes PostgreSQL (inkl. IDOR-Generator über alle Routen und E2E mit echtem Server), 90 Mutationstests,
   Docker/Compose/Caddy, CI
 
 ## Schnellstart (Entwicklung)

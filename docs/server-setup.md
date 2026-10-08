@@ -79,3 +79,17 @@ journalctl -u ichq-notifications-scan.service      # Ergebnis: "firmen N · zuge
 Exitcode 1 = mindestens eine Firma ist gescheitert (Details im JSON-Log des Containers). Ein zweiter Lauf während
 eines laufenden endet sofort („übersprungen"). **Nicht auf einem echten Server getestet** — geprüft sind die Units
 mit `systemd-analyze verify` und der Job selbst in der Testsuite.
+
+
+## Anmeldung hinter Caddy (M2)
+
+- Fünfte Datenbankrolle **`ichq_auth`** anlegen (`deploy/postgres/init-roles.sql`, Variable `auth_pw`) und
+  `ICHQ_AUTH_DATABASE_URL` setzen; Migration `0002` bricht ab, wenn die Rolle fehlt oder Superuser/BYPASSRLS ist.
+- `ICHQ_PUBLIC_ORIGIN=https://<domain>` setzen — sonst fehlen Reset-/Einladungslinks und die CSRF-Prüfung nutzt den
+  Host-Header.
+- Cookies: In Produktion `Secure` + Name `__Host-ichq_session` (setzt HTTPS voraus — Caddy terminiert TLS).
+- Client-IP: Caddy setzt `X-Forwarded-For`; die App vertraut ihm nur von `ICHQ_TRUSTED_PROXIES`. In Compose `*`,
+  weil der App-Port nicht veröffentlicht ist und nur Caddy im internen Netz die App erreicht. Wird die App anders
+  erreichbar gemacht, unbedingt auf die Caddy-Adresse einschränken — sonst kann jeder seine IP fälschen und die
+  IP-Drosselung umgehen.
+- Aufräumen: `deploy/systemd/ichq-auth-cleanup.{service,timer}` wie im Abschnitt „Geplante Jobs" installieren.

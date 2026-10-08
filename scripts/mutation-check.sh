@@ -125,8 +125,15 @@ mutation "3b API-Entzug entfernt automatische Freigabe" "relations/service.py" "
 mutation "3c Historie-Trigger fehlt" "migrations/versions/0005_core_followups.py" "    CREATE TRIGGER trg_comments_history AFTER INSERT OR UPDATE ON comments
       FOR EACH ROW EXECUTE FUNCTION ichq_comment_history();|||    SELECT 1;" "tests/test_core_followups.py"
 mutation "3c Gelöschter Kommentar änderbar" "migrations/versions/0005_core_followups.py" "      IF OLD.deleted_at IS NOT NULL THEN|||      IF false THEN" "tests/test_core_followups.py"
-mutation "3d Scan ohne Sperre gegen Parallellauf" "notifications/jobs.py" "        if not sperre.execute(text(\"SELECT pg_try_advisory_lock(:k)\"), {\"k\": LOCK_KEY}).scalar():|||        if False:" "tests/test_notifications_job.py"
-mutation "3d Fehler einer Firma bricht den Scan ab" "notifications/jobs.py" "                except Exception as e:   # eine Firma darf die anderen nicht aufhalten|||                except ZeroDivisionError as e:" "tests/test_notifications_job.py"
+mutation "3d Scan ohne Sperre gegen Parallellauf" "db/locks.py" "        erworben = bool(conn.execute(text(\"SELECT pg_try_advisory_lock(:k)\"), {\"k\": key}).scalar())|||        erworben = True" "tests/test_notifications_job.py"
+mutation "3d Fehler einer Firma bricht den Scan ab" "notifications/jobs.py" "            except Exception as e:   # eine Firma darf die anderen nicht aufhalten|||            except ZeroDivisionError as e:" "tests/test_notifications_job.py"
 mutation "3d Doppelte Zustellung (kein dedup_key)" "notifications/service.py" "                     dedup_key=dedup_key)|||                     dedup_key=None)" "tests/test_notifications_job.py"
+
+# ---------- M2-Restpunkte ----------
+mutation "M2 Aufräumen ignoriert Alter der Anmeldeversuche" "auth/cleanup.py" "\"DELETE FROM login_attempts WHERE occurred_at < now() - make_interval(days => :d)\"|||\"DELETE FROM login_attempts WHERE true\"" "tests/test_auth_cleanup.py"
+mutation "M2 Aufräumen löscht frisch widerrufene Sitzungen" "auth/cleanup.py" "WHERE (revoked_at IS NOT NULL AND revoked_at < now() - make_interval(days => :d))|||WHERE (revoked_at IS NOT NULL)" "tests/test_auth_cleanup.py"
+mutation "M2 Aufräumen löscht unbenutzte Recovery-Codes" "auth/cleanup.py" "\"DELETE FROM recovery_codes WHERE used_at < now() - make_interval(days => :d)\"|||\"DELETE FROM recovery_codes WHERE used_at IS NULL OR used_at < now()\"" "tests/test_auth_cleanup.py"
+mutation "M2 Aufräumen ohne Sperre" "db/locks.py" "        erworben = bool(conn.execute(text(\"SELECT pg_try_advisory_lock(:k)\"), {\"k\": key}).scalar())|||        erworben = True" "tests/test_auth_cleanup.py"
+mutation "Migration: Daten-Pflege unter FORCE RLS" "migrations/datenpflege.py" "op.execute(f\"ALTER TABLE {t} NO FORCE ROW LEVEL SECURITY\")|||op.execute(f\"ALTER TABLE {t} FORCE ROW LEVEL SECURITY\")" "tests/test_migrations.py"
 echo "---"; echo "erkannt $ERKANNT · unbemerkt $UNBEMERKT · ungültig $UNGUELTIG"
 [ "$UNBEMERKT" -eq 0 ] && [ "$UNGUELTIG" -eq 0 ]

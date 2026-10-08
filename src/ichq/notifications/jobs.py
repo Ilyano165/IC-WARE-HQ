@@ -23,11 +23,12 @@ from datetime import date
 from sqlalchemy import text
 
 from ichq.db.engine import Engines
+from ichq.db.locks import NOTIFICATIONS_SCAN, job_lock
 from ichq.db.session import platform_transaction, tenant_transaction
 from ichq.notifications.handlers import scan
 
 log = logging.getLogger("ichq.jobs.notifications_scan")
-LOCK_KEY = 0x1C4A_5C40   # fester Schlüssel für pg_try_advisory_lock
+LOCK_KEY = NOTIFICATIONS_SCAN
 
 
 @dataclass
@@ -45,34 +46,30 @@ class ScanReport:
 
 def run_scan(engines: Engines, day: date) -> ScanReport:
     bericht = ScanReport(day=day)
-    with engines.platform.connect() as sperre:
-        if not sperre.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": LOCK_KEY}).scalar():
+    with job_lock(engines.platform, LOCK_KEY) as erworben:
+        if not erworben:
             bericht.skipped = True
             log.warning("notifications_scan_uebersprungen", extra={"grund": "laeuft_bereits"})
             return bericht
-        try:
-            with platform_transaction(engines.platform) as s:
-                firmen: list[uuid.UUID] = list(s.scalars(text(
-                    "SELECT id FROM tenants WHERE status = 'active' ORDER BY id")).all())
-            for tid in firmen:
-                t0 = time.perf_counter()
-                try:
-                    with tenant_transaction(engines.app, tid) as ts:
-                        ergebnis = scan(ts, day)
-                except Exception as e:   # eine Firma darf die anderen nicht aufhalten
-                    bericht.failed.append(str(tid))
-                    log.error("notifications_scan_firma_fehler",
-                              extra={"tenant_id": str(tid), "fehler": e.__class__.__name__})
-                    continue
-                n = sum(ergebnis.values())
-                bericht.tenants += 1
-                bericht.delivered += n
-                log.info("notifications_scan_firma", extra={"tenant_id": str(tid), "zugestellt": n,
-                                                             "regeln": ergebnis,
-                                                             "dauer_ms": int((time.perf_counter() - t0) * 1000)})
-        finally:
-            sperre.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": LOCK_KEY})
-            sperre.commit()
+        with platform_transaction(engines.platform) as s:
+            firmen: list[uuid.UUID] = list(s.scalars(text(
+                "SELECT id FROM tenants WHERE status = 'active' ORDER BY id")).all())
+        for tid in firmen:
+            t0 = time.perf_counter()
+            try:
+                with tenant_transaction(engines.app, tid) as ts:
+                    ergebnis = scan(ts, day)
+            except Exception as e:   # eine Firma darf die anderen nicht aufhalten
+                bericht.failed.append(str(tid))
+                log.error("notifications_scan_firma_fehler",
+                          extra={"tenant_id": str(tid), "fehler": e.__class__.__name__})
+                continue
+            n = sum(ergebnis.values())
+            bericht.tenants += 1
+            bericht.delivered += n
+            log.info("notifications_scan_firma", extra={"tenant_id": str(tid), "zugestellt": n,
+                                                         "regeln": ergebnis,
+                                                         "dauer_ms": int((time.perf_counter() - t0) * 1000)})
     log.info("notifications_scan_fertig", extra={"tag": day.isoformat(), "firmen": bericht.tenants,
                                                    "zugestellt": bericht.delivered, "fehler": len(bericht.failed)})
     return bericht

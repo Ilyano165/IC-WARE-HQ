@@ -93,3 +93,63 @@ def test_migration_verweigert_rolle_mit_bypassrls(frische_db: str) -> None:
 def test_app_rolle_kann_kein_schema_aendern(db_name: str) -> None:
     with psycopg.connect(url("ichq_app", db_name)) as c, pytest.raises(psycopg.errors.InsufficientPrivilege):
         c.execute("CREATE TABLE eingeschleust(id int)")
+
+
+def test_m1_altdaten_nach_0002(frische_db: str) -> None:
+    """M2-Restpunkt: M1-Bestand mit Konto 'active' ohne Passwort und 'disabled' → nach 0002 'pending' bzw.
+    'deactivated'. Danach ganz zurück und wieder hoch."""
+    cfg = _alembic(url("ichq_owner", frische_db))
+    command.upgrade(cfg, "0001_foundation")
+    with _admin(frische_db) as c:
+        c.execute("INSERT INTO users(id, email, display_name, status) VALUES "
+                  "('00000000-0000-7000-8000-000000000001', 'alt-aktiv@m1.test', 'Alt Aktiv', 'active'), "
+                  "('00000000-0000-7000-8000-000000000002', 'alt-aus@m1.test', 'Alt Aus', 'disabled')")
+    command.upgrade(cfg, "0002_authentication")
+    with _admin(frische_db) as c:
+        status = dict(c.execute("SELECT email, status FROM users ORDER BY email").fetchall())
+    assert status == {"alt-aktiv@m1.test": "pending", "alt-aus@m1.test": "deactivated"}
+    command.upgrade(cfg, "head")
+    command.downgrade(cfg, "base")
+    command.upgrade(cfg, "head")
+    e = _eng(frische_db)
+    with e.connect() as c:
+        assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == expected_head()
+    e.dispose()
+
+
+def test_0005_nachtraege_mit_bestand(frische_db: str) -> None:
+    """Daten-Pflege in Migrationen läuft trotz FORCE RLS: Historie und Löschgrund für vorhandene Kommentare."""
+    cfg = _alembic(url("ichq_owner", frische_db))
+    command.upgrade(cfg, "0004_m3_tenancy")
+    with _admin(frische_db) as c:
+        c.execute("""
+          INSERT INTO tenants(id, slug, name, status) VALUES ('00000000-0000-7000-8000-0000000000a1', 'altfirma',
+                 'Alt GmbH', 'active');
+          INSERT INTO users(id, email, display_name) VALUES ('00000000-0000-7000-8000-0000000000b1', 'k@alt.test', 'K');
+          INSERT INTO memberships(id, tenant_id, user_id) VALUES ('00000000-0000-7000-8000-0000000000c1',
+                 '00000000-0000-7000-8000-0000000000a1', '00000000-0000-7000-8000-0000000000b1');
+          INSERT INTO objects(id, tenant_id, type, public_id, title) VALUES ('00000000-0000-7000-8000-0000000000d1',
+                 '00000000-0000-7000-8000-0000000000a1', 'task', repeat('d', 32), 'Alt');
+          INSERT INTO comments(id, tenant_id, public_id, object_id, author_membership_id, body, deleted_at) VALUES
+            ('00000000-0000-7000-8000-0000000000e1', '00000000-0000-7000-8000-0000000000a1', repeat('e', 32),
+             '00000000-0000-7000-8000-0000000000d1', '00000000-0000-7000-8000-0000000000c1', 'Bestandstext', NULL),
+            ('00000000-0000-7000-8000-0000000000e2', '00000000-0000-7000-8000-0000000000a1', repeat('f', 32),
+             '00000000-0000-7000-8000-0000000000d1', '00000000-0000-7000-8000-0000000000c1', '', now());
+          INSERT INTO object_grants(tenant_id, object_id, membership_id) VALUES
+            ('00000000-0000-7000-8000-0000000000a1', '00000000-0000-7000-8000-0000000000d1',
+             '00000000-0000-7000-8000-0000000000c1');""")
+    command.upgrade(cfg, "head")
+    with _admin(frische_db) as c:
+        revs = c.execute("SELECT comment_id::text, kind, body FROM comment_revisions ORDER BY comment_id").fetchall()
+        gruende = c.execute("SELECT delete_reason FROM comments WHERE deleted_at IS NOT NULL").fetchall()
+        quellen = c.execute("SELECT source FROM object_grants").fetchall()
+        force = c.execute("SELECT relforcerowsecurity FROM pg_class WHERE relname IN "
+                          "('comments','comment_revisions','users','object_grants')").fetchall()
+    assert revs == [("00000000-0000-7000-8000-0000000000e1", "created", "Bestandstext"),
+                    ("00000000-0000-7000-8000-0000000000e2", "created", "")]
+    assert gruende == [("vor Migration 0005 gelöscht (Grund nicht erfasst)",)]
+    assert quellen == [("manual",)]
+    assert force and all(f for (f,) in force)            # FORCE ist nach der Daten-Pflege wieder an
+    command.downgrade(cfg, "0004_m3_tenancy")
+    with _admin(frische_db) as c:
+        assert c.execute("SELECT count(*) FROM object_grants").fetchone() == (1,)

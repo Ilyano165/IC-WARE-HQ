@@ -15,6 +15,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql as pg
 
+from ichq.migrations.datenpflege import ohne_force
+
 revision = "0005_core_followups"
 down_revision = "0004_m3_tenancy"
 branch_labels = None
@@ -34,8 +36,9 @@ def upgrade() -> None:
 
     # --- Kommentare: Löschgrund, keine Änderung nach dem Löschen -------------------------
     op.add_column("comments", sa.Column("delete_reason", sa.String(500)))
-    op.execute("UPDATE comments SET delete_reason = 'vor Migration 0005 gelöscht (Grund nicht erfasst)' "
-               "WHERE deleted_at IS NOT NULL")
+    with ohne_force("comments"):    # sonst sieht ichq_owner wegen RLS keine Zeile (datenpflege.py)
+        op.execute("UPDATE comments SET delete_reason = 'vor Migration 0005 gelöscht (Grund nicht erfasst)' "
+                   "WHERE deleted_at IS NOT NULL")
     op.create_check_constraint("ck_comments_delete_reason_required", "comments",
                                "deleted_at IS NULL OR char_length(btrim(delete_reason)) >= 3")
     op.execute("GRANT UPDATE (delete_reason) ON comments TO ichq_app")
@@ -108,8 +111,10 @@ def upgrade() -> None:
       FOR EACH ROW EXECUTE FUNCTION ichq_comment_history();
     """)
     # Bestand (vor 0005 angelegte Kommentare): erste Fassung nachtragen, soweit der Text noch da ist
-    op.execute("""INSERT INTO comment_revisions(tenant_id, comment_id, kind, body, actor_membership_id, recorded_at)
-                  SELECT tenant_id, id, 'created', body, author_membership_id, created_at FROM comments""")
+    with ohne_force("comments", "comment_revisions"):
+        op.execute("""INSERT INTO comment_revisions(tenant_id, comment_id, kind, body, actor_membership_id,
+                                                    recorded_at)
+                      SELECT tenant_id, id, 'created', body, author_membership_id, created_at FROM comments""")
 
 
 def downgrade() -> None:
@@ -120,7 +125,8 @@ def downgrade() -> None:
     op.drop_constraint("ck_comments_delete_reason_required", "comments", type_="check")
     op.drop_column("comments", "delete_reason")
     op.drop_constraint("pk_object_grants", "object_grants", type_="primary")
-    op.execute("DELETE FROM object_grants WHERE source <> 'manual'")
+    with ohne_force("object_grants"):
+        op.execute("DELETE FROM object_grants WHERE source <> 'manual'")
     op.create_primary_key("pk_object_grants", "object_grants", ["object_id", "membership_id"])
     op.drop_constraint("ck_object_grants_source_valid", "object_grants", type_="check")
     op.drop_column("object_grants", "source")
