@@ -23,7 +23,9 @@ Auftrag: „nutz die typische IC-Ware-UI und arbeite weiter". Entscheidung: [ADR
 ## Tested (lokal, PostgreSQL 16 + Chromium 141 über Playwright 1.56)
 | Prüfung | Ergebnis |
 | --- | --- |
-| pytest gesamt | siehe Commit-Nachricht des Abschluss-Commits |
+| pytest gesamt | **438 passed**, 0 failed |
+| Mutationen gesamt | **erkannt 129 · unbemerkt 0 · ungültig 0** |
+| ruff / mypy strict / lint-imports | sauber (129 Dateien) |
 | `test_u1_static.py` | Weiterleitungen, Header, 12 Ausbruchspfade, Dateitypen, Symlink, Code-Regeln, JS-Syntax (`node --check`) |
 | `test_u1_browser.py` | 5 Tests im echten Browser; 15 Wiederholungen der Datei ohne Fehlschlag (75 Läufe) |
 | U1-Mutationen | 8 (Pfad-Regex, Symlink, Dateitypen, Header, zwei CSP, Text als HTML, Navigation ohne Rechtefilter, veraltete Ansicht) |
