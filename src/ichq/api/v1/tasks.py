@@ -71,7 +71,7 @@ def task_out(s: TenantSession, p: Principal, t: Task, o: ObjectRow) -> dict[str,
 def list_tasks(p: Principal = Depends(require("tasks.read")), db: TenantDB = Depends(tenant_db),
                status: Annotated[list[str] | None, Query(max_length=5)] = None,
                priority: Annotated[list[str] | None, Query(max_length=4)] = None,
-               assignee: Annotated[str | None, Query(max_length=64, description="öffentliche ID oder 'me'")] = None,
+               assignee: Annotated[str | None, Query(max_length=64, description="ID, 'me', 'none'")] = None,
                subject: Annotated[str | None, Query(max_length=64)] = None,
                due_before: date | None = None,
                sort: Annotated[str, Query(pattern="^(created_at|due_date|priority|title)$")] = "created_at",
@@ -84,11 +84,14 @@ def list_tasks(p: Principal = Depends(require("tasks.read")), db: TenantDB = Dep
         assignee_id: uuid.UUID | None
         if assignee == "me":
             assignee_id = p.membership_id
+        elif assignee == "none":
+            assignee_id = None
         else:
             assignee_id = objects.member(s, assignee, active_only=False).id if assignee else None
         subject_id = objects.resolve(s, p, subject).id if subject else None
         f = tasks.TaskFilter(status=tuple(status or ()), priority=tuple(priority or ()),
-                             assignee_membership_id=assignee_id, subject_object_id=subject_id, due_before=due_before)
+                             assignee_membership_id=assignee_id, subject_object_id=subject_id, due_before=due_before,
+                             unassigned=assignee == "none")
         rows, weiter = tasks.list_tasks(s, visible_clause(p), f, sort=sort, desc=order == "desc", cursor=cursor,
                                         limit=limit)
         return {"items": [task_out(s, p, t, o) for t, o, *_ in rows], "next_cursor": weiter}

@@ -39,3 +39,18 @@ export async function suche(el, _p, q) {
     g.has_more ? h("p", { class: "muted small" }, "Weitere Treffer — Suche verfeinern.") : null))
     : h("p", { class: "empty" }, "Keine Treffer."));
 }
+
+export async function rueckfragen(el, _p, q) {
+  const alle = q.get("open_only") === "false";
+  const daten = await get(`/questions${query({ open_only: alle ? "false" : "true", limit: 50, cursor: q.get("cursor") })}`);
+  ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("h1", {}, "Rückfragen"),
+    h("p", {}, alle ? "Alle Rückfragen" : "Offen = noch keine Antwort einer anderen Person im selben Vorgang")),
+  h("a", { class: "btn btn--ghost btn--sm", href: alle ? "#/rueckfragen" : "#/rueckfragen?open_only=false" },
+    alle ? "Nur offene" : "Auch beantwortete")),
+  daten.items.length ? h("div", { class: "list" }, daten.items.map((r) => h("div", { class: "item" },
+    h("span", {}, link(r.object) ? h("a", { href: link(r.object) }, r.object.title) : r.object.title,
+      h("div", { class: "meta" }, `${r.author ? r.author.display_name : "—"} · ${zeit(r.created_at)}`),
+      h("div", { class: "body" }, r.deleted ? "Gelöscht" : r.body))))) : h("p", { class: "empty" }, "Keine offenen Rückfragen."),
+  daten.next_cursor ? h("div", { class: "row row--end" }, h("a", { class: "btn btn--ghost btn--sm",
+    href: `#/rueckfragen${query({ open_only: alle ? "false" : null, cursor: daten.next_cursor })}` }, "Weitere")) : null);
+}

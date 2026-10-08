@@ -45,6 +45,7 @@ class TaskFilter:
     assignee_membership_id: uuid.UUID | None = None
     subject_object_id: uuid.UUID | None = None
     due_before: date | None = None
+    unassigned: bool = False           # nur Aufgaben ohne Zuständige (Dashboard „ohne Zuständigkeit")
 
 
 def _beschreibung(text: str | None) -> str:
@@ -151,6 +152,25 @@ def update(session: Session, principal: Principal, ref: str, changes: dict[str, 
     return task, obj
 
 
+def filter_clauses(f: TaskFilter) -> list[Any]:
+    """Die Filterbedingungen der Aufgabenliste — dieselben nutzt das Dashboard für seine Zahlen (D0: jede Zahl
+    entspricht genau der verlinkten Liste)."""
+    teile: list[Any] = [ObjectRow.archived_at.is_(None)]
+    if f.status:
+        teile.append(Task.status.in_(f.status))
+    if f.priority:
+        teile.append(Task.priority.in_(f.priority))
+    if f.assignee_membership_id is not None:
+        teile.append(Task.assignee_membership_id == f.assignee_membership_id)
+    if f.unassigned:
+        teile.append(Task.assignee_membership_id.is_(None))
+    if f.subject_object_id is not None:
+        teile.append(Task.subject_object_id == f.subject_object_id)
+    if f.due_before is not None:
+        teile.append(Task.due_date < f.due_before)
+    return teile
+
+
 def list_tasks(session: Session, visible: Any, f: TaskFilter, *, sort: str, desc: bool, cursor: str | None,
                limit: int | None) -> tuple[list[Any], str | None]:
     key = SORTS.get(sort)
@@ -158,16 +178,6 @@ def list_tasks(session: Session, visible: Any, f: TaskFilter, *, sort: str, desc
         raise ValidationFailed(f"sort muss eine von {sorted(SORTS)} sein")
     stmt = (select(Task, ObjectRow)
             .join(ObjectRow, (ObjectRow.id == Task.id) & (ObjectRow.tenant_id == Task.tenant_id))
-            .where(visible, ObjectRow.archived_at.is_(None)))
-    if f.status:
-        stmt = stmt.where(Task.status.in_(f.status))
-    if f.priority:
-        stmt = stmt.where(Task.priority.in_(f.priority))
-    if f.assignee_membership_id is not None:
-        stmt = stmt.where(Task.assignee_membership_id == f.assignee_membership_id)
-    if f.subject_object_id is not None:
-        stmt = stmt.where(Task.subject_object_id == f.subject_object_id)
-    if f.due_before is not None:
-        stmt = stmt.where(Task.due_date < f.due_before)
+            .where(visible, *filter_clauses(f)))
     seite = keyset(session, stmt, key, ObjectRow.id, desc=desc, cursor=cursor, limit=limit)
     return list(seite.rows), seite.next_cursor

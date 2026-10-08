@@ -11,8 +11,16 @@ const TYPEN = ".pdf,.png,.jpg,.jpeg,.xml,.txt,.csv";
 
 const pruefTag = (s) => h("span", { class: `tag${s === "approved" ? "" : s === "rejected" ? " tag--danger" : " tag--muted"}` }, PRUEFUNG[s] || s);
 
+const ZUSATZ = { scan_status: (v) => `Virenprüfung: ${SCAN[v] || v}`, since: (v) => `seit ${datum(v)}`,
+  unlinked: () => "nicht zugeordnet" };
+
 export async function liste(el, _p, q) {
-  const daten = await get(`/documents${query({ review_status: q.get("review_status"), limit: 25, cursor: q.get("cursor") })}`);
+  // Filter aus Links (Dashboard) bleiben erhalten und sind sichtbar — dieselben Parameter wie die API
+  const f = { review_status: q.get("review_status"), scan_status: q.get("scan_status"), since: q.get("since"),
+    unlinked: q.get("unlinked") };
+  const daten = await get(`/documents${query({ ...f, limit: 25, cursor: q.get("cursor") })}`);
+  const chips = Object.keys(ZUSATZ).filter((k) => f[k]).map((k) => h("a", { class: "tag tag--muted",
+    href: `#/dokumente${query({ ...f, [k]: null })}`, title: "Filter entfernen" }, `${ZUSATZ[k](f[k])} ×`));
   let upload = null;
   if (darf("files.upload")) {
     const datei = h("input", { type: "file", accept: TYPEN, class: "sr-only", id: "upload" });
@@ -29,16 +37,16 @@ export async function liste(el, _p, q) {
   }
   const filter = h("select", { class: "input", "aria-label": "Prüfstatus" }, h("option", { value: "" }, "Alle"),
     Object.entries(PRUEFUNG).map(([k, v]) => h("option", { value: k, selected: q.get("review_status") === k }, v)));
-  filter.addEventListener("change", () => gehe(`/dokumente${query({ review_status: filter.value })}`));
+  filter.addEventListener("change", () => gehe(`/dokumente${query({ ...f, review_status: filter.value })}`));
   const zeilen = daten.items.map((d) => h("tr", {}, h("td", {}, h("a", { href: `#/dokumente/${d.id}` }, d.title)),
     h("td", {}, pruefTag(d.review_status)), h("td", { class: "opt" }, groesse(d.size_bytes)), h("td", { class: "opt" }, datum(d.created_at))));
   ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("h1", {}, "Dokumente"),
     h("p", {}, "Neue Dateien sind bis zur Virenprüfung gesperrt.")), upload),
-  h("div", { class: "row" }, filter), h("br"),
+  h("div", { class: "row" }, filter, chips), h("br"),
   zeilen.length ? h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Datei"), h("th", {}, "Prüfung"),
     h("th", { class: "opt" }, "Größe"), h("th", { class: "opt" }, "Hochgeladen"))), h("tbody", {}, zeilen))) : h("p", { class: "empty" }, "Keine Dokumente."),
   daten.next_cursor ? h("div", { class: "row row--end" }, h("a", { class: "btn btn--ghost btn--sm",
-    href: `#/dokumente${query({ review_status: q.get("review_status"), cursor: daten.next_cursor })}` }, "Weitere")) : null);
+    href: `#/dokumente${query({ ...f, cursor: daten.next_cursor })}` }, "Weitere")) : null);
 }
 
 export async function detail(el, { ref }) {

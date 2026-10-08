@@ -20,18 +20,35 @@ async function mitglieder() {
   return (await get("/members?status=active&limit=100")).items;
 }
 
+const OFFEN = ["open", "in_progress", "blocked"];
+
+function chip(text, ohne) {
+  return h("a", { class: "tag tag--muted", href: `#/aufgaben${query(ohne)}`, title: "Filter entfernen" }, `${text} ×`);
+}
+
 export async function liste(el, _params, q) {
-  const filter = { status: q.get("status") || "", assignee: q.get("assignee") || "", sort: q.get("sort") || "created_at" };
-  const params = { status: filter.status || ["open", "in_progress", "blocked"], assignee: filter.assignee,
-    sort: filter.sort, order: filter.sort === "due_date" || filter.sort === "title" ? "asc" : "desc", limit: 25,
-    cursor: q.get("cursor") };
+  const st = q.getAll("status");
+  const alleOffen = st.length === 0 || (st.length === OFFEN.length && OFFEN.every((s) => st.includes(s)));
+  // Filter aus Links (z. B. Dashboard) bleiben erhalten — dieselben Parameter wie die API (Wert → Liste)
+  const filter = { status: alleOffen ? "" : st, assignee: q.get("assignee") || "", priority: q.getAll("priority"),
+    due_before: q.get("due_before") || "", sort: q.get("sort") || "created_at" };
+  const params = { ...filter, status: alleOffen ? OFFEN : st,
+    order: filter.sort === "due_date" || filter.sort === "title" ? "asc" : "desc", limit: 25, cursor: q.get("cursor") };
   const daten = await get(`/tasks${query(params)}`);
   const leiste = h("form", { class: "row" },
-    auswahl("status", STATUS, filter.status, "Alle offenen"),
-    h("select", { name: "assignee" }, h("option", { value: "" }, "Alle"), h("option", { value: "me", selected: filter.assignee === "me" }, "Mir zugewiesen")),
+    auswahl("status", STATUS, st.length === 1 ? st[0] : "", "Alle offenen"),
+    h("select", { name: "assignee" }, h("option", { value: "" }, "Alle"),
+      h("option", { value: "me", selected: filter.assignee === "me" }, "Mir zugewiesen"),
+      h("option", { value: "none", selected: filter.assignee === "none" }, "Ohne Zuständige")),
     auswahl("sort", { created_at: "Neueste", due_date: "Fälligkeit", priority: "Priorität", title: "Titel" }, filter.sort));
   for (const s of leiste.querySelectorAll("select")) s.classList.add("input");
-  leiste.addEventListener("change", () => gehe(`/aufgaben${query(Object.fromEntries(new FormData(leiste).entries()))}`));
+  leiste.addEventListener("change", () => gehe(`/aufgaben${query({ ...Object.fromEntries(new FormData(leiste).entries()),
+    priority: filter.priority, due_before: filter.due_before })}`));
+  const chips = [];
+  if (filter.due_before) chips.push(chip(`Fällig vor ${datum(filter.due_before)}`, { ...filter, due_before: "" }));
+  if (filter.priority.length) {
+    chips.push(chip(`Priorität: ${filter.priority.map((p) => PRIO[p] || p).join(", ")}`, { ...filter, priority: [] }));
+  }
   const neu = darf("tasks.create") ? h("button", { class: "btn", type: "button", on: { click: anlegen } }, "Neue Aufgabe") : null;
   const zeilen = daten.items.map((a) => h("tr", {},
     h("td", {}, h("a", { href: `#/aufgaben/${a.id}` }, a.title)),
@@ -40,7 +57,8 @@ export async function liste(el, _params, q) {
     h("td", { class: "opt" }, datum(a.due_date))));
   const weiter = daten.next_cursor ? h("a", { class: "btn btn--ghost btn--sm",
     href: `#/aufgaben${query({ ...filter, cursor: daten.next_cursor })}` }, "Weitere") : null;
-  ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("h1", {}, "Aufgaben")), neu), leiste, h("br"),
+  ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("h1", {}, "Aufgaben")), neu), leiste,
+    chips.length ? h("div", { class: "row chips" }, chips) : null, h("br"),
     zeilen.length ? h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Titel"), h("th", {}, "Status"),
       h("th", { class: "opt" }, "Zuständig"), h("th", { class: "opt" }, "Fällig"))), h("tbody", {}, zeilen)))
       : h("p", { class: "empty" }, "Keine Aufgaben für diesen Filter."), h("div", { class: "row row--end" }, weiter));

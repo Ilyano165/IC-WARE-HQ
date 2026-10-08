@@ -4,7 +4,7 @@ import { ApiError, get, meldung, post } from "./api.js";
 import { aktuell, finde, gehe, route } from "./router.js";
 import { darf, setzeMe, state } from "./state.js";
 import * as anmeldung from "./views/anmeldung.js";
-import * as uebersicht from "./views/uebersicht.js";
+import * as dashboard from "./views/dashboard.js";
 import * as aufgaben from "./views/aufgaben.js";
 import * as dokumente from "./views/dokumente.js";
 import * as inbox from "./views/inbox.js";
@@ -15,7 +15,8 @@ import * as konto from "./views/konto.js";
 
 const app = $("#app");
 
-route("/", uebersicht.ansicht);
+route("/", dashboard.ansicht);
+route("/rueckfragen", inbox.rueckfragen, "comments.read");
 route("/aufgaben", aufgaben.liste, "tasks.read");
 route("/aufgaben/:ref", aufgaben.detail, "tasks.read");
 route("/dokumente", dokumente.liste, "files.read");
@@ -35,6 +36,7 @@ const NAV = [
   { pfad: "/", text: "Übersicht" },
   { pfad: "/aufgaben", text: "Aufgaben", recht: "tasks.read" },
   { pfad: "/dokumente", text: "Dokumente", recht: "files.read" },
+  { pfad: "/rueckfragen", text: "Rückfragen", recht: "comments.read" },
   { pfad: "/benachrichtigungen", text: "Benachrichtigungen" },
   { gruppe: "Verwaltung" },
   { pfad: "/mitglieder", text: "Mitglieder", recht: "users.read" },
@@ -78,9 +80,13 @@ function shell() {
       h("header", { class: "top" },
         h("button", { class: "btn btn--ghost btn--sm menu-btn", type: "button", "aria-controls": "seite",
           on: { click: () => huelle.classList.toggle("nav-open") } }, "Menü"),
+        state.sitzung.memberships.length > 1
+          ? h("button", { class: "btn btn--ghost btn--sm firma", type: "button", title: "Firma wechseln",
+            on: { click: () => anmeldung.firmenwahl(app, state.sitzung, start, true) } }, state.firma || "Firma")
+          : h("span", { class: "firma small" }, state.firma || ""),
         h("form", { class: "search", role: "search", on: { submit: (e) => { e.preventDefault(); gehe(`/suche?q=${encodeURIComponent(suche.value.trim())}`); } } }, suche),
         glocke,
-        h("span", { class: "who-name muted small" }, name),
+        h("a", { class: "who-name small", href: "#/konto", title: "Konto & Sicherheit" }, name),
         h("button", { class: "btn btn--ghost btn--sm", type: "button", on: { click: abmelden } }, "Abmelden")),
       h("div", { class: "content", id: "inhalt" })));
   huelle.addEventListener("click", (e) => { if (e.target.closest(".nav a")) huelle.classList.remove("nav-open"); });

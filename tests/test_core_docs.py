@@ -11,7 +11,7 @@ from ichq.core.config import Settings
 from ichq.db.engine import Engines
 
 DOCS = [Path(__file__).resolve().parent.parent / "docs" / n
-        for n in ("core-permissions.md", "m3-mandanten.md", "authorization.md")]
+        for n in ("core-permissions.md", "m3-mandanten.md", "authorization.md", "d0-dashboard.md")]
 
 
 def test_routentabelle_entspricht_dem_code(settings: Settings, engines: Engines) -> None:

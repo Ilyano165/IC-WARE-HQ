@@ -1,6 +1,7 @@
 """Dokumente (C0): Upload als Rohdaten (kein Multipart), Liste, Prüfung, Download nur nach Virenprüfung."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -61,12 +62,16 @@ async def upload(request: Request, filename: Annotated[str, Query(min_length=1, 
 @router.get("/documents")
 def list_documents(p: Principal = Depends(require("files.read")), db: TenantDB = Depends(tenant_db),
                    review_status: Annotated[str | None, Query(pattern="^(pending|approved|rejected)$")] = None,
+                   scan_status: Annotated[str | None, Query(pattern="^(quarantined|clean|infected)$")] = None,
+                   since: datetime | None = None, unlinked: bool = False,
                    sort: Annotated[str, Query(pattern="^(created_at|title)$")] = "created_at",
                    order: Annotated[str, Query(pattern="^(asc|desc)$")] = "desc",
                    cursor: Cursor = None, limit: Limit = DEFAULT) -> dict[str, Any]:
     with db() as s:
-        rows, weiter = documents.list_documents(s, visible_clause(p), review_status=review_status, sort=sort,
-                                                desc=order == "desc", cursor=cursor, limit=limit)
+        f = documents.DocumentFilter(review_status=review_status, scan_status=scan_status, since=since,
+                                     unlinked=unlinked)
+        rows, weiter = documents.list_documents(s, visible_clause(p), f, sort=sort, desc=order == "desc",
+                                                cursor=cursor, limit=limit)
         return {"items": [document_out(s, d, o) for d, o, *_ in rows], "next_cursor": weiter}
 
 

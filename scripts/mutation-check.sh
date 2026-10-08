@@ -185,5 +185,25 @@ mutation "U1 Zwei CSP (Middleware überschreibt nicht)" "api/middleware.py" "hea
 mutation "U1 Text als HTML eingefügt" "web/js/dom.js" "    el.append(k instanceof Node ? k : document.createTextNode(String(k)));|||    if (k instanceof Node) el.append(k); else el.insertAdjacentHTML(\"beforeend\", String(k));" "$U1S $U1B"
 mutation "U1 Veraltete Ansicht überschreibt neue Seite" "web/js/app.js" "    await r.ansicht(ziel, r.params, query);|||    await r.ansicht(inhalt, r.params, query);" "$U1B"
 mutation "U1 Navigation ohne Rechtefilter" "web/js/app.js" "NAV.filter((n) => !n.recht || darf(n.recht))|||NAV.filter(() => true)" "$U1B"
+# ---------- D0 Dashboard (ADR-014) ----------
+D0A="tests/test_d0_dashboard.py"; D0B="tests/test_d0_browser.py"
+mutation "D0 Widget ohne Rechteprüfung" "dashboard/service.py" "        if (only is not None and key != only) or not erlaubt(p, w.requires):|||        if (only is not None and key != only):" "$D0A"
+mutation "D0 Ein Recht genügt (any statt all)" "dashboard/service.py" "    return all(decide(p, r) for r in requires)|||    return any(decide(p, r) for r in requires) or not requires" "$D0A"
+mutation "D0 Geplante Module ohne Rechteprüfung" "dashboard/service.py" "               if only is None and erlaubt(p, g.requires)]|||               if only is None]" "$D0A"
+mutation "D0 Fehler eines Widgets reißt alles mit" "dashboard/service.py" "        except Exception:   # ein defektes Widget|||        except ZeroDivisionError:   # ein defektes Widget" "$D0A"
+mutation "D0 Heute in UTC statt Firmenzeit" "dashboard/service.py" "SELECT (now() AT TIME ZONE timezone)::date FROM tenants|||SELECT (now() AT TIME ZONE 'UTC')::date FROM tenants" "$D0A"
+mutation "D0 Aufgabenzahlen ohne Sichtbarkeit" "dashboard/loaders.py" "    return (select(Task.id).join(ObjectRow, (ObjectRow.id == Task.id) & (ObjectRow.tenant_id == Task.tenant_id))
+            .where(visible_clause(p)))|||    return (select(Task.id).join(ObjectRow, (ObjectRow.id == Task.id) & (ObjectRow.tenant_id == Task.tenant_id)))" "$D0A"
+mutation "D0 Aufgabeneinträge ohne Sichtbarkeit" "dashboard/loaders.py" "            .where(visible_clause(p), *task_filter(f))|||            .where(*task_filter(f))" "$D0A"
+mutation "D0 Dokumentzahlen ohne Sichtbarkeit" "dashboard/loaders.py" "& (ObjectRow.tenant_id == Document.tenant_id)).where(visible_clause(p)))
+    z = _zaehle|||& (ObjectRow.tenant_id == Document.tenant_id)))
+    z = _zaehle" "$D0A"
+mutation "D0 Rückfragen ohne Sichtbarkeit" "comments/questions.py" "            .where(Comment.kind == \"question\", visible_clause(principal)))|||            .where(Comment.kind == \"question\"))" "$D0A"
+mutation "D0 Eigene Antwort schließt Rückfrage" "comments/questions.py" "                                 antwort.author_membership_id != Comment.author_membership_id)|||                                 )" "$D0A"
+mutation "D0 Gelöschte Antwort schließt Rückfrage" "comments/questions.py" "antwort.created_at > Comment.created_at, antwort.deleted_at.is_(None),|||antwort.created_at > Comment.created_at," "$D0A"
+mutation "D0 Überfällig schließt heute ein" "tasks/service.py" "        teile.append(Task.due_date < f.due_before)|||        teile.append(Task.due_date <= f.due_before)" "$D0A"
+mutation "D0 Ohne-Zuständige-Filter wirkungslos" "tasks/service.py" "    if f.unassigned:|||    if False:" "$D0A"
+mutation "D0 Dokumentfilter nicht zugeordnet wirkungslos" "documents/service.py" "    if f.unlinked:|||    if False:" "$D0A"
+mutation "D0 Kennzahl-Link ohne Filter" "web/js/views/dashboard.js" "  return \`#\${basis}\${query(filter || {})}\`;|||  return \`#\${basis}\`;" "$D0B"
 echo "---"; echo "erkannt $ERKANNT · unbemerkt $UNBEMERKT · ungültig $UNGUELTIG"
 [ "$UNBEMERKT" -eq 0 ] && [ "$UNGUELTIG" -eq 0 ]

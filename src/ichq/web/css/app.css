@@ -143,3 +143,41 @@ dialog h2{margin-bottom:1rem}
   .top .bell{margin-left:auto}
   th.opt,td.opt{display:none}
 }
+
+/* ---------- Dashboard (D0) ---------- */
+.dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;align-items:start}
+.dash > .card + .card{margin-top:0}
+.widget{min-height:180px;display:flex;flex-direction:column;gap:.8rem}
+.widget--l{grid-column:1 / -1}
+.widget-head{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem}
+.widget-head h2{margin:0}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:.5rem}
+.metric{display:flex;flex-direction:column;gap:.1rem;padding:.65rem .8rem;border-radius:var(--r-md);border:1px solid var(--line);
+  background:rgba(255,255,255,.025);color:var(--ink);transition:border-color .2s ease,background .2s ease}
+a.metric:hover{text-decoration:none;border-color:rgba(25,229,110,.45);background:var(--brand-soft)}
+.metric-value{font-family:var(--f-display);font-weight:600;font-size:1.6rem;letter-spacing:-.03em;line-height:1.1;
+  font-variant-numeric:tabular-nums}
+.metric-label{font-size:.78rem;color:var(--muted2)}
+.metric--warn .metric-value{color:var(--warn)}
+.metric--danger .metric-value{color:var(--danger)}
+.witems{list-style:none;display:grid;gap:.15rem}
+.witem{padding:.45rem .2rem;border-bottom:1px solid var(--line);font-size:.9rem}
+.witem:last-child{border-bottom:none}
+.witem .meta{color:var(--muted);font-size:.78rem}
+.witem--danger > a,.witem--danger > span{color:var(--danger)}
+.witem--warn > span{color:var(--warn)}
+.widget .empty{padding:1.1rem .8rem}
+.skeleton{background:linear-gradient(100deg,rgba(255,255,255,.03) 30%,rgba(255,255,255,.07) 50%,rgba(255,255,255,.03) 70%);
+  background-size:300% 100%;animation:schimmer 1.4s ease-in-out infinite}
+@keyframes schimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+.planned{margin-top:1.4rem;border-top:1px solid var(--line);padding-top:1rem}
+.planned h2{text-transform:uppercase;letter-spacing:.08em;font-size:.72rem}
+.chips{margin-top:.6rem}
+.top .firma{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted2)}
+.top .who-name{color:var(--muted2)}
+@media (max-width:900px){
+  .dash{grid-template-columns:1fr}
+  .widget--l{grid-column:auto}
+  .metrics{grid-template-columns:repeat(2,1fr)}
+  .top .firma{max-width:42vw}
+}

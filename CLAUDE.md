@@ -8,7 +8,7 @@ Mandantenfähige B2B-Plattform („digitales Betriebssystem eines Unternehmens")
 Entwicklung in Meilensteinen M0–M26 (Roadmap: `docs/architecture.md`, M0-Bericht separat).
 
 **Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication ✅ · **C0 Core-Plattform** (vor M3/M4 gebaut, ADR-010) · **M3 Mandanten** umgesetzt
-(`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **U1 Oberfläche** im IC-Ware-Design (`docs/ui.md`, ADR-013); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
+(`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **U1 Oberfläche** im IC-Ware-Design (`docs/ui.md`, ADR-013); **D0 Dashboard** (`docs/d0-dashboard.md`, ADR-014); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
 Tor 1/M3 → C0 → U1 → D0 → S1… — **keine D0-/S-Arbeit vor Tor 1.** Produktvision v2 ist ein **unbestätigter
 Entwurf** (`docs/produktvision-v2.md`). Nichts davon ist produktionsreif.
 
@@ -73,6 +73,7 @@ src/ichq/
   members/     M3: Mitglieder, Einladungen (Annehmen über auth/platform/app-Rolle), Last-Admin-Schutz
   notifications/  C0: Engine (Rechte beim Zustellen), Outbox-Handler, Regeln (`ichq notifications-scan`)
   search/      C0: Volltext über `objects`, gruppiert, nur Sichtbares
+  dashboard/   D0: Widget-Registry (Rechte je Widget), Loader (Zahl = gefilterte Liste), Zusammenstellung
   health/      Prüfungen für /health und /readiness
   api/         Routen, Sicherheitsabhängigkeiten, Fehler (RFC 9457), Middleware, ui.py (Auslieferung /app)
   web/         U1: build-freie Oberfläche (ES-Module, IC-Ware-Tokens, Schriften lokal) — spricht nur /api/v1
@@ -177,3 +178,12 @@ Noch offen aus M2: Compose-Smoke-Test (Prompt-Abschnitt 2), echter SMTP-Versand.
 - **Keine Inline-Skripte/-Styles, keine externen Quellen** (CSP). Neue Datei-Typen nur über `ui.TYPES`.
 - **IC-Ware-Design:** Tokens aus `web/css/tokens.css`, Spring Green `#19E56E` als einzige Akzentfarbe.
 - **Neue Seite ⇒** Browsertest in `tests/test_u1_browser.py`; jede CSP-Verletzung lässt ihn scheitern.
+
+## Regeln des Dashboards (D0, ADR-014)
+
+- **Widgets nur über die Registry** (`ichq.dashboard.registry.register`) mit ihren Rechten — der Server lässt Widgets
+  ohne effektive Rechte weg. Nie im Browser nach Rollen filtern.
+- **Zahl = Liste:** Kennzahlen zählen mit denselben `filter_clauses` wie die verlinkte Liste und tragen deren Filter;
+  neue Kennzahl ⇒ Eintrag im Gleichheitstest (`tests/test_d0_dashboard.py`).
+- **Keine Werte ohne Datenquelle:** fehlende Module nur als `PLANNED` (Titel + Modul), nie mit Zahlen.
+- „Heute" immer in der Zeitzone der Firma (`dashboard.service.context`).

@@ -11,6 +11,7 @@ from ichq.api.security import TenantDB, require, tenant_db
 from ichq.api.v1.common import DEFAULT, Cursor, Limit, Strict, refs_for, writing
 from ichq.api.v1.tasks import Priority, task_out
 from ichq.authz.service import Principal
+from ichq.comments import questions
 from ichq.comments import service as comments
 from ichq.comments.models import Comment
 from ichq.core.errors import Conflict
@@ -51,6 +52,17 @@ def comment_out(s: TenantSession, c: Comment, mentions: list[Any] | None = None)
             "deleted_by": refs.get(c.deleted_by_membership_id) if c.deleted_by_membership_id else None,
             "delete_reason": c.delete_reason,
             "mentions": [refs[m] for m in (mentions or []) if m in refs]}
+
+
+@router.get("/questions")
+def list_questions(p: Principal = Depends(require("comments.read")), db: TenantDB = Depends(tenant_db),
+                   open_only: bool = True, cursor: Cursor = None, limit: Limit = DEFAULT) -> dict[str, Any]:
+    """Rückfragen über alle sichtbaren Objekte, neueste zuerst. ``open_only``: noch ohne Antwort einer anderen
+    Person (Regel: ``ichq.comments.questions``). Jede Zeile nennt das Objekt — Wert → Liste → Objekt (D0)."""
+    with db() as s:
+        rows, weiter = questions.list_questions(s, p, open_only=open_only, cursor=cursor, limit=limit)
+        return {"items": [{**comment_out(s, c), "object": {"id": o.public_id, "type": o.type, "title": o.title}}
+                          for c, o, *_ in rows], "next_cursor": weiter}
 
 
 @router.get("/objects/{ref}/comments")

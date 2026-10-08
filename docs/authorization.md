@@ -143,6 +143,7 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/comments/{ref}/tasks` | POST | permission | `tasks.create` |
 | `/api/v1/company` | GET | permission | `company.read` |
 | `/api/v1/company` | PATCH | permission | `company.update` |
+| `/api/v1/dashboard` | GET | permission | `dashboard.read` |
 | `/api/v1/documents` | GET | permission | `files.read` |
 | `/api/v1/documents` | POST | permission | `files.upload` |
 | `/api/v1/documents/{ref}` | GET | permission | `files.read` |
@@ -181,6 +182,7 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/objects/{ref}/links` | POST | authenticated | angemeldet + Firma |
 | `/api/v1/objects/{ref}/tasks` | POST | permission | `tasks.create` |
 | `/api/v1/permissions` | GET | permission | `roles.read` |
+| `/api/v1/questions` | GET | permission | `comments.read` |
 | `/api/v1/roles` | GET | permission | `roles.read` |
 | `/api/v1/roles` | POST | permission | `roles.create` |
 | `/api/v1/roles/{role}` | DELETE | permission | `roles.delete` |

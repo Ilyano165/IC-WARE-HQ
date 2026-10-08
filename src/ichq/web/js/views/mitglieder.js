@@ -7,8 +7,10 @@ import { darf, state } from "../state.js";
 const STATUS = { active: "aktiv", suspended: "deaktiviert", left: "ausgetreten", invited: "eingeladen" };
 const QUELLE = { role: "Rolle", allow: "Einzelrecht: erlaubt", deny: "Einzelrecht: verboten", feature_disabled: "Modul abgeschaltet", none: "—" };
 
-export async function liste(el) {
-  const [m, e] = await Promise.all([get("/members?limit=100"), darf("users.read") ? get("/invitations?limit=50") : null]);
+export async function liste(el, _p, q) {
+  const status = q && STATUS[q.get("status")] ? q.get("status") : null;
+  const [m, e] = await Promise.all([get(`/members?limit=100${status ? `&status=${status}` : ""}`),
+    darf("users.read") ? get("/invitations?limit=50") : null]);
   const einladen = darf("users.create") ? h("button", { class: "btn", type: "button", on: { click: async () => {
     const d = await dialog("Person einladen", [feld("E-Mail", h("input", { name: "email", type: "email", required: true, maxlength: 254 })),
       feld("Funktion (optional)", h("input", { name: "title", maxlength: 120 })),
@@ -20,7 +22,7 @@ export async function liste(el) {
     h("div", { class: "muted small" }, p.email)), h("td", { class: "opt" }, p.title || "—"),
   h("td", {}, h("span", { class: `tag${p.status === "active" ? "" : " tag--muted"}` }, STATUS[p.status] || p.status))));
   const offen = e ? e.items.filter((i) => !i.accepted && !i.revoked) : [];
-  ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("h1", {}, "Mitglieder"), h("p", {}, `${m.items.length} Personen`)), einladen),
+  ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("h1", {}, "Mitglieder"), h("p", {}, `${m.items.length} Personen${status ? ` · nur ${STATUS[status]}` : ""}`)), einladen),
     h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Person"), h("th", { class: "opt" }, "Funktion"),
       h("th", {}, "Status"))), h("tbody", {}, zeilen))),
     offen.length ? h("section", { class: "card" }, h("h2", {}, "Offene Einladungen"), h("div", { class: "list" }, offen.map((i) =>

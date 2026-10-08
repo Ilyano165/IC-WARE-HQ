@@ -39,12 +39,15 @@ TEMPLATES: tuple[Template, ...] = (
     Template(COMPANY_ADMIN, 100, "Gesperrt: hält immer alle Rechte der Registry", grants_all=True),
     Template("Geschäftsführung", 90, "Sieht und entscheidet alles Geschäftliche, verwaltet keine Rechte",
              PERMISSIONS - _VERWALTUNG),
-    Template("Mitarbeiter", 40, "Eigene Aufgaben, Fahrten, Reisen, Termine; sieht nur Eigenes und Freigegebenes",
+    # Ohne objects.read_all: sieht nur Eigenes, Zugewiesenes und ausdrücklich Freigegebenes (ADR-009). Keine
+    # Finanz-, Rechnungs-, Kunden-, Mitglieder- oder Bewirtungsrechte (D0-Auftrag, Abschnitt 2).
+    Template("Mitarbeiter", 40, "Eigene Aufgaben, Projekte, Dokumente, Reisen, Fahrten; nur Eigenes und Freigegebenes",
              _LESEN_BASIS | {
                  "tasks.read", "tasks.create", "tasks.update", "projects.read", "files.read", "files.upload",
                  "chat.read", "chat.create", "calendar.read", "calendar.create", "calendar.update",
-                 "vehicles.read", "vehicles.update", "travel.read", "travel.update",
-                 "hospitality.read", "hospitality.update", "activity.read"}),
+                 "vehicles.read", "vehicles.update", "travel.read", "travel.update", "activity.read"}),
+    # Steuerlich relevante Daten lesen und exportieren, Rückfragen stellen/beantworten (Kommentare). Keine Mitglieder-,
+    # Rollen- oder Prüf-/Freigaberechte (files.update) — Freigaben entscheidet die Firma. Ohne objects.read_all.
     Template("Steuerberater", 30, "Extern: Rückfragen, Belege, Export — nur Freigegebenes (ohne objects.read_all)",
              _LESEN_BASIS | {
                  "finance.read", "finance.export", "invoices.read", "invoices.export", "files.read",
@@ -53,6 +56,21 @@ TEMPLATES: tuple[Template, ...] = (
 )
 assert all(t.permissions <= PERMISSIONS for t in TEMPLATES)
 assert not any("objects.read_all" in t.permissions for t in TEMPLATES if t.name in ("Mitarbeiter", "Steuerberater"))
+
+
+def table_markdown() -> str:
+    """Rechte der Vorlagen als Tabelle (Modul × Vorlage) — Quelle für docs/d0-dashboard.md, per Test verglichen."""
+    module = sorted({p.split(".", 1)[0] for p in PERMISSIONS})
+    kopf = "| Modul | " + " | ".join(t.name for t in TEMPLATES) + " |"
+    zeilen = [kopf, "| --- |" + " --- |" * len(TEMPLATES)]
+    for m in module:
+        zellen = []
+        for t in TEMPLATES:
+            rechte = PERMISSIONS if t.grants_all else t.permissions
+            aktionen = sorted(p.split(".", 1)[1] for p in rechte if p.split(".", 1)[0] == m)
+            zellen.append(", ".join(aktionen) if aktionen else "—")
+        zeilen.append(f"| `{m}` | " + " | ".join(zellen) + " |")
+    return "\n".join(zeilen) + "\n"
 
 
 def company_admin_role(session: Session) -> uuid.UUID | None:

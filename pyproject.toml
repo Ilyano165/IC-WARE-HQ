@@ -79,6 +79,7 @@ layers = [
   "ichq.app",
   "ichq.api",
   "ichq.models",
+  "ichq.dashboard",
   "ichq.search | ichq.notifications",
   "ichq.tasks",
   "ichq.comments | ichq.documents | ichq.relations | ichq.members",

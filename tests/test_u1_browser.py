@@ -129,7 +129,7 @@ def test_rechte_einer_person_aendern(browser: Any, server: str, leute: dict[str,
     s.anmelden("chefin@alpha.test")
     p = s.page
     s.gehe("Mitglieder")
-    p.get_by_role("link", name="max", exact=True).click()
+    p.locator("#inhalt").get_by_role("link", name="max", exact=True).click()
     p.get_by_role("heading", name="Was diese Person darf").wait_for()
     zeile = p.locator("tr", has=p.get_by_text("tasks.create", exact=True))
     assert "darf\t" in zeile.inner_text().lower() and "Mitarbeiter" in zeile.inner_text()
@@ -140,7 +140,7 @@ def test_rechte_einer_person_aendern(browser: Any, server: str, leute: dict[str,
     assert "tasks.create" not in rw.rechte(leute["max"])           # wirklich auf dem Server
     # Eigenes Konto: Hinweis statt Bedienelemente
     p.get_by_role("link", name="← Mitglieder").click()
-    p.get_by_role("link", name="chefin", exact=True).click()
+    p.locator("#inhalt").get_by_role("link", name="chefin", exact=True).click()
     p.get_by_text("eigenes Konto").wait_for()
     assert p.get_by_role("combobox", name="Einzelrecht tasks.read").count() == 0
     # Rollen-Editor: gesperrte Rolle ist nicht bearbeitbar
@@ -170,7 +170,7 @@ def test_mobil_ohne_querscrollen(browser: Any, server: str, leute: dict[str, Any
 
 def test_langsame_alte_seite_ueberschreibt_neue_nicht(browser: Any, server: str, leute: dict[str, Any]) -> None:  # noqa: F811
     """Gefundener Fehler: Die Übersicht lud noch, der Mensch wechselte schon die Seite — die verspätete Übersicht
-    überschrieb dann die neue Seite. Hier künstlich erzwungen: Aufgaben-Abfrage der Übersicht 1,5 s verzögert."""
+    überschrieb dann die neue Seite. Hier künstlich erzwungen: Dashboard-Abfrage 1,5 s verzögert."""
     s = Seite(browser, server)
     s.anmelden("max@alpha.test")
     p = s.page
@@ -178,7 +178,7 @@ def test_langsame_alte_seite_ueberschreibt_neue_nicht(browser: Any, server: str,
     def langsam(route: Any) -> None:
         p.wait_for_timeout(1500)
         route.continue_()
-    p.route("**/api/v1/tasks?assignee=me*", langsam)
+    p.route("**/api/v1/dashboard*", langsam)
     p.goto("/app/#/aufgaben")
     p.get_by_role("heading", name="Aufgaben").wait_for()
     p.evaluate("location.hash = '#/'")                       # Übersicht starten (langsam) …
