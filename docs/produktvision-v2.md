@@ -199,6 +199,7 @@ Tor 1. Die M0-Meilensteine bleiben gültig; diese Tabelle ordnet sie neu, wo die
 - [ ] Datenschutzkonzept bestätigen (`docs/datenschutzkonzept.md`, Entwurf) — Voraussetzung für das CRM.
 - [ ] Sind Kommentare/Rückfragen GoBD-relevant (Handels-/Geschäftsbriefe, § 147 Abs. 1 AO)? Siehe
       `docs/core-activity-model.md` — fachlich ungeklärt.
+- [ ] KI-Schicht (M21): Konzept `docs/ki-schicht.md`, ADR-012 (vorgeschlagen) — Anbieter, AVV, Region offen.
 - [ ] Bankanbindung für S6 (FinTS/PSD2-Anbieter) und deren AVV.
 - [ ] Wer ist „Steuerberater" technisch: Mitglied der Mandantenfirma oder eigener Kanzlei-Mandant mit Zugriff
       auf mehrere Firmen? (Heute: Mitglied je Firma.)
