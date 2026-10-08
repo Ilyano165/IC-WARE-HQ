@@ -120,6 +120,7 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 <!-- routen:start -->
 | Pfad | Methode | Marke | Regel |
 | --- | --- | --- | --- |
+| `/` | GET | public | öffentlich — Weiterleitung zur Oberfläche |
 | `/api/v1/activities` | GET | permission | `activity.read` |
 | `/api/v1/audit` | GET | permission | `audit.read` |
 | `/api/v1/audit/export` | GET | permission | `audit.export` |
@@ -194,8 +195,12 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/tasks/{ref}` | GET | permission | `tasks.read` |
 | `/api/v1/tasks/{ref}` | PATCH | permission | `tasks.update` |
 | `/api/v1/tasks/{ref}/attachments` | POST | permission | `tasks.update` |
+| `/app` | GET | public | öffentlich — Weiterleitung zur Oberfläche |
+| `/app/{pfad:path}` | GET | public | öffentlich — Oberfläche: statische Dateien, keine Daten |
 | `/health` | GET | public | öffentlich — Liveness für Orchestrierung |
+| `/invite` | GET | public | öffentlich — Einladungslink → Oberfläche |
 | `/readiness` | GET | public | öffentlich — Bereitschaft für Load Balancer |
+| `/reset` | GET | public | öffentlich — Passwort-Link → Oberfläche |
 <!-- routen:end -->
 
 ## Bekannte Grenzen

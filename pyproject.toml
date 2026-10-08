@@ -29,7 +29,7 @@ ichq = "ichq.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-ichq = ["migrations/script.py.mako", "migrations/alembic.ini", "auth/data/*"]
+ichq = ["migrations/script.py.mako", "migrations/alembic.ini", "auth/data/*", "web/*", "web/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

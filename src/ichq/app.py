@@ -13,6 +13,7 @@ from ichq.api.middleware import RequestContextMiddleware
 from ichq.api.origin import OriginGuardMiddleware
 from ichq.api.security import assert_routes_secured
 from ichq.api.state import AppState
+from ichq.api.ui import router as ui_router
 from ichq.api.v1.auth import router as auth_router
 from ichq.api.v1.comments import router as comments_router
 from ichq.api.v1.documents import router as documents_router
@@ -54,6 +55,7 @@ def create_app(settings: Settings | None = None, *, engines: Engines | None = No
     app.state.ichq = AppState(settings=settings, engines=engines, storage=storage, mailer=mailer)
     install_error_handlers(app)
     app.include_router(health_routes.router)
+    app.include_router(ui_router)
     app.include_router(v1_router)
     app.include_router(auth_router)
     for core in (objects_router, tasks_router, comments_router, documents_router, inbox_router, members_router,

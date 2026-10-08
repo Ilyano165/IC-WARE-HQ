@@ -8,7 +8,7 @@ Mandantenfähige B2B-Plattform („digitales Betriebssystem eines Unternehmens")
 Entwicklung in Meilensteinen M0–M26 (Roadmap: `docs/architecture.md`, M0-Bericht separat).
 
 **Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication ✅ · **C0 Core-Plattform** (vor M3/M4 gebaut, ADR-010) · **M3 Mandanten** umgesetzt
-(`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
+(`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **U1 Oberfläche** im IC-Ware-Design (`docs/ui.md`, ADR-013); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
 Tor 1/M3 → C0 → U1 → D0 → S1… — **keine D0-/S-Arbeit vor Tor 1.** Produktvision v2 ist ein **unbestätigter
 Entwurf** (`docs/produktvision-v2.md`). Nichts davon ist produktionsreif.
 
@@ -74,7 +74,8 @@ src/ichq/
   notifications/  C0: Engine (Rechte beim Zustellen), Outbox-Handler, Regeln (`ichq notifications-scan`)
   search/      C0: Volltext über `objects`, gruppiert, nur Sichtbares
   health/      Prüfungen für /health und /readiness
-  api/         Routen, Sicherheitsabhängigkeiten, Fehler (RFC 9457), Middleware
+  api/         Routen, Sicherheitsabhängigkeiten, Fehler (RFC 9457), Middleware, ui.py (Auslieferung /app)
+  web/         U1: build-freie Oberfläche (ES-Module, IC-Ware-Tokens, Schriften lokal) — spricht nur /api/v1
   models.py    registriert ALLE Tabellen — jeder Einstiegspunkt lädt es
   app.py, cli.py, asgi.py, migrations/
 tests/         echte PostgreSQL-Tests, Unterprozess-Tests, Mutationsliste in scripts/
@@ -168,3 +169,11 @@ Noch offen aus M2: Compose-Smoke-Test (Prompt-Abschnitt 2), echter SMTP-Versand.
   `ichq.authz.delegation.manageable` und die Obergrenzen-Prüfung, nie daran vorbei.
 - **Company Admin** (`grants_all`) speichert keine Rechte; DB-Trigger sperren Änderungen. Plattform-Rechte gibt es nicht.
 - **Neue Route ⇒** `ichq routes-doc` neu erzeugen (`docs/authorization.md`, `tests/test_m4_docs.py`).
+
+## Regeln der Oberfläche (U1, ADR-013)
+
+- **Nur `/api/v1`** — keine HTML erzeugenden Routen, keine zweite Sicherheitsschicht. Ausblenden ist keine Sicherung.
+- **Serverdaten nur als Text** über `h()`; `innerHTML` & Co. sind verboten (`tests/test_u1_static.py`).
+- **Keine Inline-Skripte/-Styles, keine externen Quellen** (CSP). Neue Datei-Typen nur über `ui.TYPES`.
+- **IC-Ware-Design:** Tokens aus `web/css/tokens.css`, Spring Green `#19E56E` als einzige Akzentfarbe.
+- **Neue Seite ⇒** Browsertest in `tests/test_u1_browser.py`; jede CSP-Verletzung lässt ihn scheitern.

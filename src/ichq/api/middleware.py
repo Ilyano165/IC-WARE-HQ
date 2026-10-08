@@ -45,11 +45,12 @@ class RequestContextMiddleware:
             if message["type"] == "http.response.start":
                 status["code"], status["started"] = message["status"], True
                 headers = list(message.get("headers", []))
+                # Standard-Header nur, wo die Antwort keine eigenen setzt (Oberfläche /app: eigene CSP, ADR-013) —
+                # zwei CSP-Header würden BEIDE gelten und die strengere ('none') blockierte die App.
+                gesetzt = {k.lower() for k, _ in headers}
                 headers.append((b"x-request-id", rid.encode()))
-                headers.extend(_HEADER)
-                if not docs:
-                    headers.append(_API_CSP)
-                    headers.append((b"cache-control", b"no-store"))
+                standard = [*_HEADER, *([] if docs else [_API_CSP, (b"cache-control", b"no-store")])]
+                headers.extend(h for h in standard if h[0] not in gesetzt)
                 message["headers"] = headers
             await send(message)
 

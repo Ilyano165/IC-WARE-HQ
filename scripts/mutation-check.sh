@@ -175,5 +175,14 @@ mutation "M4 Archivieren ohne Last-Admin-Schutz" "authz/roles.py" "        with 
 mutation "M4 DB-Sperre der gesperrten Rolle aus" "migrations/versions/0006_m4_rbac.py" "      IF OLD.grants_all AND (NEW.name|||      IF false AND (NEW.name" "$M4B"
 mutation "M4 App-Rolle schreibt Feature-Flags" "migrations/versions/0006_m4_rbac.py" "    GRANT SELECT ON tenant_feature_flags TO ichq_app;|||    GRANT SELECT, INSERT ON tenant_feature_flags TO ichq_app;" "$M4B"
 mutation "M4 Migration lässt Rechteliste der Übergangsrolle stehen" "migrations/versions/0006_m4_rbac.py" "        op.execute(\"DELETE FROM role_permissions rp USING roles r WHERE r.id = rp.role_id AND r.grants_all\")|||        pass" "tests/test_m4_setup.py"
+# ---------- U1 Oberfläche (ADR-013) ----------
+U1S="tests/test_u1_static.py"; U1B="tests/test_u1_browser.py"
+mutation "U1 Pfad-Regex aus" "api/ui.py" "    if not _PFAD.match(pfad) or any(teil in (\"\", \".\", \"..\") for teil in pfad.split(\"/\")[:-1]) or \"..\" in pfad:|||    if False:" "$U1S"
+mutation "U1 Symlink-Ausbruch" "api/ui.py" "    if not datei.is_relative_to(WEB) or not datei.is_file() or datei.suffix not in TYPES:|||    if not datei.is_file() or datei.suffix not in TYPES:" "$U1S"
+mutation "U1 Beliebige Dateitypen" "api/ui.py" " or datei.suffix not in TYPES:|||:" "$U1S"
+mutation "U1 Sicherheits-Header fehlen" "api/ui.py" "    resp.headers.update(HEADERS)|||    pass" "$U1S"
+mutation "U1 Zwei CSP (Middleware überschreibt nicht)" "api/middleware.py" "headers.extend(h for h in standard if h[0] not in gesetzt)|||headers.extend(standard)" "$U1S"
+mutation "U1 Text als HTML eingefügt" "web/js/dom.js" "    el.append(k instanceof Node ? k : document.createTextNode(String(k)));|||    if (k instanceof Node) el.append(k); else el.insertAdjacentHTML(\"beforeend\", String(k));" "$U1S $U1B"
+mutation "U1 Navigation ohne Rechtefilter" "web/js/app.js" "NAV.filter((n) => !n.recht || darf(n.recht))|||NAV.filter(() => true)" "$U1B"
 echo "---"; echo "erkannt $ERKANNT · unbemerkt $UNBEMERKT · ungültig $UNGUELTIG"
 [ "$UNBEMERKT" -eq 0 ] && [ "$UNGUELTIG" -eq 0 ]

@@ -1,6 +1,6 @@
 # ADR-004: Frontend — Entscheidung vertagt auf M5
 
-**Status:** offen
+**Status:** abgelöst durch ADR-013 (U1, 08.10.2026)
 
 ## Kontext
 M1 hat keine Oberfläche. Zur Wahl stehen serverseitiges Rendering mit HTMX und eine React-SPA.

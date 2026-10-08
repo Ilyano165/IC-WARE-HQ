@@ -1,0 +1,99 @@
+// Aufgaben (C0): Liste mit Filtern und Seiten, anlegen, Detail mit Bearbeiten, Status, Zuweisung, Kommentaren.
+import { alertBox, datum, dialog, ersetze, feld, h, toast, zeit } from "../dom.js";
+import { get, meldung, patch, post, query } from "../api.js";
+import { gehe } from "../router.js";
+import { darf } from "../state.js";
+import { kommentare } from "./kommentare.js";
+
+const STATUS = { open: "Offen", in_progress: "In Arbeit", blocked: "Blockiert", done: "Erledigt", cancelled: "Abgebrochen" };
+const PRIO = { low: "Niedrig", normal: "Normal", high: "Hoch", urgent: "Dringend" };
+
+export const status = (s) => h("span", { class: `tag${s === "done" ? "" : s === "blocked" ? " tag--danger" : " tag--muted"}` }, STATUS[s] || s);
+export const prioritaet = (p) => (p === "high" || p === "urgent" ? h("span", { class: "tag tag--warn" }, PRIO[p]) : null);
+
+const auswahl = (name, werte, wert, leer) => h("select", { name },
+  leer ? h("option", { value: "" }, leer) : null,
+  Object.entries(werte).map(([k, v]) => h("option", { value: k, selected: k === wert }, v)));
+
+async function mitglieder() {
+  if (!darf("users.read")) return [];
+  return (await get("/members?status=active&limit=100")).items;
+}
+
+export async function liste(el, _params, q) {
+  const filter = { status: q.get("status") || "", assignee: q.get("assignee") || "", sort: q.get("sort") || "created_at" };
+  const params = { status: filter.status || ["open", "in_progress", "blocked"], assignee: filter.assignee,
+    sort: filter.sort, order: filter.sort === "due_date" || filter.sort === "title" ? "asc" : "desc", limit: 25,
+    cursor: q.get("cursor") };
+  const daten = await get(`/tasks${query(params)}`);
+  const leiste = h("form", { class: "row" },
+    auswahl("status", STATUS, filter.status, "Alle offenen"),
+    h("select", { name: "assignee" }, h("option", { value: "" }, "Alle"), h("option", { value: "me", selected: filter.assignee === "me" }, "Mir zugewiesen")),
+    auswahl("sort", { created_at: "Neueste", due_date: "Fälligkeit", priority: "Priorität", title: "Titel" }, filter.sort));
+  for (const s of leiste.querySelectorAll("select")) s.classList.add("input");
+  leiste.addEventListener("change", () => gehe(`/aufgaben${query(Object.fromEntries(new FormData(leiste).entries()))}`));
+  const neu = darf("tasks.create") ? h("button", { class: "btn", type: "button", on: { click: anlegen } }, "Neue Aufgabe") : null;
+  const zeilen = daten.items.map((a) => h("tr", {},
+    h("td", {}, h("a", { href: `#/aufgaben/${a.id}` }, a.title)),
+    h("td", {}, status(a.status), " ", prioritaet(a.priority)),
+    h("td", { class: "opt" }, a.assignee ? a.assignee.display_name : "—"),
+    h("td", { class: "opt" }, datum(a.due_date))));
+  const weiter = daten.next_cursor ? h("a", { class: "btn btn--ghost btn--sm",
+    href: `#/aufgaben${query({ ...filter, cursor: daten.next_cursor })}` }, "Weitere") : null;
+  ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("h1", {}, "Aufgaben")), neu), leiste, h("br"),
+    zeilen.length ? h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Titel"), h("th", {}, "Status"),
+      h("th", { class: "opt" }, "Zuständig"), h("th", { class: "opt" }, "Fällig"))), h("tbody", {}, zeilen)))
+      : h("p", { class: "empty" }, "Keine Aufgaben für diesen Filter."), h("div", { class: "row row--end" }, weiter));
+}
+
+function personenAuswahl(personen, wert) {
+  return h("select", { name: "assignee" }, h("option", { value: "" }, "Niemand"),
+    personen.map((m) => h("option", { value: m.id, selected: m.id === wert }, m.display_name)));
+}
+
+async function anlegen() {
+  const personen = await mitglieder();
+  const d = await dialog("Neue Aufgabe", [
+    feld("Titel", h("input", { name: "title", required: true, maxlength: 200 })),
+    feld("Beschreibung", h("textarea", { name: "description", maxlength: 10000 })),
+    h("div", { class: "grid2" }, feld("Fällig am", h("input", { name: "due_date", type: "date" })),
+      feld("Priorität", auswahl("priority", PRIO, "normal"))),
+    personen.length ? feld("Zuständig", personenAuswahl(personen, "")) : null], "Anlegen");
+  if (!d) return;
+  const body = { title: d.title, description: d.description || null, priority: d.priority, due_date: d.due_date || null };
+  if (d.assignee) body.assignee = d.assignee;
+  try {
+    const t = await post("/tasks", body);
+    toast("Aufgabe angelegt.");
+    gehe(`/aufgaben/${t.id}`);
+  } catch (e) { toast(meldung(e), "error"); }
+}
+
+export async function detail(el, { ref }) {
+  const [a, personen] = await Promise.all([get(`/tasks/${ref}`), mitglieder()]);
+  const kom = h("section", { class: "card" });
+  const fehler = h("div");
+  let form = h("div", { class: "stack" }, h("p", { class: "body" }, a.description || h("span", { class: "muted" }, "Keine Beschreibung.")));
+  if (darf("tasks.update")) {
+    form = h("form", { class: "stack" }, fehler,
+      feld("Titel", h("input", { name: "title", required: true, maxlength: 200, value: a.title })),
+      feld("Beschreibung", h("textarea", { name: "description", maxlength: 10000, value: a.description || "" })),
+      h("div", { class: "grid2" }, feld("Status", auswahl("status", STATUS, a.status)), feld("Priorität", auswahl("priority", PRIO, a.priority)),
+        feld("Fällig am", h("input", { name: "due_date", type: "date", value: a.due_date || "" })),
+        personen.length ? feld("Zuständig", personenAuswahl(personen, a.assignee ? a.assignee.id : "")) : null),
+      h("div", { class: "row row--end" }, h("button", { class: "btn", type: "submit" }, "Speichern")));
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const d = Object.fromEntries(new FormData(form).entries());
+      const aenderung = { title: d.title, description: d.description, status: d.status, priority: d.priority,
+        due_date: d.due_date || null };
+      if (personen.length) aenderung.assignee = d.assignee || null;
+      try { await patch(`/tasks/${ref}`, aenderung); toast("Gespeichert."); detail(el, { ref }); } catch (err) { ersetze(fehler, alertBox(meldung(err))); }
+    });
+  }
+  ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("a", { href: "#/aufgaben", class: "small" }, "← Aufgaben"), h("h1", {}, a.title),
+    h("p", {}, `angelegt ${zeit(a.created_at)}${a.created_by ? ` von ${a.created_by.display_name}` : ""}`)),
+  h("span", { class: "row" }, prioritaet(a.priority), status(a.status))),
+  h("section", { class: "card" }, form), kom);
+  await kommentare(kom, ref);
+}
