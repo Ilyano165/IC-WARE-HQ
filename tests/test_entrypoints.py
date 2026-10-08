@@ -21,7 +21,8 @@ from tests.conftest import World
 
 ERWARTET = {"tenants", "users", "memberships", "roles", "role_permissions", "membership_roles",
             "audit_events", "platform_audit_events", "outbox_events", "auth_sessions", "password_reset_tokens",
-            "recovery_codes", "login_attempts", "auth_events"}
+            "recovery_codes", "login_attempts", "auth_events", "objects", "object_links", "object_grants",
+            "activities", "comments", "comment_mentions", "tasks", "documents", "notifications"}
 
 
 def _umgebung(settings: Settings) -> dict[str, str]:

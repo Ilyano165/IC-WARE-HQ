@@ -11,7 +11,7 @@ pytest -q
 Die Testumgebung legt die vier `ichq_*`-Rollen mit **Testpasswörtern** an (bestehende Rollen bekommen
 diese Passwörter!) und je Lauf eine frische Datenbank. Nur gegen einen eigenen Test-Server laufen lassen.
 
-## Was getestet wird (131 Tests)
+## Was getestet wird (Stand C0: 321 Tests, Zahl aus dem letzten Lauf)
 
 | Datei | Inhalt |
 | --- | --- |
@@ -28,6 +28,12 @@ diese Passwörter!) und je Lauf eine frische Datenbank. Nur gegen einen eigenen 
 | `test_entrypoints.py` | App, CLI, ASGI und Worker in **frischen Prozessen** |
 | `test_cli.py` | Kommandozeile gegen die Testdatenbank |
 | `test_architecture.py` | Schichtregeln, Dateigröße, keine Geheimnisse und keine Rollennamen im Code |
+| `test_core_objects.py` | C0: Registry = DB-CHECK, typisierte FKs, Verweise über Firmengrenzen scheitern in der DB, RLS aller Core-Tabellen, Spaltenrechte, öffentliche IDs, Cursor |
+| `test_core_api.py` | C0: Aufgaben (Filter, Sortierung, 53er-Paginierung), Validierung, Kommentare (15-min-Regel, Löschen), Dokumente (Quarantäne, Prüfung), Verknüpfungen |
+| `test_core_security.py` | C0: **IDOR-Generator über alle Routen mit Pfad-ID** + Gegenprobe, Listen/Suche ohne Fremddaten, Rechte-Matrix, Steuerberater, pausierte Firma |
+| `test_core_notify_search.py` | C0: Rechte beim Zustellen/Lesen, Rückfrage, Fälligkeitsregel, Suche (Gruppen, Präfix, Sonderzeichen), Aktivität ≠ Audit, Audit unveränderbar |
+| `test_core_e2e.py` | C0: echter uvicorn-Prozess, echte Logins, Worker und Scan als CLI-Prozesse — Steuerberater-Szenario |
+| `test_core_docs.py` | C0: Routentabelle in `docs/core-permissions.md` = Code |
 
 ## Mutationstests
 

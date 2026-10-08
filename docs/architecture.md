@@ -11,7 +11,12 @@ ichq.cli | ichq.migrations            Einstiegspunkte
 ichq.app                              Anwendungsfabrik
 ichq.api                              HTTP: Routen, Sicherheitsabhängigkeiten, Fehler, Middleware
 ichq.models                           registriert alle Tabellen (siehe unten)
-ichq.health | jobs | tenancy | identity | authz      Fachmodule
+ichq.search | ichq.notifications      C0: Suche, Benachrichtigungen (Konsumenten)
+ichq.tasks                            C0: Aufgaben
+ichq.comments | documents | relations C0: Kommentare, Dokumente, Verknüpfen/Freigeben
+ichq.activity                         C0: Benutzerverlauf
+ichq.objects                          C0: Objektmodell, Registry, Sichtbarkeit
+ichq.health | jobs | tenancy | identity | authz | auth   Fachmodule
 ichq.audit                            Audit — wird von Fachmodulen benutzt
 ichq.db | ichq.storage                Datenbankzugriff, Dateispeicher
 ichq.core                             Konfiguration, Logging, Fehler, IDs, Geld
@@ -101,6 +106,12 @@ Schlüssel nur in der Form `t/<tenant>/f/<file>/v/<version>` — Mandant im Pfad
 nie eine Benutzereingabe. Lokal: atomares Schreiben, Rechte 600, kein Pfad außerhalb der Wurzel.
 S3: privater Bucket, signierte Links 1–300 Sekunden.
 
+## Core-Plattform (C0)
+
+Objektmodell und Beziehungen: `docs/core-object-model.md` (ADR-008). Rechte und Sichtbarkeit:
+`docs/core-permissions.md` (ADR-009). Aktivität, Audit, Benachrichtigungen: `docs/core-activity-model.md`.
+API: `docs/core-api.md`. Paginierung liegt in `ichq.db.paging`, damit auch das Audit-Lesen sie nutzt.
+
 ## Abweichungen vom M0-Bericht
 
 | M0 sagt | M1 macht | Begründung |
@@ -111,3 +122,5 @@ S3: privater Bucket, signierte Links 1–300 Sekunden.
 | Plattform-Konten getrennt | Plattform-Aktionen in M1 nur per CLI (`actor = cli:<user>`) | Control-Plane-Konten folgen in M17 |
 | Dateien-Tabelle | noch keine | Metadaten entstehen mit dem Dateimodul (M10); M1 liefert nur die Speicherschicht |
 | Login-Sperre in Redis | — | gehört zu M2 |
+| Aufgaben/Kommunikation/Dateien/Suche ab M7–M14 | Querschnitts-Bausteine schon in C0 | ADR-010 |
+| Ressourcen-Freigaben in M4 | `object_grants` + `objects.read_all` schon in C0 | ADR-009 |

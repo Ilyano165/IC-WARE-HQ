@@ -8,7 +8,9 @@ Mandantenfähige B2B-Plattform („digitales Betriebssystem eines Unternehmens")
 Entwicklung in Meilensteinen M0–M26 (Roadmap: `docs/architecture.md`, M0-Bericht separat).
 
 **Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication — Kern fertig, Abschluss offen
-(siehe „Offene Punkte" unten). Nichts davon ist produktionsreif.
+(siehe „Offene Punkte" unten) · **C0 Core-Plattform** (Objektmodell, Aufgaben, Kommentare, Dokumente,
+Aktivität, Benachrichtigungen, Suche, Audit-Lesen) — vor M3/M4 gebaut, siehe ADR-010. Nichts davon ist
+produktionsreif.
 
 Kommunikation mit dem Team: **Deutsch, direkt, ehrlich.** Lieber „das ist nicht getestet" als
 etwas schönreden.
@@ -64,6 +66,12 @@ src/ichq/
   authz/       Rechte-Registry, Rollen-Schema, Entscheidungsfunktion (Vollausbau M4)
   auth/        Login, Sitzungen, Passwörter, Reset, TOTP, Drosselung, Auth-Audit (M2)
   jobs/        Transactional Outbox + Worker
+  objects/     C0: Typ-Registry, `objects` (Supertyp), Verknüpfungen/Freigaben (Tabellen), Sichtbarkeit (EINE Stelle)
+  activity/    C0: Benutzerverlauf (≠ Audit)
+  relations/   C0: Verknüpfen, Freigeben (Services)
+  comments/ tasks/ documents/   C0: Fachbausteine auf dem Objektmodell
+  notifications/  C0: Engine (Rechte beim Zustellen), Outbox-Handler, Regeln (`ichq notifications-scan`)
+  search/      C0: Volltext über `objects`, gruppiert, nur Sichtbares
   health/      Prüfungen für /health und /readiness
   api/         Routen, Sicherheitsabhängigkeiten, Fehler (RFC 9457), Middleware
   models.py    registriert ALLE Tabellen — jeder Einstiegspunkt lädt es
@@ -99,8 +107,27 @@ docs/          Architektur, Setup, Konfiguration, Migrationen, Tests, ADRs
   prüfen. Query-Strings werden per Regex entfernt, auch im Fehlerlog (`log default`).
 - **Hintergrundprozesse** in Testskripten: Start und Prüfung im selben Shell-Aufruf; `pkill -f` mit
   Mustern trifft leicht die eigene Shell — PID-Dateien benutzen.
+- **Constraint-Namen doppelt:** Alembic wendet die Namenskonvention auf schon vollständige Namen erneut an —
+  in der DB heißen CHECKs `ck_x_ck_x_…` (seit 0001). Funktional egal; in Tests mit `match=` auf den Teilnamen
+  prüfen. Korrektur (`op.f()`) nur mit eigener Migration.
+- **Autoflush:** `session.scalar(select(func.now()))` NACH dem Setzen eines Feldes schreibt einen Halbzustand
+  und verletzt CHECKs. Erst Werte holen, dann Felder gemeinsam setzen.
+- **Korrelation in `exists()`:** Joint die Außenabfrage `objects` schon, im Unterselect einen Alias nutzen
+  (`visible_clause(p, aliased(ObjectRow))`) — sonst „returned no FROM clauses".
 - **TOTP-Wiederverwendungsschutz:** Nach Einrichtung (Schritt t) und Login (t+1) gibt es im selben
   30-s-Fenster keinen weiteren gültigen Code. In Tests Zeit simulieren, nicht den Schutz abschwächen.
+
+## Regeln der Core-Plattform (C0)
+
+- **Fachobjekte nur über `objects`** (ADR-008): erst `create_object`, dann Fachzeile mit
+  `(tenant_id, id, object_type) → objects`. Nie `target_type + target_id`-Spalten ohne Fremdschlüssel.
+- **Sichtbarkeit nur über `ichq.objects.visibility`** (`visible_clause`, `can_see`, `resolve`). Unsichtbar ⇒ 404.
+- **Nach außen nur `public_id`** — keine internen UUIDs in neuen Antworten.
+- **Jede neue Route mit Pfad-ID** muss im IDOR-Generator (`tests/test_core_security.py::_ref_fuer`) zugeordnet
+  sein und in `docs/core-permissions.md` stehen (`tests/test_core_docs.py`) — sonst rot.
+- **Benachrichtigungen nur über `deliver`**; neue Outbox-Ereignisse in `notifications.handlers.EMITTED`.
+- **Aktivität ≠ Audit**; in beide nie Kommentartexte, Beträge, Beschreibungen.
+- Schreibende Core-Routen öffnen die Transaktion mit `writing(db)` (pausierte Firma → `tenant_paused`).
 
 ## Offene Punkte aus M2 (vor M3 erledigen)
 

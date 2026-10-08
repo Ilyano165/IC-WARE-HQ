@@ -36,9 +36,11 @@ def test_routenpruefung_sieht_alle_echten_routen(settings: Settings, engines: En
     """Gegenprobe: Der Check darf nicht leer durchlaufen (genau das war hier zuerst passiert)."""
     from ichq.api.security import assert_routes_secured, iter_api_routes
     app = create_app(settings, engines=engines)
-    pfade = {p for p, _, _ in iter_api_routes(app)}
-    assert {"/health", "/readiness", "/api/v1/me", "/api/v1/company"} <= pfade
-    assert assert_routes_secured(app) == len(pfade)
+    routen = [(p, tuple(sorted(m))) for p, m, _ in iter_api_routes(app)]
+    pfade = {p for p, _ in routen}
+    assert {"/health", "/readiness", "/api/v1/me", "/api/v1/company", "/api/v1/tasks/{ref}"} <= pfade
+    assert len(set(routen)) == len(routen)          # (Pfad, Methode) eindeutig
+    assert assert_routes_secured(app) == len(routen)
 
 
 def test_router_weite_regel_wird_erkannt(settings: Settings, engines: Engines) -> None:

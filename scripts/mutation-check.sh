@@ -74,5 +74,35 @@ mutation "M2 Gesperrte Firma wählbar" "auth/login.py" "AND m.status = 'active' 
 mutation "M2 CSRF-Schutz aus" "api/origin.py" "            if h.get(\"sec-fetch-site\") == \"cross-site\" or (origin and origin.rstrip(\"/\") != erlaubt):|||            if False:" "tests/test_auth_boundaries.py"
 mutation "M2 Cookie ohne HttpOnly" "api/cookies.py" "    response.set_cookie(cookie_name(settings), token, max_age=max_age, httponly=True,|||    response.set_cookie(cookie_name(settings), token, max_age=max_age, httponly=False," "tests/test_auth_login.py"
 mutation "M2 Cookie in Produktion ohne Secure" "api/cookies.py" "                        secure=secure_cookies(settings), samesite=\"lax\", path=\"/\")|||                        secure=False, samesite=\"lax\", path=\"/\")" "tests/test_auth_login.py"
+
+# ---------- C0 Core-Plattform ----------
+mutation "C0 Sichtbereich ignoriert (read_all für alle)" "objects/visibility.py" "    if decide(principal, READ_ALL):
+        return typ_ok|||    if True:
+        return typ_ok" "tests/test_core_security.py"
+mutation "C0 Modulrecht des Objekttyps ignoriert" "objects/visibility.py" "obj.type.in_(sorted(typen))|||obj.type.in_(sorted(OBJECT_TYPES))" "tests/test_core_security.py"
+mutation "C0 Auflösen per ID ohne Sichtbarkeit" "objects/service.py" "where(ObjectRow.public_id == ref, visible_clause(principal))|||where(ObjectRow.public_id == ref)" "tests/test_core_security.py"
+mutation "C0 RLS der Core-Tabellen ohne Mandant" "migrations/versions/0003_core.py" "                           USING (tenant_id = ichq_current_tenant())
+                           WITH CHECK|||                           USING (true)
+                           WITH CHECK" "tests/test_core_objects.py"
+mutation "C0 Typregel für Verknüpfungen fehlt in der DB" "migrations/versions/0003_core.py" "sa.CheckConstraint(LINK_RULE, name=\"ck_object_links_rule\"),|||" "tests/test_core_objects.py"
+mutation "C0 Kommentar-Bearbeitungsfenster aus" "comments/service.py" "    if jetzt is None or jetzt - c.created_at > EDIT_WINDOW:|||    if jetzt is None:" "tests/test_core_api.py"
+mutation "C0 Fremde bearbeiten Kommentare" "comments/service.py" "    if c.author_membership_id != principal.membership_id:
+        raise PermissionDenied(\"Nur der Autor|||    if False:
+        raise PermissionDenied(\"Nur der Autor" "tests/test_core_api.py"
+mutation "C0 Fremde Kommentare löschen ohne Moderation" "comments/service.py" "    if not eigener and not decide(principal, \"comments.moderate\"):|||    if False:" "tests/test_core_api.py"
+mutation "C0 Zuweisen ohne tasks.assign" "tasks/service.py" "    if m.id != principal.membership_id and not decide(principal, \"tasks.assign\"):|||    if False:" "tests/test_core_api.py"
+mutation "C0 Verknüpfen ohne Änderungsrecht" "relations/service.py" "    if not can_update(principal, source):|||    if False:" "tests/test_core_api.py"
+mutation "C0 Zustellung ohne Objektprüfung" "notifications/service.py" "    if obj is not None and not can_see(session, empfaenger, obj.id):|||    if False:" "tests/test_core_notify_search.py"
+mutation "C0 Zustellung ohne Recht der Art" "notifications/service.py" "    if kind.requires is not None and not decide(empfaenger, kind.requires):|||    if False:" "tests/test_core_notify_search.py"
+mutation "C0 Benachrichtigungsliste ohne Empfängerfilter" "notifications/service.py" "    return and_(Notification.recipient_membership_id == principal.membership_id,|||    return and_(Notification.recipient_membership_id.is_not(None)," "tests/test_core_notify_search.py"
+mutation "C0 Fremde Benachrichtigung als gelesen markieren" "notifications/service.py" "        Notification.public_id == ref, Notification.recipient_membership_id == principal.membership_id,|||        Notification.public_id == ref," "tests/test_core_notify_search.py"
+mutation "C0 Suche ohne Sichtbarkeit" "search/service.py" "ObjectRow.search_vector.op(\"@@\")(tsq), visible_clause(principal))|||ObjectRow.search_vector.op(\"@@\")(tsq))" "tests/test_core_security.py"
+mutation "C0 Pausierte Firma darf schreiben" "api/v1/common.py" "        if usable_tenant(s).status != \"active\":|||        if False:" "tests/test_core_security.py"
+mutation "C0 Export mit Leserecht" "api/v1/inbox.py" "Depends(require(\"audit.export\"))|||Depends(require(\"audit.read\"))" "tests/test_core_security.py"
+mutation "C0 Bezugsobjekt ohne Sichtprüfung ausgegeben" "api/v1/tasks.py" "    if t.subject_object_id is not None and can_see(s, p, t.subject_object_id):|||    if t.subject_object_id is not None:" "tests/test_core_security.py"
+mutation "C0 Paginierung unbegrenzt" "db/paging.py" "    return max(1, min(int(limit), MAX_LIMIT))|||    return max(1, int(limit))" "tests/test_core_objects.py"
+mutation "C0 Worker lädt Core-Handler nicht" "cli.py" "            from ichq.notifications.handlers import assert_handlers
+            assert_handlers()|||            pass" "tests/test_core_e2e.py"
+mutation "C0 Quarantäne-Download erlaubt" "documents/service.py" "    if doc.scan_status != \"clean\":|||    if False:" "tests/test_core_api.py"
 echo "---"; echo "erkannt $ERKANNT · unbemerkt $UNBEMERKT · ungültig $UNGUELTIG"
 [ "$UNBEMERKT" -eq 0 ] && [ "$UNGUELTIG" -eq 0 ]

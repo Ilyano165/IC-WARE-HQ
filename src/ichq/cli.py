@@ -67,6 +67,9 @@ def main(argv: list[str] | None = None) -> int:
     ma = sub.add_parser("membership-add", help="Konto einer Firma zuordnen (ohne Rollen — Rechte kommen aus M4)")
     ma.add_argument("--email", required=True)
     ma.add_argument("--tenant", required=True, help="Slug der Firma")
+    ns = sub.add_parser("notifications-scan", help="Geplante Benachrichtigungsregeln (z. B. überfällige Aufgaben) "
+                                                   "für alle aktiven Firmen ausführen")
+    ns.add_argument("--date", help="Stichtag JJJJ-MM-TT (Standard: heute, UTC)")
     w = sub.add_parser("worker", help="Outbox-Worker starten")
     w.add_argument("--once", action="store_true")
     sv = sub.add_parser("serve", help="API-Server starten (Produktion: hinter Reverse Proxy)")
@@ -110,6 +113,12 @@ def main(argv: list[str] | None = None) -> int:
 
     engines = build_engines(settings)
     try:
+        if args.cmd in ("worker", "notifications-scan"):
+            # Handler der Core-Plattform laden; fehlt einer, startet der Worker nicht (wie assert_complete)
+            from ichq.notifications.handlers import assert_handlers
+            assert_handlers()
+        if args.cmd == "notifications-scan":
+            return _scan(engines, args.date)
         if args.cmd == "worker":
             from ichq.jobs.worker import run_forever, run_once
             if args.once:
@@ -140,6 +149,25 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     finally:
         engines.dispose()
+
+
+def _scan(engines: Any, stichtag: str | None) -> int:
+    from datetime import UTC, date, datetime
+
+    from sqlalchemy import text
+
+    from ichq.db.session import platform_transaction, tenant_transaction
+    from ichq.notifications.handlers import scan
+
+    heute = date.fromisoformat(stichtag) if stichtag else datetime.now(UTC).date()
+    with platform_transaction(engines.platform) as s:
+        firmen = list(s.scalars(text("SELECT id FROM tenants WHERE status = 'active' ORDER BY id")).all())
+    gesamt = 0
+    for tid in firmen:      # je Firma eine eigene Mandanten-Transaktion — nie firmenübergreifend
+        with tenant_transaction(engines.app, tid) as s:
+            gesamt += sum(scan(s, heute).values())
+    print(f"firmen {len(firmen)} · zugestellt {gesamt}")
+    return 0
 
 
 def _passwort_lesen(stdin: bool) -> str:

@@ -3,7 +3,8 @@
 Mandantenfähige Unternehmensplattform von IC Ware GbR.
 
 **Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication — Kern fertig und getestet,
-Doku und Abschluss offen (siehe `CLAUDE.md`). Keine Oberfläche (M5), keine Geschäftsdaten.
+Doku und Abschluss offen (siehe `CLAUDE.md`) · C0 Core-Plattform (Objektmodell, Aufgaben, Kommentare,
+Dokumente, Aktivität, Benachrichtigungen, Suche). Keine Oberfläche (M5), noch keine Fachmodule.
 **Nicht produktionsreif.**
 
 Arbeiten mit Claude Code: `CLAUDE.md` (Regeln, wird automatisch gelesen) und
@@ -21,7 +22,11 @@ in [docs/architecture.md](docs/architecture.md#abweichungen-vom-m0-bericht).
 - Fehlerformat nach RFC 9457, Speicher (lokal/S3), Hintergrundjobs über eine Outbox
 - Anmeldung (M2): Argon2id, serverseitige Sitzungen mit Leerlauf- und absoluter Grenze, Sperre und
   Drosselung, Passwort-Reset, TOTP-2FA mit Recovery-Codes, Kontozustände, Auth-Audit, CSRF-Schutz
-- 231 Tests gegen echtes PostgreSQL, 45 Mutationstests, Docker/Compose/Caddy, CI
+- Core-Plattform (C0): globales Objektmodell mit typisierten Verknüpfungen und Freigaben, Aufgaben,
+  Kommentare mit Erwähnungen, Dokumente (Quarantäne), Aktivitätsverlauf getrennt vom Audit, Benachrichtigungen
+  mit Rechteprüfung beim Zustellen, globale Suche, Audit-Export — siehe `docs/core-*.md`
+- 321 Tests gegen echtes PostgreSQL (inkl. IDOR-Generator und E2E mit echtem Server), 67 Mutationstests,
+  Docker/Compose/Caddy, CI
 
 ## Schnellstart (Entwicklung)
 

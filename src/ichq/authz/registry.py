@@ -24,8 +24,13 @@ PERMISSIONS: frozenset[str] = frozenset({
     "files.read", "files.upload", "files.update", "files.delete", "files.share",
     "chat.read", "chat.create", "chat.moderate",
     "calendar.read", "calendar.create", "calendar.update", "calendar.delete",
-    "audit.read",
+    "audit.read", "audit.export",
     "settings.read", "settings.update",
+    # C0 Core-Plattform (docs/core-permissions.md)
+    "contracts.read", "contracts.update",
+    "comments.read", "comments.create", "comments.moderate",
+    "activity.read",
+    "objects.read_all", "objects.share",
 })
 
 assert all(_FORMAT.match(p) for p in PERMISSIONS), "Rechte-Format verletzt"

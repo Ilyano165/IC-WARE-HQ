@@ -59,8 +59,12 @@ class Membership(IdMixin, TenantScoped, TimestampMixin, Base):
                                                nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="active")
     title: Mapped[str | None] = mapped_column(String(120))
+    # Öffentliche Referenz für die API (C0, ADR-008) — zufällig, unabhängig vom Primärschlüssel
+    public_id: Mapped[str] = mapped_column(String(32), nullable=False, unique=True,
+                                           server_default=text("replace(gen_random_uuid()::text, '-', '')"))
     __table_args__ = (
         UniqueConstraint("tenant_id", "id"),          # Ziel zusammengesetzter Fremdschlüssel
         UniqueConstraint("tenant_id", "user_id"),
         CheckConstraint("status IN ('invited','active','suspended','left')", name="status_valid"),
+        CheckConstraint(r"public_id ~ '^[0-9a-f]{32}$'", name="public_id_format"),
     )
