@@ -1,0 +1,12 @@
+# Täglich früh morgens (deutsche Zeit) und nach einem Neustart nachholen, falls verpasst.
+[Unit]
+Description=IC WARE HQ: Fälligkeits-Scan täglich
+
+[Timer]
+OnCalendar=*-*-* 05:47:00 Europe/Berlin
+Persistent=true
+RandomizedDelaySec=5min
+Unit=ichq-notifications-scan.service
+
+[Install]
+WantedBy=timers.target

@@ -29,7 +29,7 @@ from ichq.api.state import AppState, get_state
 from ichq.auth import sessions as auth_sessions
 from ichq.authz.registry import is_known
 from ichq.authz.service import Principal, decide, permissions_for_membership
-from ichq.core.errors import AuthenticationRequired, PermissionDenied, TenantRequired
+from ichq.core.errors import AuthenticationRequired, PermissionDenied, TenantPaused, TenantRequired
 from ichq.db.session import TenantSession, auth_transaction, tenant_transaction
 from ichq.tenancy.service import TenantInfo, current_tenant
 
@@ -56,15 +56,25 @@ def get_principal(request: Request, state: AppState = Depends(get_state)) -> Pri
     if info is None or info.stage != "full" or info.active_tenant_id is None or info.active_membership_id is None:
         return None
     with tenant_transaction(state.engines.app, info.active_tenant_id) as s:
-        gueltig = s.execute(text("""
-            SELECT 1 FROM memberships m JOIN tenants t ON t.id = m.tenant_id
+        status = s.execute(text("""
+            SELECT t.status FROM memberships m JOIN tenants t ON t.id = m.tenant_id
             WHERE m.id = :m AND m.user_id = :u AND m.status = 'active' AND t.status IN ('active','paused')"""),
             {"m": info.active_membership_id, "u": info.user_id}).scalar()
-        if not gueltig:
+        if not status:
             return None
         rechte = permissions_for_membership(s, info.active_membership_id)
     return Principal(user_id=info.user_id, tenant_id=info.active_tenant_id,
-                     membership_id=info.active_membership_id, permissions=rechte)
+                     membership_id=info.active_membership_id, permissions=rechte, tenant_status=status)
+
+
+SCHREIBEND = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+def _schreibschutz(request: Request, principal: Principal) -> None:
+    """M3: Eine pausierte Firma darf lesen, aber nicht schreiben — zentral für JEDE Route mit Principal,
+    nicht pro Route. (Routen ohne Firma — Anmeldung, Firmenwahl — sind nicht betroffen.)"""
+    if principal.tenant_status == "paused" and request.method in SCHREIBEND:
+        raise TenantPaused()
 
 
 def _ohne_principal(request: Request) -> Exception:
@@ -112,6 +122,7 @@ def authenticated() -> Callable[..., Principal]:
     def _dep(request: Request, principal: Principal | None = Depends(get_principal)) -> Principal:
         if principal is None:
             raise _ohne_principal(request)
+        _schreibschutz(request, principal)
         return principal
     setattr(_dep, MARKE, ("authenticated", ()))
     return _dep
@@ -130,6 +141,7 @@ def require(*permissions: str) -> Callable[..., Principal]:
         fehlend = [p for p in permissions if not decide(principal, p)]
         if fehlend:
             raise PermissionDenied(f"Fehlendes Recht: {', '.join(fehlend)}")
+        _schreibschutz(request, principal)
         return principal
     setattr(_dep, MARKE, ("permission", permissions))
     return _dep

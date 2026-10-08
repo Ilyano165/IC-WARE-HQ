@@ -4,8 +4,9 @@ Regeln (docs/core-permissions.md):
 * Lesen: ``comments.read`` + Objekt sichtbar.  Schreiben: ``comments.create`` + Objekt sichtbar.
 * Bearbeiten: nur der Autor, nur innerhalb von ``EDIT_WINDOW`` nach dem Erstellen, nie nach dem Löschen.
   Erwähnungen ändern sich beim Bearbeiten nicht (keine nachträglichen Benachrichtigungen).
-* Löschen: der Autor jederzeit; andere nur mit ``comments.moderate``. Gelöscht wird weich: Der Text wird
-  geleert, die Hülle (wer, wann, gelöscht von) bleibt — Audit und Aktivität bleiben unverändert.
+* Löschen: der Autor jederzeit; andere nur mit ``comments.moderate``. Nie physisch: Tombstone mit wer, wann,
+  Grund; jede Fassung (auch der gelöschte Text) bleibt in ``comment_revisions`` — geschrieben vom
+  Datenbank-Trigger, für die App-Rolle nur lesbar, für niemanden änderbar.
 * Erwähnungen: nur aktive Mitglieder dieser Firma, höchstens ``MAX_MENTIONS``. Benachrichtigt wird nur,
   wer das Objekt sehen darf (Prüfung beim Zustellen, ``ichq.notifications``).
 """
@@ -21,7 +22,7 @@ from sqlalchemy.orm import Session
 from ichq.activity.service import record as activity
 from ichq.audit.service import record as audit
 from ichq.authz.service import Principal, decide
-from ichq.comments.models import COMMENT_KINDS, MAX_BODY, Comment, CommentMention
+from ichq.comments.models import COMMENT_KINDS, MAX_BODY, Comment, CommentMention, CommentRevision
 from ichq.core.errors import Conflict, NotFound, PermissionDenied, ValidationFailed
 from ichq.db.paging import SortKey, keyset
 from ichq.db.session import current_tenant_id
@@ -97,7 +98,12 @@ def edit(session: Session, principal: Principal, ref: str, body: str) -> Comment
     return c
 
 
-def delete(session: Session, principal: Principal, ref: str) -> None:
+def delete(session: Session, principal: Principal, ref: str, reason: str) -> None:
+    """Weiches Löschen (Tombstone). Der Text verschwindet aus der Kommentarzeile, bleibt aber in
+    ``comment_revisions`` (DB-Trigger). Grund ist Pflicht. Danach ist der Kommentar unveränderlich."""
+    reason = " ".join((reason or "").split())
+    if not 3 <= len(reason) <= 500:
+        raise ValidationFailed("reason: 3–500 Zeichen")
     c, obj = load(session, principal, ref)
     eigener = c.author_membership_id == principal.membership_id
     if not eigener and not decide(principal, "comments.moderate"):
@@ -105,12 +111,20 @@ def delete(session: Session, principal: Principal, ref: str) -> None:
     if c.deleted_at is not None:
         return
     laenge = len(c.body)
-    c.body, c.deleted_at, c.deleted_by_membership_id = "", session.scalar(select(func.now())), principal.membership_id
+    jetzt = session.scalar(select(func.now()))
+    c.body, c.deleted_at, c.deleted_by_membership_id, c.delete_reason = "", jetzt, principal.membership_id, reason
     session.flush()
     activity(session, obj.id, "comment.deleted", actor_membership_id=principal.membership_id,
              data={"comment": c.public_id})
     audit(session, "comment.deleted", actor_membership_id=principal.membership_id, target_type=obj.type,
-          target_id=obj.public_id, data={"comment": c.public_id, "by_author": eigener, "length": laenge})
+          target_id=obj.public_id, data={"comment": c.public_id, "by_author": eigener, "length": laenge,
+                                         "reason_length": len(reason)})
+
+
+def revisions(session: Session, comment: Comment) -> list[CommentRevision]:
+    """Alle Fassungen (inkl. Text gelöschter Kommentare) — nur für Prüfzwecke (Route: audit.read)."""
+    return list(session.scalars(select(CommentRevision).where(CommentRevision.comment_id == comment.id)
+                                .order_by(CommentRevision.seq).limit(500)).all())
 
 
 def mentions_of(session: Session, comment_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[uuid.UUID]]:

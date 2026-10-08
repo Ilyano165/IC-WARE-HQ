@@ -11,7 +11,7 @@ from fastapi import Query
 from pydantic import BaseModel, ConfigDict
 
 from ichq.api.security import TenantDB, usable_tenant
-from ichq.core.errors import AppError
+from ichq.core.errors import TenantPaused
 from ichq.db.paging import DEFAULT_LIMIT, MAX_LIMIT
 from ichq.db.session import TenantSession
 from ichq.objects.models import ObjectRow
@@ -20,10 +20,6 @@ from ichq.objects.service import member_refs
 Limit = Annotated[int, Query(ge=1, le=MAX_LIMIT, description=f"Seitengröße, höchstens {MAX_LIMIT}")]
 Cursor = Annotated[str | None, Query(max_length=512, description="next_cursor der vorigen Seite")]
 DEFAULT = DEFAULT_LIMIT
-
-
-class TenantPaused(AppError):
-    status, code, title = 403, "tenant_paused", "Firma ist pausiert — nur Lesen möglich"
 
 
 class Strict(BaseModel):
@@ -50,7 +46,8 @@ class Page(BaseModel):
 
 @contextmanager
 def writing(db: TenantDB) -> Iterator[TenantSession]:
-    """Schreibende Transaktion. Pausierte Firmen dürfen lesen, aber nicht schreiben — für alle Core-Routen hier."""
+    """Schreibende Transaktion. Zweite Linie hinter dem zentralen Schreibschutz (ichq.api.security): prüft den
+    Firmenstatus in DERSELBEN Transaktion, in der geschrieben wird."""
     with db() as s:
         if usable_tenant(s).status != "active":
             raise TenantPaused()

@@ -19,8 +19,8 @@ wie ein neues Fachmodul es benutzt.
 | `objects` | Identität, Typ, Titel, Suchtext, Ersteller | — |
 | `tasks`, `documents` | Fachdaten | `(tenant_id, id, object_type)` → `(tenant_id, id, type)`, `object_type` per CHECK fix |
 | `object_links` | typisierte Verknüpfung A → B | Quelle und Ziel je `(tenant_id, id, type)`; CHECK `ck_object_links_rule` |
-| `object_grants` | Freigabe eines Objekts für ein Mitglied | `(tenant_id, object_id)` |
-| `comments` (+ `comment_mentions`) | Kommentare, Erwähnungen | `(tenant_id, object_id)` |
+| `object_grants` | Freigabe eines Objekts für ein Mitglied, mit Quelle `manual` / `task_assignment` | `(tenant_id, object_id)` |
+| `comments` (+ `comment_mentions`, `comment_revisions`) | Kommentare, Erwähnungen, jede Fassung (Trigger) | `(tenant_id, object_id)` |
 | `activities` | Benutzerverlauf (nicht Audit) | `(tenant_id, object_id)` |
 | `notifications` | zugestellte Benachrichtigungen | `(tenant_id, object_id)` optional |
 
@@ -34,23 +34,23 @@ zusammengesetzten Fremdschlüssel **in der Datenbank** unmöglich (`test_verweis
 | --- | --- | --- | --- | --- | --- |
 | `company` | Firma (extern) | companies | customers.read | customers.update | reserviert |
 | `customer` | Kunde | companies | customers.read | customers.update | reserviert |
-| `supplier` | Lieferant | companies | customers.read | customers.update | reserviert |
+| `supplier` | Lieferant | companies | suppliers.read | suppliers.update | reserviert |
 | `employee` | Mitarbeiter | persons | users.read | users.update | reserviert |
 | `project` | Projekt | projects | projects.read | projects.update | reserviert |
 | `task` | Aufgabe | tasks | tasks.read | tasks.update | **C0** |
 | `receipt` | Beleg | receipts | finance.read | finance.update | reserviert |
 | `invoice` | Rechnung | invoices | invoices.read | invoices.update | reserviert |
 | `payment` | Zahlung | invoices | finance.read | finance.update | reserviert |
-| `trip` | Fahrt | receipts | finance.read | finance.update | reserviert |
-| `travel` | Reise | receipts | finance.read | finance.update | reserviert |
-| `entertainment` | Bewirtung | receipts | finance.read | finance.update | reserviert |
+| `trip` | Fahrt | receipts | vehicles.read | vehicles.update | reserviert |
+| `travel` | Reise | receipts | travel.read | travel.update | reserviert |
+| `entertainment` | Bewirtung | receipts | hospitality.read | hospitality.update | reserviert |
 | `contract` | Vertrag | documents | contracts.read | contracts.update | reserviert |
 | `asset` | Anlage | receipts | finance.read | finance.update | reserviert |
 | `website` | Website | projects | projects.read | projects.update | reserviert |
 | `document` | Dokument | documents | files.read | files.update | **C0** |
 
-„Firma" ist hier ein **Geschäftspartner** (CRM), nicht der Mandant. Die Zuordnung Typ → Recht ist vorläufig
-(siehe offene Fragen im C0-Bericht), z. B. ob Fahrten/Reisen ein eigenes Recht bekommen.
+„Firma" ist hier ein **Geschäftspartner** (CRM), nicht der Mandant. Fahrten, Reisen, Bewirtung und Lieferanten
+haben eigene Rechte (Entscheidung vom 08.10.2026); `finance.read`/`customers.read` reichen dafür nicht mehr.
 
 ## Verknüpfungstypen
 

@@ -122,7 +122,7 @@ def test_kommentar_erwaehnung_bearbeiten_loeschen(cw: CoreWorld, engines: Engine
     assert cw.client(cw.admin_a).patch(f"/api/v1/comments/{k['id']}", json={"body": "x"}).status_code == 403
     k3 = ok(cw.client(cw.leser).get(f"/api/v1/objects/{t['id']}/comments"))["items"][0]
     assert k3["body"] == "Bitte bis Freitag ansehen"
-    ok(c.delete(f"/api/v1/comments/{k['id']}"), 204)
+    ok(c.request("DELETE", f"/api/v1/comments/{k['id']}", json={"reason": "Test: erledigt"}), 204)
     weg = ok(c.get(f"/api/v1/objects/{t['id']}/comments"))["items"][0]
     assert weg["deleted"] is True and weg["body"] is None
     assert c.patch(f"/api/v1/comments/{k['id']}", json={"body": "wieder da"}).status_code == 409
@@ -132,13 +132,13 @@ def test_loeschen_fremder_kommentare_nur_moderator(cw: CoreWorld) -> None:
     t = ok(cw.client(cw.mitarbeiter).post("/api/v1/tasks", json={"title": "x"}), 201)
     k = ok(cw.client(cw.mitarbeiter).post(f"/api/v1/objects/{t['id']}/comments", json={"body": "Hallo"}), 201)
     for mid in (cw.leser, cw.stb):       # leser: kein comments.create; stb: sieht die Aufgabe nicht
-        assert cw.client(mid).delete(f"/api/v1/comments/{k['id']}").status_code in (403, 404)
+        assert cw.client(mid).request("DELETE", f"/api/v1/comments/{k['id']}", json={"reason": "Test: erledigt"}).status_code in (403, 404)
     # admin_a schreibt; mitarbeiter sieht das Objekt und hat comments.create, aber kein comments.moderate
     k2 = ok(cw.client(cw.admin_a).post(f"/api/v1/objects/{t['id']}/comments", json={"body": "Vom Chef"}), 201)
-    r = cw.client(cw.mitarbeiter).delete(f"/api/v1/comments/{k2['id']}")
+    r = cw.client(cw.mitarbeiter).request("DELETE", f"/api/v1/comments/{k2['id']}", json={"reason": "Test: erledigt"})
     assert r.status_code == 403 and "Moderatoren" in r.json()["detail"]
     assert ok(cw.client(cw.admin_a).get(f"/api/v1/objects/{t['id']}/comments"))["items"][1]["deleted"] is False
-    ok(cw.client(cw.admin_a).delete(f"/api/v1/comments/{k['id']}"), 204)   # admin hat comments.moderate
+    ok(cw.client(cw.admin_a).request("DELETE", f"/api/v1/comments/{k['id']}", json={"reason": "Test: erledigt"}), 204)   # admin hat comments.moderate
 
 
 def test_erwaehnung_fremder_oder_inaktiver_mitglieder_scheitert(cw: CoreWorld, engines: Engines) -> None:

@@ -112,15 +112,21 @@ class ObjectLink(IdMixin, TenantScoped, Base):
     )
 
 
+GRANT_SOURCES = ("manual", "task_assignment")
+
+
 class ObjectGrant(TenantScoped, Base):
-    """Ausdrückliche Freigabe eines Objekts für eine Mitgliedschaft (ADR-009)."""
+    """Freigabe eines Objekts für eine Mitgliedschaft (ADR-009)."""
 
     __tablename__ = "object_grants"
     object_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     membership_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    # manual = über die API erteilt; task_assignment = automatisch durch Zuweisung (entfällt bei Neuzuweisung)
+    source: Mapped[str] = mapped_column(String(24), primary_key=True, server_default="manual")
     granted_by_membership_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     __table_args__ = (
+        CheckConstraint("source IN ('manual','task_assignment')", name="source_valid"),
         _objekt_fk("object_id", "CASCADE"),
         _mitglied_fk("membership_id", "CASCADE"),
         _mitglied_fk("granted_by_membership_id"),

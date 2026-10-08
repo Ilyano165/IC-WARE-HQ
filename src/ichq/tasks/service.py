@@ -26,7 +26,7 @@ from ichq.jobs.service import emit_event
 from ichq.objects.models import ObjectRow
 from ichq.objects.service import Member, clean_title, create_object, member, resolve
 from ichq.objects.visibility import READ_ALL, principal_for_membership
-from ichq.relations.service import grant
+from ichq.relations.service import drop_assignment_grant, grant_for_assignment
 from ichq.tasks.models import MAX_DESCRIPTION, TASK_PRIORITY, TASK_STATUS, Task
 
 _RANG = case({"urgent": 4, "high": 3, "normal": 2, "low": 1}, value=Task.priority, else_=0)
@@ -62,7 +62,7 @@ def _verantwortlich(session: Session, principal: Principal, ref: str, task_obj: 
     if ziel is None or not decide(ziel, "tasks.read"):
         raise ValidationFailed("Dieses Mitglied darf keine Aufgaben sehen (tasks.read fehlt)")
     if task_obj is not None and not decide(ziel, READ_ALL):
-        grant(session, principal, task_obj, m, quiet=True)
+        grant_for_assignment(session, principal, task_obj, m)
     return m
 
 
@@ -128,7 +128,10 @@ def update(session: Session, principal: Principal, ref: str, changes: dict[str, 
         if m is None and not decide(principal, "tasks.assign") and task.assignee_membership_id not in (
                 None, principal.membership_id):
             raise PermissionDenied("Fehlendes Recht: tasks.assign")
+        alt_assignee = task.assignee_membership_id
         task.assignee_membership_id = m.id if m else None
+        if alt_assignee is not None and alt_assignee != task.assignee_membership_id:
+            drop_assignment_grant(session, principal, obj, alt_assignee)   # nur die automatische Freigabe
     session.flush()
     if task.status != alt["status"]:
         activity(session, obj.id, "task.status_changed", actor_membership_id=principal.membership_id,

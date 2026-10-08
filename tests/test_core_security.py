@@ -10,7 +10,8 @@ from ichq.api.security import iter_api_routes
 from ichq.app import create_app
 from ichq.core.config import Settings
 from ichq.db.engine import Engines
-from ichq.db.session import platform_transaction
+from ichq.db.session import platform_transaction, tenant_transaction
+from ichq.members.service import invite
 from ichq.tenancy.service import set_status
 from tests.auth_helpers import db
 from tests.conftest import World
@@ -31,8 +32,11 @@ def _bestand(cw: CoreWorld, mid: Any) -> dict[str, str]:
     d = ok(c.post("/api/v1/documents?filename=beleg.pdf", **PDF), 201)
     k = ok(c.post(f"/api/v1/objects/{t['id']}/comments", json={"body": "Interna"}), 201)
     link = ok(c.post(f"/api/v1/tasks/{t['id']}/attachments", json={"document": d["id"]}), 201)
+    p = cw.principal(mid)
+    with tenant_transaction(cw.engines.app, p.tenant_id) as s:   # Einladung ohne Mailversand anlegen
+        inv, _roh = invite(s, p, email=f"neu-{mid.hex[:8]}@extern.test", title=None)
     return {"task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"],
-            "member": cw.public_id(mid)}
+            "member": cw.public_id(mid), "invitation": inv.public_id}
 
 
 def _notification(cw: CoreWorld, engines: Engines, empfaenger: Any, tid: Any, absender: Any) -> str:
@@ -53,15 +57,18 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("PATCH", "/api/v1/tasks/{ref}"): {"title": "Übernommen", "status": "done"},
     ("POST", "/api/v1/tasks/{ref}/attachments"): {},                             # document wird eingesetzt
     ("PATCH", "/api/v1/comments/{ref}"): {"body": "Übernommen"},
+    ("DELETE", "/api/v1/comments/{ref}"): {"reason": "Eingeschleust"},
     ("POST", "/api/v1/comments/{ref}/tasks"): {"title": "Eingeschleust"},
     ("POST", "/api/v1/documents/{ref}/review"): {"decision": "approved"},
+    ("POST", "/api/v1/members/{member}/deactivate"): {},
 }
 
 
 def _ref_fuer(pfad: str, param: str, refs: dict[str, str]) -> str:
     if param == "member":
         return refs["member"]
-    for praefix, art in (("/api/v1/tasks/", "task"), ("/api/v1/comments/", "comment"),
+    for praefix, art in (("/api/v1/invitations/", "invitation"), ("/api/v1/tasks/", "task"),
+                         ("/api/v1/comments/", "comment"),
                          ("/api/v1/documents/", "document"), ("/api/v1/notifications/", "notification"),
                          ("/api/v1/links/", "link"), ("/api/v1/objects/", "task")):
         if pfad.startswith(praefix):
@@ -96,7 +103,8 @@ def _felder(m: str, pfad: str) -> set[str]:
 
 def test_idor_jede_route_mit_id_liefert_404_fuer_fremde_firma(cw: CoreWorld, settings: Settings,
                                                                engines: Engines) -> None:
-    """Generator: ALLE Routen mit Pfadparametern. Admin aus A (alle Rechte) greift mit IDs aus B zu → 404.
+    """Tor 1 — Generator: ALLE /api/v1-Routen mit Pfadparametern (Core + M3). Admin aus A (alle Rechte) greift
+    mit IDs aus B zu → 404. Neue Routen ohne Zuordnung lassen den Test scheitern.
     Gegenprobe im selben Test: mit eigenen IDs ist keine dieser Antworten 404 (sonst prüfte der Test nichts)."""
     eigene, fremde = _bestand(cw, cw.admin_a), _bestand(cw, cw.admin_b)
     eigene["notification"] = _notification(cw, engines, cw.admin_a, cw.a, cw.mitarbeiter)
@@ -240,7 +248,7 @@ def test_pausierte_firma_liest_aber_schreibt_nicht(cw: CoreWorld, engines: Engin
     for m, pfad, body in (("POST", "/api/v1/tasks", {"title": "x"}),
                           ("PATCH", f"/api/v1/tasks/{refs['task']}", {"status": "done"}),
                           ("POST", f"/api/v1/objects/{refs['task']}/comments", {"body": "x"}),
-                          ("DELETE", f"/api/v1/comments/{refs['comment']}", None),
+                          ("DELETE", f"/api/v1/comments/{refs['comment']}", {"reason": "pausiert?"}),
                           ("DELETE", f"/api/v1/links/{refs['link']}", None)):
         r = c.request(m, pfad, json=body)
         assert r.status_code == 403 and r.json()["code"] == "tenant_paused", (m, pfad, r.status_code)

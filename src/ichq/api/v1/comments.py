@@ -31,6 +31,10 @@ class CommentPatch(Strict):
     body: str = Field(min_length=1, max_length=10_000)
 
 
+class DeleteIn(Strict):
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class TaskFromCommentIn(Strict):
     title: str = Field(min_length=1, max_length=300)
     assignee: str | None = Field(default=None, max_length=64)
@@ -44,6 +48,8 @@ def comment_out(s: TenantSession, c: Comment, mentions: list[Any] | None = None)
     return {"id": c.public_id, "kind": c.kind, "body": c.body if c.deleted_at is None else None,
             "author": refs.get(c.author_membership_id), "created_at": c.created_at, "edited_at": c.edited_at,
             "deleted": c.deleted_at is not None, "deleted_at": c.deleted_at,
+            "deleted_by": refs.get(c.deleted_by_membership_id) if c.deleted_by_membership_id else None,
+            "delete_reason": c.delete_reason,
             "mentions": [refs[m] for m in (mentions or []) if m in refs]}
 
 
@@ -75,11 +81,25 @@ def edit_comment(ref: str, body: CommentPatch, p: Principal = Depends(require("c
 
 
 @router.delete("/comments/{ref}", status_code=204)
-def delete_comment(ref: str, p: Principal = Depends(require("comments.create")),
+def delete_comment(ref: str, body: DeleteIn, p: Principal = Depends(require("comments.create")),
                    db: TenantDB = Depends(tenant_db)) -> Response:
+    """Tombstone statt Löschen; ``reason`` ist Pflicht (JSON-Body)."""
     with writing(db) as s:
-        comments.delete(s, p, ref)
+        comments.delete(s, p, ref, body.reason)
     return Response(status_code=204)
+
+
+@router.get("/comments/{ref}/revisions")
+def comment_revisions(ref: str, p: Principal = Depends(require("audit.read")),
+                      db: TenantDB = Depends(tenant_db)) -> dict[str, Any]:
+    """Prüfansicht: alle Fassungen inkl. gelöschtem Text. Nur mit audit.read und sichtbarem Objekt."""
+    with db() as s:
+        c, _ = comments.load(s, p, ref)
+        revs = comments.revisions(s, c)
+        refs = refs_for(s, {r.actor_membership_id for r in revs})
+        return {"comment": c.public_id, "items": [
+            {"kind": r.kind, "body": r.body, "reason": r.reason, "recorded_at": r.recorded_at,
+             "actor": refs.get(r.actor_membership_id) if r.actor_membership_id else None} for r in revs]}
 
 
 @router.post("/comments/{ref}/tasks", status_code=201)

@@ -36,6 +36,10 @@ class TenantRequired(AppError):
     status, code, title = 403, "tenant_required", "Bitte zuerst eine Firma auswählen"
 
 
+class TenantPaused(AppError):
+    status, code, title = 403, "tenant_paused", "Firma ist pausiert — nur Lesen möglich"
+
+
 class TooManyAttempts(AppError):
     status, code, title = 429, "too_many_attempts", "Zu viele Versuche"
 

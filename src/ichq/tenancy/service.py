@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ichq.audit.service import record_platform
+from ichq.audit.service import record, record_platform
 from ichq.core.errors import Conflict, NotFound, ValidationFailed
 from ichq.db.session import current_tenant_id
 from ichq.tenancy.models import Tenant
@@ -120,4 +120,36 @@ def current_tenant(session: Session) -> TenantInfo:
     t = session.scalars(select(Tenant)).one_or_none()
     if t is None or t.id != tid:
         raise NotFound("Firma nicht gefunden")
+    return TenantInfo.of(t)
+
+
+PROFILFELDER = ("name", "legal_name", "timezone", "language", "currency")
+
+
+def update_profile(session: Session, changes: dict[str, str | None], *,
+                   actor_membership_id: uuid.UUID) -> TenantInfo:
+    """M3: Firma ändert ihr eigenes Profil (Mandanten-Transaktion, RLS + Spaltenrechte).
+    Gleiche Regeln wie beim Anlegen; Slug, Status und Plan sind hier nicht änderbar."""
+    unbekannt = set(changes) - set(PROFILFELDER)
+    if unbekannt:
+        raise ValidationFailed(f"Nicht änderbar: {sorted(unbekannt)}")
+    tid = current_tenant_id(session)
+    t = session.scalars(select(Tenant).where(Tenant.id == tid).with_for_update()).one_or_none()
+    if t is None:
+        raise NotFound("Firma nicht gefunden")
+    neu = {f: getattr(t, f) for f in PROFILFELDER}
+    neu.update(changes)
+    name = (neu["name"] or "").strip()
+    legal = (neu["legal_name"] or "").strip() or None
+    if legal is not None and len(legal) > 200:
+        raise ValidationFailed("legal_name: höchstens 200 Zeichen")
+    _pruefen(t.slug, name, str(neu["timezone"]), str(neu["language"]), str(neu["currency"]))
+    alt = {f: getattr(t, f) for f in PROFILFELDER}
+    t.name, t.legal_name = name, legal
+    t.timezone, t.language, t.currency = str(neu["timezone"]), str(neu["language"]), str(neu["currency"])
+    session.flush()
+    diff = {f: {"from": alt[f], "to": getattr(t, f)} for f in PROFILFELDER if alt[f] != getattr(t, f)}
+    if diff:
+        record(session, "company.updated", actor_membership_id=actor_membership_id, target_type="company",
+               data={"changes": diff})
     return TenantInfo.of(t)

@@ -8,9 +8,10 @@ Mandantenfähige B2B-Plattform („digitales Betriebssystem eines Unternehmens")
 Entwicklung in Meilensteinen M0–M26 (Roadmap: `docs/architecture.md`, M0-Bericht separat).
 
 **Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication — Kern fertig, Abschluss offen
-(siehe „Offene Punkte" unten) · **C0 Core-Plattform** (Objektmodell, Aufgaben, Kommentare, Dokumente,
-Aktivität, Benachrichtigungen, Suche, Audit-Lesen) — vor M3/M4 gebaut, siehe ADR-010. Nichts davon ist
-produktionsreif.
+(siehe „Offene Punkte" unten) · **C0 Core-Plattform** (vor M3/M4 gebaut, ADR-010) · **M3 Mandanten** umgesetzt
+(`docs/m3-mandanten.md`); **Tor 1 lokal belegt, CI-Beleg fehlt** (noch kein PR). Reihenfolge laut Vision:
+Tor 1/M3 → C0 → U1 → D0 → S1… — **keine D0-/S-Arbeit vor Tor 1.** Produktvision v2 ist ein **unbestätigter
+Entwurf** (`docs/produktvision-v2.md`). Nichts davon ist produktionsreif.
 
 Kommunikation mit dem Team: **Deutsch, direkt, ehrlich.** Lieber „das ist nicht getestet" als
 etwas schönreden.
@@ -70,6 +71,7 @@ src/ichq/
   activity/    C0: Benutzerverlauf (≠ Audit)
   relations/   C0: Verknüpfen, Freigeben (Services)
   comments/ tasks/ documents/   C0: Fachbausteine auf dem Objektmodell
+  members/     M3: Mitglieder, Einladungen (Annehmen über auth/platform/app-Rolle), Last-Admin-Schutz
   notifications/  C0: Engine (Rechte beim Zustellen), Outbox-Handler, Regeln (`ichq notifications-scan`)
   search/      C0: Volltext über `objects`, gruppiert, nur Sichtbares
   health/      Prüfungen für /health und /readiness
@@ -144,7 +146,12 @@ Keine Steuerfunktion geht vor **Tor S** an Kunden (Vision Abschnitt 5).
   sein und in `docs/core-permissions.md` stehen (`tests/test_core_docs.py`) — sonst rot.
 - **Benachrichtigungen nur über `deliver`**; neue Outbox-Ereignisse in `notifications.handlers.EMITTED`.
 - **Aktivität ≠ Audit**; in beide nie Kommentartexte, Beträge, Beschreibungen.
-- Schreibende Core-Routen öffnen die Transaktion mit `writing(db)` (pausierte Firma → `tenant_paused`).
+- Schreibende Core-Routen öffnen die Transaktion mit `writing(db)` (zweite Linie hinter dem zentralen
+  Pause-Schreibschutz in `ichq.api.security`).
+- Freigaben haben eine Quelle (`manual` / `task_assignment`); Zuweisungs-Freigaben nur über
+  `grant_for_assignment`/`drop_assignment_grant`.
+- Kommentare nie physisch löschen; Historie schreibt der DB-Trigger, nicht der Code.
+- Zeitgesteuerte Jobs nie im Webprozess: eigener CLI-Einstieg + `deploy/systemd/`, idempotent, mit Advisory-Lock.
 
 ## Offene Punkte aus M2 (vor M3 erledigen)
 

@@ -91,32 +91,60 @@ def links_of(session: Session, principal: Principal, obj: ObjectRow) -> list[dic
     return ergebnis[:MAX_LINKS]
 
 
-def grant(session: Session, principal: Principal, obj: ObjectRow, m: Member, *, quiet: bool = False) -> bool:
-    """Objekt für eine Mitgliedschaft freigeben. Gibt ``False`` zurück, wenn es schon freigegeben war."""
-    if session.get(ObjectGrant, (obj.id, m.id)) is not None:
+MANUAL, AUTO = "manual", "task_assignment"
+
+
+def grant(session: Session, principal: Principal, obj: ObjectRow, m: Member) -> bool:
+    """Manuelle Freigabe (API). ``False``, wenn schon manuell freigegeben."""
+    if session.get(ObjectGrant, (obj.id, m.id, MANUAL)) is not None:
         return False
     session.add(ObjectGrant(tenant_id=current_tenant_id(session), object_id=obj.id, membership_id=m.id,
-                            granted_by_membership_id=principal.membership_id))
+                            source=MANUAL, granted_by_membership_id=principal.membership_id))
     session.flush()
-    if not quiet:
-        activity(session, obj.id, "object.shared", actor_membership_id=principal.membership_id,
-                 data={"member": m.public_id})
+    activity(session, obj.id, "object.shared", actor_membership_id=principal.membership_id,
+             data={"member": m.public_id})
     audit(session, "object.shared", actor_membership_id=principal.membership_id, target_type=obj.type,
-          target_id=obj.public_id, data={"member": m.public_id})
+          target_id=obj.public_id, data={"member": m.public_id, "source": MANUAL})
     return True
 
 
+def grant_for_assignment(session: Session, principal: Principal, obj: ObjectRow, m: Member) -> None:
+    """Automatische Freigabe, gebunden an die aktuelle Zuweisung. Unabhängig von manuellen Freigaben."""
+    if session.get(ObjectGrant, (obj.id, m.id, AUTO)) is not None:
+        return
+    session.add(ObjectGrant(tenant_id=current_tenant_id(session), object_id=obj.id, membership_id=m.id,
+                            source=AUTO, granted_by_membership_id=principal.membership_id))
+    session.flush()
+    audit(session, "object.shared", actor_membership_id=principal.membership_id, target_type=obj.type,
+          target_id=obj.public_id, data={"member": m.public_id, "source": AUTO})
+
+
+def drop_assignment_grant(session: Session, principal: Principal, obj: ObjectRow,
+                          membership_id: uuid.UUID) -> bool:
+    """Bei Neuzuweisung/Entzug: NUR die automatische Freigabe der bisherigen Person entfernen.
+    Eine manuelle Freigabe derselben Person bleibt bestehen."""
+    n = session.execute(delete(ObjectGrant).where(
+        ObjectGrant.object_id == obj.id, ObjectGrant.membership_id == membership_id,
+        ObjectGrant.source == AUTO)).rowcount  # type: ignore[attr-defined]
+    if n:
+        audit(session, "object.unshared", actor_membership_id=principal.membership_id, target_type=obj.type,
+              target_id=obj.public_id, data={"source": AUTO, "reason": "reassigned"})
+    return bool(n)
+
+
 def revoke(session: Session, principal: Principal, obj: ObjectRow, m: Member) -> None:
-    n = session.execute(delete(ObjectGrant).where(ObjectGrant.object_id == obj.id,
-                                                  ObjectGrant.membership_id == m.id)).rowcount  # type: ignore[attr-defined]
+    """Entzieht nur die MANUELLE Freigabe. Eine Freigabe aus Zuweisung endet mit der Zuweisung."""
+    n = session.execute(delete(ObjectGrant).where(ObjectGrant.object_id == obj.id, ObjectGrant.membership_id == m.id,
+                                                  ObjectGrant.source == MANUAL)).rowcount  # type: ignore[attr-defined]
     if not n:
-        raise NotFound("Keine Freigabe für dieses Mitglied")
+        raise NotFound("Keine manuelle Freigabe für dieses Mitglied")
     activity(session, obj.id, "object.unshared", actor_membership_id=principal.membership_id,
              data={"member": m.public_id})
     audit(session, "object.unshared", actor_membership_id=principal.membership_id, target_type=obj.type,
-          target_id=obj.public_id, data={"member": m.public_id})
+          target_id=obj.public_id, data={"member": m.public_id, "source": MANUAL})
 
 
-def grants_of(session: Session, obj: ObjectRow) -> list[uuid.UUID]:
-    return list(session.scalars(select(ObjectGrant.membership_id).where(ObjectGrant.object_id == obj.id)
-                                .order_by(ObjectGrant.created_at).limit(MAX_LINKS)).all())
+def grants_of(session: Session, obj: ObjectRow) -> list[tuple[uuid.UUID, str]]:
+    return [(r.membership_id, r.source) for r in session.execute(
+        select(ObjectGrant.membership_id, ObjectGrant.source).where(ObjectGrant.object_id == obj.id)
+        .order_by(ObjectGrant.created_at, ObjectGrant.source).limit(MAX_LINKS)).all()]

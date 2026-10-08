@@ -21,7 +21,10 @@ Alle Pfade unter `/api/v1`. Anmeldung per Sitzungs-Cookie (siehe M2), Firma gew�
 | 401 | `authentication_required` | keine Sitzung |
 | 403 | `tenant_required` | angemeldet, keine Firma gewählt |
 | 403 | `permission_denied` | Recht der Route oder Sonderregel fehlt |
-| 403 | `tenant_paused` | schreibend in pausierter Firma |
+| 403 | `tenant_paused` | schreibend in pausierter Firma (zentral, jede Route mit Principal) |
+| 409 | `last_admin` | letzte Mitgliedschaft mit Verwaltungsrecht entfernen |
+| 409 | `account_exists` | Einladung annehmen mit neuem Konto, obwohl es eines gibt |
+| 400 | `invalid_token` | Einladung unbekannt, abgelaufen, benutzt oder widerrufen |
 | 404 | `not_found` | unbekannt, fremde Firma, nicht sichtbar, ungültiges ID-Format |
 | 409 | `conflict` | doppelt verknüpft, Kommentar nicht mehr bearbeitbar, schon geprüft |
 | 409 | `document_quarantined` | Download vor Virenprüfung |
@@ -36,10 +39,9 @@ Alle Pfade unter `/api/v1`. Anmeldung per Sitzungs-Cookie (siehe M2), Firma gew�
 | GET | `/objects/{ref}/links` | — | `{items: [{id, link_type, direction: outgoing\|incoming, object: {id,type,title}, created_at}]}` (≤ 200) |
 | POST | `/objects/{ref}/links` | `{target, link_type}` | 201 `{id, link_type, source, target}` |
 | DELETE | `/links/{ref}` | — | 204 |
-| GET | `/objects/{ref}/grants` | — | `{items: [{id, display_name}]}` (≤ 200) |
+| GET | `/objects/{ref}/grants` | — | `{items: [{id, display_name, source: manual\|task_assignment}]}` (≤ 200) |
 | POST | `/objects/{ref}/grants` | `{member}` | 201 `{object, member, created}` |
-| DELETE | `/objects/{ref}/grants/{member}` | — | 204 |
-| GET | `/members` | `q`, `cursor`, `limit` | aktive Mitglieder `{id, display_name}`, sortiert nach Name |
+| DELETE | `/objects/{ref}/grants/{member}` | — | 204 — entzieht nur die **manuelle** Freigabe |
 
 ## Aktivitäten
 
@@ -70,10 +72,13 @@ assignee, due_date, completed_at, subject}` — `subject` nur, wenn der Aufrufer
 | GET | `/objects/{ref}/comments` | `cursor`, `limit` (älteste zuerst) |
 | POST | `/objects/{ref}/comments` | `{body (1–10 000), kind: note\|question, mentions: [member-ID] (≤ 20)}` |
 | PATCH | `/comments/{ref}` | `{body}` |
-| DELETE | `/comments/{ref}` | — (204) |
+| DELETE | `/comments/{ref}` | `{reason (3–500)}` — Tombstone, 204 |
+| GET | `/comments/{ref}/revisions` | — alle Fassungen inkl. gelöschtem Text (nur `audit.read`) |
 | POST | `/comments/{ref}/tasks` | `{title, assignee?, due_date?, priority?}` |
 
-Kommentar: `{id, kind, body (null wenn gelöscht), author, created_at, edited_at, deleted, deleted_at, mentions}`.
+Kommentar: `{id, kind, body (null wenn gelöscht), author, created_at, edited_at, deleted, deleted_at, deleted_by, delete_reason, mentions}`.
+
+Mitglieder, Einladungen, Firmenprofil: `docs/m3-mandanten.md`.
 
 ## Dokumente
 

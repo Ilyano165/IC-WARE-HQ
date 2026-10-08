@@ -6,15 +6,12 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import Field
-from sqlalchemy import select
 
 from ichq.activity import service as activities
 from ichq.api.security import TenantDB, authenticated, require, tenant_db
 from ichq.api.v1.common import DEFAULT, Cursor, Limit, Strict, object_out, refs_for, writing
 from ichq.authz.service import Principal
 from ichq.core.errors import ValidationFailed
-from ichq.db.paging import SortKey, keyset
-from ichq.identity.models import Membership, User
 from ichq.objects import service as objects
 from ichq.objects.registry import OBJECT_TYPES
 from ichq.relations import service as relations
@@ -67,9 +64,9 @@ def list_grants(ref: str, p: Principal = Depends(require("objects.share")),
                 db: TenantDB = Depends(tenant_db)) -> dict[str, Any]:
     with db() as s:
         obj = objects.resolve(s, p, ref)
-        ids = relations.grants_of(s, obj)
-        refs = refs_for(s, set(ids))
-        return {"items": [refs[i] for i in ids if i in refs]}
+        grants = relations.grants_of(s, obj)
+        refs = refs_for(s, {mid for mid, _ in grants})
+        return {"items": [{**refs[mid], "source": quelle} for mid, quelle in grants if mid in refs]}
 
 
 @router.post("/objects/{ref}/grants", status_code=201)
@@ -127,22 +124,3 @@ def object_activities(ref: str, p: Principal = Depends(require("activity.read"))
     with db() as s:
         obj = objects.resolve(s, p, ref)
         return _feed(s, p, activities.FeedFilter(object_id=obj.id), cursor, limit, order == "asc")
-
-
-_MITGLIED_SORT = SortKey("display_name", User.display_name, "text")
-
-
-@router.get("/members")
-def list_members(p: Principal = Depends(require("users.read")), db: TenantDB = Depends(tenant_db),
-                 q: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
-                 cursor: Cursor = None, limit: Limit = DEFAULT) -> dict[str, Any]:
-    """Aktive Mitglieder (für Zuweisung, Erwähnung, Freigabe). Nur öffentliche IDs und Anzeigename."""
-    with db() as s:
-        stmt = (select(Membership.public_id, User.display_name)
-                .join(User, User.id == Membership.user_id).where(Membership.status == "active"))
-        if q:
-            muster = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-            stmt = stmt.where(User.display_name.ilike(muster, escape="\\"))
-        seite = keyset(s, stmt, _MITGLIED_SORT, Membership.id, desc=False, cursor=cursor, limit=limit)
-        return {"items": [{"id": r.public_id, "display_name": r.display_name} for r in seite.rows],
-                "next_cursor": seite.next_cursor}

@@ -119,6 +119,17 @@ def set_initial_password(s: Session, settings: Settings, user_id: uuid.UUID, new
     return Outcome(True)
 
 
+def set_password_from_invitation(s: Session, settings: Settings, user_id: uuid.UUID, new: str) -> Outcome:
+    """M3: Passwort für ein Konto, das gerade über eine Einladung entstanden ist. Gleiche Regel wie überall."""
+    u = _user(s, user_id)
+    verstoss = check_policy(new, email=u.email, username=u.username)
+    if verstoss:
+        return Outcome(False, "password_policy", data={"policy": verstoss.code, "message": verstoss.message})
+    _setze_passwort(s, settings, user_id, new)
+    events.record(s, "password_set_by_invitation", user_id=user_id)
+    return Outcome(True)
+
+
 def set_status(s: Session, user_id: uuid.UUID, new_status: str, *, actor: str, reason: str) -> Outcome:
     if new_status not in STATUS or not reason.strip():
         return Outcome(False, "invalid_status")

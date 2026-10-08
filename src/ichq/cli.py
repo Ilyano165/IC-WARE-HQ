@@ -64,6 +64,9 @@ def main(argv: list[str] | None = None) -> int:
     us.add_argument("--email", required=True)
     us.add_argument("status", choices=["active", "locked", "suspended", "deactivated", "pending"])
     us.add_argument("--reason", required=True)
+    ta = sub.add_parser("tenant-admin", help="ÜBERGANG bis M4: Rolle „Company Admin“ (alle Rechte) zuweisen")
+    ta.add_argument("--email", required=True)
+    ta.add_argument("--tenant", required=True, help="Slug der Firma")
     ma = sub.add_parser("membership-add", help="Konto einer Firma zuordnen (ohne Rollen — Rechte kommen aus M4)")
     ma.add_argument("--email", required=True)
     ma.add_argument("--tenant", required=True, help="Slug der Firma")
@@ -129,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 run_forever(engines)
             return 0
-        if args.cmd.startswith(("user-", "membership-")):
+        if args.cmd.startswith(("user-", "membership-")) or args.cmd == "tenant-admin":
             return _konten(args, settings, engines)
         with platform_transaction(engines.platform) as s:
             if args.cmd == "tenant-create":
@@ -152,22 +155,25 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _scan(engines: Any, stichtag: str | None) -> int:
+    """Einstiegspunkt für systemd-Timer/Cron. Exitcodes: 0 ok oder übersprungen (läuft schon), 1 Firma gescheitert."""
     from datetime import UTC, date, datetime
 
-    from sqlalchemy import text
-
-    from ichq.db.session import platform_transaction, tenant_transaction
-    from ichq.notifications.handlers import scan
+    from ichq.notifications.jobs import run_scan
 
     heute = date.fromisoformat(stichtag) if stichtag else datetime.now(UTC).date()
+    r = run_scan(engines, heute)
+    if r.skipped:
+        print("übersprungen: ein anderer Scan läuft bereits")
+        return 0
+    print(f"firmen {r.tenants} · zugestellt {r.delivered} · fehlgeschlagen {len(r.failed)}")
+    return 0 if r.ok else 1
+
+
+def tenancy_lookup(engines: Any, slug: str) -> Any:
+    from ichq.db.session import platform_transaction
+    from ichq.tenancy import service as tenancy
     with platform_transaction(engines.platform) as s:
-        firmen = list(s.scalars(text("SELECT id FROM tenants WHERE status = 'active' ORDER BY id")).all())
-    gesamt = 0
-    for tid in firmen:      # je Firma eine eigene Mandanten-Transaktion — nie firmenübergreifend
-        with tenant_transaction(engines.app, tid) as s:
-            gesamt += sum(scan(s, heute).values())
-    print(f"firmen {len(firmen)} · zugestellt {gesamt}")
-    return 0
+        return tenancy.get_tenant_by_slug(s, slug)
 
 
 def _passwort_lesen(stdin: bool) -> str:
@@ -203,6 +209,18 @@ def _konten(args: argparse.Namespace, settings: Any, engines: Any) -> int:
     if gefunden is None:
         print("Fehler (not_found): Konto nicht gefunden", file=sys.stderr)
         return 1
+    if args.cmd == "tenant-admin":
+        from ichq.authz.service import ensure_company_admin
+        tenant = tenancy_lookup(engines, args.tenant)
+        with tenant_transaction(engines.app, tenant.id) as s:
+            mid = s.execute(text("SELECT id FROM memberships WHERE user_id = :u AND status = 'active'"),
+                            {"u": gefunden}).scalar()
+            if mid is None:
+                print("Fehler (not_found): keine aktive Mitgliedschaft in dieser Firma", file=sys.stderr)
+                return 1
+            ensure_company_admin(s, mid)
+        print(f"Company Admin (Übergang bis M4) → {args.email} @ {tenant.slug}")
+        return 0
     if tenant is not None:
         with tenant_transaction(engines.app, tenant.id) as s:
             mid = add_membership(s, user_id=gefunden)

@@ -30,6 +30,13 @@ das fehlt (`permission_denied` mit Name des Rechts).
 | `activity.read` | Aktivitätsverlauf (Firma und Objekt) |
 | `audit.export` | Audit als CSV exportieren (`audit.read` reicht nicht) |
 | `contracts.read` / `contracts.update` | Objekttyp Vertrag |
+| `vehicles.read` / `vehicles.update` | Fahrten/Fahrzeuge (Objekttyp `trip`) |
+| `travel.read` / `travel.update` | Reisen/Reisekosten (`travel`) |
+| `hospitality.read` / `hospitality.update` | Bewirtung (`entertainment`) |
+| `suppliers.read` / `suppliers.update` | Lieferanten (`supplier`) |
+
+Benennung `.update` statt `.write`, weil die ganze Registry so aufgebaut ist (`customers.update`, `tasks.update` …).
+`create`/`delete`/`export` je Fachrecht kommen erst mit dem Fachmodul — keine Rechte ohne Funktion.
 
 Bestehende Rechte werden für Objekttypen wiederverwendet (Tabelle in `docs/core-object-model.md`).
 
@@ -39,13 +46,13 @@ Bestehende Rechte werden für Objekttypen wiederverwendet (Tabelle in `docs/core
 | --- | --- |
 | Zuweisen an andere braucht `tasks.assign` | 403 |
 | Verantwortlicher muss `tasks.read` haben | 422 |
-| Zuweisung an Mitglied ohne `objects.read_all` → automatische Freigabe der Aufgabe (nicht des Bezugsobjekts) | — |
+| Zuweisung an Mitglied ohne `objects.read_all` → automatische Freigabe der Aufgabe (`source = task_assignment`, nicht des Bezugsobjekts). Bei Neuzuweisung oder Entfernen der Zuweisung entfällt **nur** diese automatische Freigabe; eine manuelle (`source = manual`) bleibt. `DELETE …/grants/{member}` entzieht nur die manuelle. | — |
+| Pausierte Firma: **jede** schreibende Route mit Principal (zentral, M3) | 403 `tenant_paused` |
 | Verknüpfen/Entfernen braucht Änderungsrecht am Quellobjekt, beide Seiten sichtbar | 403 / 404 |
 | Kommentar bearbeiten: nur Autor, nur 15 Minuten, nicht gelöscht | 403 / 409 |
 | Kommentar löschen: Autor oder `comments.moderate` | 403 |
 | Erwähnung/Zuweisung/Freigabe nur für aktive Mitglieder dieser Firma | 404 |
 | Benachrichtigung: Empfänger aktiv, Recht der Art, Objekt sichtbar — beim Zustellen **und** beim Lesen | still nicht zugestellt / ausgeblendet |
-| Pausierte Firma: alle schreibenden Core-Routen | 403 `tenant_paused` |
 | Download nur bei `scan_status = clean` | 409 `document_quarantined` |
 
 ## Routen und ihre Marke
@@ -61,7 +68,6 @@ Bestehende Rechte werden für Objekttypen wiederverwendet (Tabelle in `docs/core
 | `DELETE` | `/api/v1/objects/{ref}/grants/{member}` | objects.share |
 | `GET` | `/api/v1/activities` | activity.read |
 | `GET` | `/api/v1/objects/{ref}/activities` | activity.read |
-| `GET` | `/api/v1/members` | users.read |
 | `GET` | `/api/v1/tasks` | tasks.read |
 | `POST` | `/api/v1/tasks` | tasks.create |
 | `POST` | `/api/v1/objects/{ref}/tasks` | tasks.create |
@@ -71,7 +77,8 @@ Bestehende Rechte werden für Objekttypen wiederverwendet (Tabelle in `docs/core
 | `GET` | `/api/v1/objects/{ref}/comments` | comments.read |
 | `POST` | `/api/v1/objects/{ref}/comments` | comments.create |
 | `PATCH` | `/api/v1/comments/{ref}` | comments.create (+ Autor, 15 min) |
-| `DELETE` | `/api/v1/comments/{ref}` | comments.create (+ Autor oder comments.moderate) |
+| `DELETE` | `/api/v1/comments/{ref}` | comments.create (+ Autor oder comments.moderate, Grund Pflicht) |
+| `GET` | `/api/v1/comments/{ref}/revisions` | audit.read (+ Objekt sichtbar) |
 | `POST` | `/api/v1/comments/{ref}/tasks` | tasks.create |
 | `POST` | `/api/v1/documents` | files.upload |
 | `GET` | `/api/v1/documents` | files.read |
@@ -85,7 +92,8 @@ Bestehende Rechte werden für Objekttypen wiederverwendet (Tabelle in `docs/core
 | `GET` | `/api/v1/audit` | audit.read |
 | `GET` | `/api/v1/audit/export` | audit.export |
 
-`tests/test_core_docs.py` prüft, dass diese Tabelle jede Core-Route mit ihrer tatsächlichen Marke enthält.
+Mitglieder- und Firmenrouten: `docs/m3-mandanten.md`. `tests/test_core_docs.py` prüft, dass beide Tabellen zusammen
+jede `/api/v1`-Route (außer `/auth`) mit ihrer tatsächlichen Marke enthalten.
 
 ## Getestete Angriffe (alle gegen die echte API und PostgreSQL)
 

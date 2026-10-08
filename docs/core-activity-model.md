@@ -55,8 +55,13 @@ fachliche Änderung ──(gleiche Transaktion)──▶ outbox_events
   Benachrichtigungen aus der Liste.
 - **Inhalt:** Titel des Objekts + Art, keine Beträge, keine Kommentartexte (M0).
 - **Doppelt zustellen** verhindert `dedup_key` (eindeutig je Empfänger).
-- **Geplante Regeln:** `ichq notifications-scan [--date JJJJ-MM-TT]` läuft je aktiver Firma in deren
-  Mandantenkontext. Ein Zeitplan (Cron/Systemd-Timer) ist noch nicht eingerichtet.
+- **Geplante Regeln (Fälligkeits-Scan):** eigener Job `ichq.notifications.jobs.run_scan`, Einstieg
+  `ichq notifications-scan [--date JJJJ-MM-TT]`, erste Betriebsvariante **systemd-Timer**
+  (`deploy/systemd/ichq-notifications-scan.{service,timer}`, täglich 05:47 Europe/Berlin, `Persistent=true`).
+  Läuft nie im Webprozess. Idempotent über `dedup_key` + Unique-Index (erneuter Lauf stellt nichts doppelt zu);
+  Advisory-Lock gegen Parallelläufe (zweiter Lauf endet mit „übersprungen", Exitcode 0); je Firma eigene
+  Transaktion, Fehler einer Firma werden geloggt (ohne Inhalte), die übrigen laufen weiter, Exitcode 1.
+  Ein anderer Scheduler ruft dieselbe Funktion auf — die Regeln (`handlers.RULES`) bleiben unverändert.
 - **Worker:** `ichq worker` lädt die Handler und bricht ab, wenn für ein Core-Ereignis keiner registriert ist
   (`assert_handlers`).
 - **E-Mail/Push:** Schema (`channel`) und Registry (`CHANNELS`) sind vorbereitet; Versand gibt es noch nicht.
@@ -72,4 +77,31 @@ fachliche Änderung ──(gleiche Transaktion)──▶ outbox_events
   Aus Kommentar: `POST /api/v1/comments/{ref}/tasks` — Bezug ist das Objekt des Kommentars,
   Beschreibung der Kommentartext.
 - Kommentare: Autor, Zeitpunkt, `kind` (`note`/`question`), Erwähnungen, Bearbeiten 15 Minuten nur durch den
-  Autor, Löschen weich (Text weg, Hülle bleibt). Keine Kommentare ohne Firmenbezug (FK + RLS).
+  Autor. Keine Kommentare ohne Firmenbezug (FK + RLS).
+
+## Gelöschte Kommentare (Tombstone)
+
+Kommentare werden **nie physisch gelöscht**:
+
+| Ebene | Was passiert |
+| --- | --- |
+| Kommentarzeile | `deleted_at`, `deleted_by_membership_id`, `delete_reason` (Pflicht, 3–500 Zeichen) gesetzt; Text in der Zeile geleert. Die normale Ansicht zeigt „gelöscht" mit wer/wann/Grund, ohne Text. |
+| `comment_revisions` | **jede** Fassung: `created`, jede `edited`, und `deleted` mit dem Text zum Löschzeitpunkt, Akteur und Grund. Geschrieben von einem **Datenbank-Trigger** (`ichq_comment_history`, SECURITY DEFINER) — auch ein direktes SQL-UPDATE der App-Rolle hinterlässt eine Fassung. |
+| Schutz | App-Rolle darf `comment_revisions` nur lesen; UPDATE/DELETE/TRUNCATE verhindert ein Trigger auch für den Besitzer. Nach dem Löschen ist die Kommentarzeile unveränderlich (Trigger `ichq_comment_frozen`). |
+| Lesen der Historie | `GET /api/v1/comments/{ref}/revisions` — nur `audit.read` und nur, wenn das Objekt sichtbar ist. |
+
+### Sind Kommentare GoBD-relevant? — **ungeklärt**
+
+Keine rechtliche Bewertung, nur die sichtbaren Unsicherheiten:
+- Nach § 147 Abs. 1 AO sind u. a. Buchungsbelege, empfangene und abgesandte **Handels- oder Geschäftsbriefe** und
+  „sonstige Unterlagen, soweit sie für die Besteuerung von Bedeutung sind" aufzubewahren. Ob eine Rückfrage des
+  Steuerberaters zu einem Beleg oder ein interner Kommentar dazu zählt, hängt vom Inhalt ab — das kann HQ nicht
+  allgemein entscheiden.
+- Die GoBD verlangen für aufbewahrungspflichtige Unterlagen Unveränderbarkeit bzw. protokollierte Änderungen
+  (Rz. 58 ff., Fassung 2019 gelesen; Fassung 14.07.2025 nicht im Volltext geprüft). Das Tombstone-Modell erfüllt die
+  *technische* Seite (nichts verschwindet, jede Änderung ist protokolliert) — ob es *rechtlich* genügt, ist nicht geprüft.
+- **Gegenläufig: DSGVO.** Kommentare können personenbezogene Daten enthalten. Ein Anspruch auf Löschung (Art. 17 DSGVO)
+  kann mit der Aufbewahrung kollidieren; Art. 17 Abs. 3 lit. b kennt Ausnahmen für gesetzliche Aufbewahrungspflichten.
+  Eine Löschroutine für Historie nach Fristablauf gibt es noch nicht.
+- **Offen, mit Steuerberater/Datenschutz zu klären:** Aufbewahrungsdauer der Historie, ob Kommentare in die
+  Verfahrensdokumentation gehören, ob ein Export zur Betriebsprüfung Kommentare enthalten muss.

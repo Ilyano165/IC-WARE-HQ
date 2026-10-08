@@ -17,6 +17,7 @@ from ichq.api.v1.auth import router as auth_router
 from ichq.api.v1.comments import router as comments_router
 from ichq.api.v1.documents import router as documents_router
 from ichq.api.v1.inbox import router as inbox_router
+from ichq.api.v1.members import router as members_router
 from ichq.api.v1.objects import router as objects_router
 from ichq.api.v1.router import router as v1_router
 from ichq.api.v1.tasks import router as tasks_router
@@ -54,7 +55,7 @@ def create_app(settings: Settings | None = None, *, engines: Engines | None = No
     app.include_router(health_routes.router)
     app.include_router(v1_router)
     app.include_router(auth_router)
-    for core in (objects_router, tasks_router, comments_router, documents_router, inbox_router):
+    for core in (objects_router, tasks_router, comments_router, documents_router, inbox_router, members_router):
         app.include_router(core)
     for r in extra_routers:
         app.include_router(r)  # type: ignore[arg-type]

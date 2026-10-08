@@ -61,3 +61,21 @@ Alle Geheimnisse liegen als Dateien in `./secrets` (Rechte 600) und kommen per D
 - **Client-IP hinter Caddy:** uvicorn vertraut `X-Forwarded-For` standardmäßig nur von 127.0.0.1. In
   Compose kommt Caddy aus einem anderen Container — für Rate-Limits (M2) `FORWARDED_ALLOW_IPS` auf das
   Caddy-Netz setzen.
+
+
+## Geplante Jobs (systemd)
+
+Erste Betriebsvariante für zeitgesteuerte Jobs: systemd-Timer auf dem Host, der Job selbst läuft im App-Container.
+
+```bash
+sudo cp deploy/systemd/ichq-notifications-scan.{service,timer} /etc/systemd/system/
+# WorkingDirectory in der .service-Datei auf den Pfad des Compose-Projekts anpassen
+sudo systemd-analyze verify /etc/systemd/system/ichq-notifications-scan.{timer,service}
+sudo systemctl daemon-reload && sudo systemctl enable --now ichq-notifications-scan.timer
+systemctl list-timers ichq-notifications-scan.timer
+journalctl -u ichq-notifications-scan.service      # Ergebnis: "firmen N · zugestellt M · fehlgeschlagen K"
+```
+
+Exitcode 1 = mindestens eine Firma ist gescheitert (Details im JSON-Log des Containers). Ein zweiter Lauf während
+eines laufenden endet sofort („übersprungen"). **Nicht auf einem echten Server getestet** — geprüft sind die Units
+mit `systemd-analyze verify` und der Job selbst in der Testsuite.

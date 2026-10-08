@@ -104,5 +104,29 @@ mutation "C0 Paginierung unbegrenzt" "db/paging.py" "    return max(1, min(int(l
 mutation "C0 Worker lädt Core-Handler nicht" "cli.py" "            from ichq.notifications.handlers import assert_handlers
             assert_handlers()|||            pass" "tests/test_core_e2e.py"
 mutation "C0 Quarantäne-Download erlaubt" "documents/service.py" "    if doc.scan_status != \"clean\":|||    if False:" "tests/test_core_api.py"
+
+# ---------- M3 Mandanten / Tor 1 und C0-Nachträge ----------
+mutation "M3 Pause-Schreibschutz zentral aus" "api/security.py" "    if principal.tenant_status == \"paused\" and request.method in SCHREIBEND:|||    if False:" "tests/test_m3_tenancy.py"
+mutation "M3 Selbst-Deaktivierung erlaubt" "members/service.py" "    if m.id == principal.membership_id:|||    if False:" "tests/test_m3_tenancy.py"
+mutation "M3 Last-Admin-Schutz aus" "members/service.py" "    if _ist_admin(session, membership_id) and _admins_ausser(session, membership_id) == 0:|||    if False:" "tests/test_m3_tenancy.py"
+mutation "M3 Archivierte Rolle zählt als Admin" "members/service.py" " AND r.archived_at IS NULL|||" "tests/test_m3_tenancy.py"
+mutation "M3 Einladung mehrfach einlösbar" "members/accept.py" "WHERE id = :i AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()|||WHERE id = :i" "tests/test_m3_tenancy.py"
+mutation "M3 Vorprüfung ignoriert Gültigkeit" "members/accept.py" "    if r is None or not r.gueltig:|||    if r is None:" "tests/test_m3_tenancy.py"
+mutation "M3 Fremdes Konto nimmt Einladung an" "members/accept.py" "    if email != inv.email:|||    if False:" "tests/test_m3_tenancy.py"
+mutation "M3 Bestehendes Konto ohne Zustimmung" "members/accept.py" "        if s.execute(text(\"SELECT 1 FROM users WHERE lower(email) = :e\"), {\"e\": inv.email}).scalar():|||        if False:" "tests/test_m3_tenancy.py"
+mutation "M3 Firmenprofil ohne Validierung" "tenancy/service.py" "    _pruefen(t.slug, name, str(neu[\"timezone\"]), str(neu[\"language\"]), str(neu[\"currency\"]))|||    pass" "tests/test_m3_tenancy.py"
+mutation "M3 Route mandantenblind (RLS) → IDOR-Generator" "migrations/versions/0003_core.py" "                           USING (tenant_id = ichq_current_tenant())
+                           WITH CHECK|||                           USING (true)
+                           WITH CHECK" "tests/test_core_security.py"
+mutation "3a Fahrt über finance.read lesbar" "objects/registry.py" "_T(\"trip\", \"Fahrt\", \"receipts\", \"vehicles.read\",|||_T(\"trip\", \"Fahrt\", \"receipts\", \"finance.read\"," "tests/test_core_followups.py"
+mutation "3b Neuzuweisung behält automatische Freigabe" "tasks/service.py" "            drop_assignment_grant(session, principal, obj, alt_assignee)|||            pass" "tests/test_core_followups.py"
+mutation "3b Neuzuweisung entzieht auch manuelle Freigabe" "relations/service.py" "        ObjectGrant.source == AUTO)).rowcount|||        True)).rowcount" "tests/test_core_followups.py"
+mutation "3b API-Entzug entfernt automatische Freigabe" "relations/service.py" "                                                  ObjectGrant.source == MANUAL)).rowcount|||                                                  True)).rowcount" "tests/test_core_followups.py"
+mutation "3c Historie-Trigger fehlt" "migrations/versions/0005_core_followups.py" "    CREATE TRIGGER trg_comments_history AFTER INSERT OR UPDATE ON comments
+      FOR EACH ROW EXECUTE FUNCTION ichq_comment_history();|||    SELECT 1;" "tests/test_core_followups.py"
+mutation "3c Gelöschter Kommentar änderbar" "migrations/versions/0005_core_followups.py" "      IF OLD.deleted_at IS NOT NULL THEN|||      IF false THEN" "tests/test_core_followups.py"
+mutation "3d Scan ohne Sperre gegen Parallellauf" "notifications/jobs.py" "        if not sperre.execute(text(\"SELECT pg_try_advisory_lock(:k)\"), {\"k\": LOCK_KEY}).scalar():|||        if False:" "tests/test_notifications_job.py"
+mutation "3d Fehler einer Firma bricht den Scan ab" "notifications/jobs.py" "                except Exception as e:   # eine Firma darf die anderen nicht aufhalten|||                except ZeroDivisionError as e:" "tests/test_notifications_job.py"
+mutation "3d Doppelte Zustellung (kein dedup_key)" "notifications/service.py" "                     dedup_key=dedup_key)|||                     dedup_key=None)" "tests/test_notifications_job.py"
 echo "---"; echo "erkannt $ERKANNT · unbemerkt $UNBEMERKT · ungültig $UNGUELTIG"
 [ "$UNBEMERKT" -eq 0 ] && [ "$UNGUELTIG" -eq 0 ]

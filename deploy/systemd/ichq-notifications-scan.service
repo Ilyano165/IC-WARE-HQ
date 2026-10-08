@@ -1,0 +1,19 @@
+# IC WARE HQ — Fälligkeits-Scan (Benachrichtigungen wie „Aufgabe überfällig").
+# Einmaliger Lauf; gestartet von ichq-notifications-scan.timer. Idempotent: erneuter Lauf stellt nichts doppelt zu.
+# Installation: docs/server-setup.md, Abschnitt „Geplante Jobs".
+[Unit]
+Description=IC WARE HQ: Fälligkeits-Scan für Benachrichtigungen
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Pfad zum Compose-Projekt anpassen. Der Job läuft im laufenden App-Container mit dessen Konfiguration/Secrets.
+WorkingDirectory=/opt/ic-ware-hq/deploy
+ExecStart=/usr/bin/docker compose exec -T app ichq notifications-scan
+# Kein Endlos-Wiederholen bei Fehler: der nächste Timer-Lauf versucht es erneut, Fehler stehen im Journal.
+TimeoutStartSec=15min
+Nice=10
+# Härtung (bewusst zurückhaltend: docker-CLI braucht Zugriff auf Socket und Konfiguration)
+NoNewPrivileges=true
+PrivateTmp=true

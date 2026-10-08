@@ -28,6 +28,12 @@ PERMISSIONS: frozenset[str] = frozenset({
     "settings.read", "settings.update",
     # C0 Core-Plattform (docs/core-permissions.md)
     "contracts.read", "contracts.update",
+    # Fachrechte je Objekttyp (Entscheidung 3a): Fahrten/Fahrzeuge, Reisen, Bewirtung, Lieferanten.
+    # Schema wie überall: .read/.update (nicht .write); create/delete/export erst mit dem jeweiligen Fachmodul.
+    "vehicles.read", "vehicles.update",
+    "travel.read", "travel.update",
+    "hospitality.read", "hospitality.update",
+    "suppliers.read", "suppliers.update",
     "comments.read", "comments.create", "comments.moderate",
     "activity.read",
     "objects.read_all", "objects.share",
