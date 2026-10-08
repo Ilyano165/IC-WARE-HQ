@@ -205,5 +205,52 @@ mutation "D0 Überfällig schließt heute ein" "tasks/service.py" "        teile
 mutation "D0 Ohne-Zuständige-Filter wirkungslos" "tasks/service.py" "    if f.unassigned:|||    if False:" "$D0A"
 mutation "D0 Dokumentfilter nicht zugeordnet wirkungslos" "documents/service.py" "    if f.unlinked:|||    if False:" "$D0A"
 mutation "D0 Kennzahl-Link ohne Filter" "web/js/views/dashboard.js" "  return \`#\${basis}\${query(filter || {})}\`;|||  return \`#\${basis}\`;" "$D0B"
+# ---------- Betrieb: Virenprüfung + Installer/Launcher (ADR-015) ----------
+SCAN="tests/test_documents_scan.py"
+mutation "Scan: Fund gilt als sauber" "documents/scan.py" "        if antwort == \"stream: OK\":|||        if antwort == \"stream: OK\" or antwort.endswith(\" FOUND\"):" "$SCAN"
+mutation "Scan: unklare Antwort gilt als sauber" "documents/scan.py" "        raise ScannerUnavailable(f\"unerwartete clamd-Antwort|||        return Verdict(True)
+        raise ScannerUnavailable(f\"unerwartete clamd-Antwort" "$SCAN"
+mutation "Scan: Ausfall verwirft schon Geprüftes" "documents/scan.py" "                ausfall, lauf.pending = e, lauf.pending + len(zeilen) - i
+                break|||                raise" "$SCAN"
+mutation "Scan: DB erlaubt jeden Übergang" "migrations/versions/0007_documents_scan.py" "         AND NOT (OLD.scan_status = 'quarantined' AND NEW.scan_status IN ('clean', 'infected')) THEN|||         AND false THEN" "$SCAN"
+mutation "Scan: Worker darf alle Dokumentspalten ändern" "migrations/versions/0007_documents_scan.py" "    GRANT UPDATE (scan_status) ON documents TO ichq_worker;|||    GRANT UPDATE ON documents TO ichq_worker;" "$SCAN"
+mutation "Scan: Web-App schreibt Prüfergebnis" "migrations/versions/0007_documents_scan.py" "    GRANT SELECT ON documents TO ichq_worker;|||    GRANT SELECT ON documents TO ichq_worker; GRANT UPDATE (scan_status) ON documents TO ichq_app;" "$SCAN tests/test_core_objects.py"
+mutation "Scan: Worker sieht fremde Firmen" "migrations/versions/0007_documents_scan.py" "    CREATE POLICY p_documents_scan_worker ON documents FOR SELECT TO ichq_worker
+      USING (tenant_id = ichq_current_tenant());|||    CREATE POLICY p_documents_scan_worker ON documents FOR SELECT TO ichq_worker
+      USING (true);" "$SCAN"
+# Wie mutation, aber in einer Kopie von deploy/ (Tests lesen ICHQ_DEPLOY_DIR)
+mutation_deploy() {
+  local name="$1" datei="$2" ersatz="$3" tests="$4"
+  local tmp; tmp=$(mktemp -d)
+  cp -a deploy "$tmp/deploy"
+  if ! python3 - "$tmp/deploy/$datei" "$ersatz" <<'PY'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); alt, neu = sys.argv[2].split("|||")
+t = p.read_text()
+if alt not in t:
+    sys.exit(3)
+p.write_text(t.replace(alt, neu, 1))
+PY
+  then echo "UNGÜLTIG  | $name (Muster nicht gefunden — Mutation nicht angewendet)"; UNGUELTIG=$((UNGUELTIG+1)); rm -rf "$tmp"; return; fi
+  local ergebnis; ergebnis=$(ICHQ_DEPLOY_DIR="$tmp/deploy" timeout 300 python3 -m pytest -q -p no:cacheprovider $tests 2>&1 | tail -1)
+  if echo "$ergebnis" | grep -q "failed"; then echo "ERKANNT   | $name"; ERKANNT=$((ERKANNT+1))
+  else echo "UNBEMERKT | $name | $ergebnis"; UNBEMERKT=$((UNBEMERKT+1)); fi
+  rm -rf "$tmp"
+}
+DEP="tests/test_deploy.py"
+mutation_deploy "Betrieb: Datenbank-Port nach außen" "docker-compose.yml" "    image: postgres:16-alpine
+    environment:|||    image: postgres:16-alpine
+    ports: [\"5432:5432\"]
+    environment:" "$DEP"
+mutation_deploy "Betrieb: Scanner ohne Neustart" "docker-compose.yml" "    command: [\"ichq\", \"documents-scan\", \"--loop\", \"10\"]
+    healthcheck: {disable: true}
+    restart: unless-stopped|||    command: [\"ichq\", \"documents-scan\", \"--loop\", \"10\"]
+    healthcheck: {disable: true}" "$DEP"
+mutation_deploy "Betrieb: App-Secret nicht für UID 10001" "fix-secret-permissions.sh" " secret_key session_secret\"||| secret_key\"" "$DEP"
+mutation_deploy "Betrieb: Secrets werden überschrieben" "generate-secrets.sh" "[ -e secrets ] && { echo \"secrets/ existiert bereits — Abbruch, nichts überschrieben.\"; exit 1; }|||" "$DEP"
+mutation_deploy "Betrieb: Rollen-Passwort nicht angeglichen" "postgres/init-roles.sql" "SELECT format('ALTER ROLE ichq_app PASSWORD %L', :'app_pw') \\gexec|||" "$DEP"
+mutation_deploy "Betrieb: E-Mail ungeprüft (Caddyfile-Injektion)" "install.sh" "[[ \"\$EMAIL\" =~ ^[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\\.)+[A-Za-z]{2,63}\$ ]]|||[[ \"\$EMAIL\" =~ ^.+\$ ]]" "$DEP"
+mutation_deploy "Betrieb: Domain ungeprüft" "install.sh" "|| fehler \"ungültige Domain|||| true \"ungültige Domain" "$DEP"
+mutation_deploy "Betrieb: Restore ohne Bestätigung" "hq" "  [ \"\$ja\" = \"--yes\" ] || fehler|||  true || fehler" "$DEP"
 echo "---"; echo "erkannt $ERKANNT · unbemerkt $UNBEMERKT · ungültig $UNGUELTIG"
 [ "$UNBEMERKT" -eq 0 ] && [ "$UNGUELTIG" -eq 0 ]

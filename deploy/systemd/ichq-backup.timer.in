@@ -1,0 +1,11 @@
+# IC WARE HQ — tägliche Sicherung um 03:15 (verpasste Läufe werden nach dem Booten nachgeholt).
+[Unit]
+Description=IC WARE HQ: tägliche Sicherung
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

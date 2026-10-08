@@ -6,7 +6,7 @@ import { darf } from "../state.js";
 import { kommentare } from "./kommentare.js";
 
 const PRUEFUNG = { pending: "zu prüfen", approved: "freigegeben", rejected: "abgelehnt" };
-const SCAN = { pending: "Virenprüfung läuft", clean: "geprüft", infected: "gesperrt", error: "Prüfung fehlgeschlagen" };
+const SCAN = { quarantined: "Virenprüfung läuft", clean: "geprüft", infected: "gesperrt (Schadsoftware)" };
 const TYPEN = ".pdf,.png,.jpg,.jpeg,.xml,.txt,.csv";
 
 const pruefTag = (s) => h("span", { class: `tag${s === "approved" ? "" : s === "rejected" ? " tag--danger" : " tag--muted"}` }, PRUEFUNG[s] || s);

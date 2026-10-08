@@ -42,6 +42,8 @@ diese Passwörter!) und je Lauf eine frische Datenbank. Nur gegen einen eigenen 
 | `test_m4_boundaries.py` | M4: letzter Admin auf jedem Weg, Mandantengrenzen, DB-Trigger der gesperrten Rolle, Flags nicht durch die App schreibbar, Wirkung in laufender Sitzung (echter Login) |
 | `test_m4_setup.py` | M4: Migration 0006 mit Übergangsrolle im Bestand, Vorlagen idempotent, CLI `tenant-status`/`tenant-admin`/`tenant-feature` |
 | `test_m4_docs.py` | Tabelle „Geschützte Endpunkte" in `docs/authorization.md` = `ichq routes-doc` |
+| `test_documents_scan.py` | Virenprüfung gegen einen Test-clamd mit echtem Protokoll: sauber/infiziert, unklare Antworten, Ausfall mitten im Stapel, Firmen getrennt, CLI, DB lässt nur `quarantined → clean/infected` zu |
+| `test_deploy.py` | Betrieb: shellcheck, Compose-Regeln (nur Caddy mit Ports, Neustart, gemeinsamer Speicher), Secrets (nie überschreiben, Rechte, UID 10001), Installer-Eingaben (Caddyfile-Injektion), Restore nur mit `--yes`, `init-roles.sql` gleicht Passwörter an (SCRAM-Prüfung) |
 | `test_notifications_job.py` | Fälligkeits-Scan: idempotent, Advisory-Lock, Fehler je Firma isoliert, CLI, systemd-Units (`systemd-analyze verify`) |
 
 ## Mutationstests
@@ -50,10 +52,26 @@ diese Passwörter!) und je Lauf eine frische Datenbank. Nur gegen einen eigenen 
 scripts/mutation-check.sh
 ```
 
-Baut 90 gezielte Sicherheitslücken ein (M1: 19, M2: 31, C0: 21, M3 + Nachträge: 19) (z. B. RLS ohne Schreibschutz, Mandant pro Sitzung statt pro
+Baut 159 gezielte Sicherheitslücken ein (inkl. 7 Virenprüfung und 8 Betrieb in einer Kopie von `deploy/`, ADR-015) (z. B. RLS ohne Schreibschutz, Mandant pro Sitzung statt pro
 Transaktion, Stacktrace an den Client, Routenprüfung nur auf oberster Ebene) und prüft, ob die Tests
 rot werden. Meldet auch Mutationen, die gar nicht angewendet werden konnten — ein Prüfskript, das
 nichts prüft, darf nicht grün sein.
 
 Warum das wichtig ist: In M1 waren drei Prüfungen grün, die nichts geprüft haben — die Routenprüfung
 (FastAPI-Hülle), der Worker (Modell nicht geladen) und eine Zeile im Mutationsskript selbst.
+
+## Ende-zu-Ende auf einem Server (ADR-015)
+
+```bash
+sudo deploy/install.sh --domain localhost --email ci@example.org --skip-dns-check --no-systemd
+sudo deploy/smoke-test.sh --wegwerf [--docker-neustart]     # NUR auf Wegwerf-Installationen — löscht alle Daten
+```
+
+26 Prüfungen: HTTPS, Header, Anmeldung, echtes ClamAV (EICAR), UID, 503 bei App-Ausfall, Client-IP, Logs ohne
+Geheimnisse, Sicherung → Totalverlust → Neuinstallation → Wiederherstellung (+ 2 mit `--docker-neustart`).
+Läuft in CI als Job `betrieb`.
+
+Gefunden durch die Mutationen in dieser Runde: Der Test für den Passwort-Angleich war grün, obwohl der Angleich
+fehlte — sein Aufräumen (`DROP DATABASE` mit weiteren Befehlen in einem `-c`, also in einer Transaktion) scheiterte
+still, und Rollen aus früheren Läufen trugen schon das „richtige" Passwort. Aufräumen jetzt vorher und nachher, mit
+geprüftem Exitcode.

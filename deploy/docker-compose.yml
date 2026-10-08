@@ -1,5 +1,7 @@
-# Einzelserver-Betrieb (M0, Abschnitt 29). Vorher: deploy/generate-secrets.sh ausführen.
-#   docker compose -f deploy/docker-compose.yml up -d
+# Einzelserver-Betrieb (M0, Abschnitt 29; ADR-015). Einrichtung: deploy/install.sh — oder von Hand:
+#   deploy/generate-secrets.sh && printf 'ICHQ_DOMAIN=…\nICHQ_ACME_EMAIL=…\n' > deploy/.env
+#   docker build -f deploy/Dockerfile -t ic-ware-hq:local . && docker compose -f deploy/docker-compose.yml up -d
+# Bedienung danach: deploy/hq (status, logs, update, backup, restore, setup-admin …)
 name: ichq
 
 x-app-env: &app-env
@@ -8,16 +10,14 @@ x-app-env: &app-env
   ICHQ_PLATFORM_DATABASE_URL_FILE: /run/secrets/platform_database_url
   ICHQ_WORKER_DATABASE_URL_FILE: /run/secrets/worker_database_url
   ICHQ_AUTH_DATABASE_URL_FILE: /run/secrets/auth_database_url
-  ICHQ_PUBLIC_ORIGIN: https://${ICHQ_DOMAIN:-localhost}
+  ICHQ_PUBLIC_ORIGIN: https://${ICHQ_DOMAIN:?ICHQ_DOMAIN fehlt — deploy/.env anlegen (deploy/install.sh)}
   ICHQ_TRUSTED_PROXIES: "*"   # nur Caddy erreicht die App (internes Netz); App-Port ist nicht veröffentlicht
   ICHQ_MIGRATION_DATABASE_URL_FILE: /run/secrets/migration_database_url
   ICHQ_SECRET_KEY_FILE: /run/secrets/secret_key
   ICHQ_SESSION_SECRET_FILE: /run/secrets/session_secret
-  ICHQ_STORAGE_BACKEND: s3
-  ICHQ_S3_ENDPOINT_URL: http://minio:9000
-  ICHQ_S3_BUCKET: ichq
-  ICHQ_S3_ACCESS_KEY_FILE: /run/secrets/s3_access_key
-  ICHQ_S3_SECRET_KEY_FILE: /run/secrets/s3_secret_key
+  # Einzelserver: Dateien auf einem Docker-Volume (ADR-015). S3 bleibt möglich: ICHQ_STORAGE_BACKEND=s3 + S3-Variablen.
+  ICHQ_STORAGE_BACKEND: local
+  ICHQ_STORAGE_PATH: /var/lib/ichq/storage
   ICHQ_LOG_FORMAT: json
 
 x-app-secrets: &app-secrets
@@ -28,8 +28,14 @@ x-app-secrets: &app-secrets
   - migration_database_url
   - secret_key
   - session_secret
-  - s3_access_key
-  - s3_secret_key
+
+x-app: &app
+  image: ic-ware-hq:local     # gebaut von deploy/hq build (install/update), nie aus einer Registry
+  pull_policy: never
+  environment: *app-env
+  secrets: *app-secrets
+  volumes: [filedata:/var/lib/ichq/storage]
+  logging: {driver: json-file, options: {max-size: "10m", max-file: "5"}}
 
 services:
   postgres:
@@ -41,7 +47,8 @@ services:
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres"]
       interval: 5s
-      retries: 10
+      retries: 20
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "5"}}
     restart: unless-stopped
 
   db-init:          # legt Rollen und Datenbank an (idempotent)
@@ -61,65 +68,64 @@ services:
     restart: "no"
 
   migrate:          # Migration vor jedem Start der App
-    image: ic-ware-hq:0.1.0
-    build: {context: .., dockerfile: deploy/Dockerfile}
+    <<: *app
     depends_on: {db-init: {condition: service_completed_successfully}}
-    environment: *app-env
-    secrets: *app-secrets
     command: ["ichq", "migrate"]
     restart: "no"
 
   app:
-    image: ic-ware-hq:0.1.0
-    depends_on:
-      migrate: {condition: service_completed_successfully}
-      minio: {condition: service_healthy}
-    environment: *app-env
-    secrets: *app-secrets
+    <<: *app
+    depends_on: {migrate: {condition: service_completed_successfully}}
     restart: unless-stopped
 
   worker:
-    image: ic-ware-hq:0.1.0
+    <<: *app
     depends_on: {migrate: {condition: service_completed_successfully}}
-    environment: *app-env
-    secrets: *app-secrets
     command: ["ichq", "worker"]
+    healthcheck: {disable: true}
     restart: unless-stopped
 
-  minio:
-    image: minio/minio:latest
-    command: ["server", "/data"]
-    environment:
-      MINIO_ROOT_USER_FILE: /run/secrets/s3_access_key
-      MINIO_ROOT_PASSWORD_FILE: /run/secrets/s3_secret_key
-    secrets: [s3_access_key, s3_secret_key]
-    volumes: [miniodata:/data]
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      retries: 10
-    restart: unless-stopped
-
-  minio-init:       # privaten Bucket anlegen
-    image: minio/mc:latest
-    depends_on: {minio: {condition: service_healthy}}
-    secrets: [s3_access_key, s3_secret_key]
+  jobs:             # geplante Jobs ohne Host-Abhängigkeit: idempotent, Advisory-Lock gegen Parallellauf (ADR-015)
+    <<: *app
+    depends_on: {migrate: {condition: service_completed_successfully}}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >
-        mc alias set local http://minio:9000 "$$(cat /run/secrets/s3_access_key)" "$$(cat /run/secrets/s3_secret_key)" &&
-        mc mb --ignore-existing local/ichq && mc anonymous set none local/ichq
-    restart: "no"
+        while :; do
+        ichq notifications-scan || echo "notifications-scan fehlgeschlagen";
+        ichq auth-cleanup || echo "auth-cleanup fehlgeschlagen";
+        sleep 3600; done
+    healthcheck: {disable: true}
+    restart: unless-stopped
+
+  clamav:           # Virenscanner (ClamAV); lädt beim ersten Start Signaturen (einige Minuten), ~1,5 GB RAM
+    image: clamav/clamav:stable
+    volumes: [clamdb:/var/lib/clamav]
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "3"}}
+    restart: unless-stopped
+
+  scanner:          # prüft Dokumente in Quarantäne; ohne erreichbares ClamAV bleibt alles gesperrt (ADR-015)
+    <<: *app
+    depends_on: {migrate: {condition: service_completed_successfully}}
+    environment:
+      <<: *app-env
+      ICHQ_CLAMD_HOST: clamav
+    command: ["ichq", "documents-scan", "--loop", "10"]
+    healthcheck: {disable: true}
+    restart: unless-stopped
 
   caddy:
     image: caddy:2-alpine
     depends_on: {app: {condition: service_healthy}}   # sonst 503, bis der erste Health-Check läuft
-    ports: ["80:80", "443:443"]
+    ports: ["80:80", "443:443", "443:443/udp"]
     environment:
-      ICHQ_DOMAIN: ${ICHQ_DOMAIN:-localhost}
+      ICHQ_DOMAIN: ${ICHQ_DOMAIN}
+      ICHQ_ACME_EMAIL: ${ICHQ_ACME_EMAIL:?ICHQ_ACME_EMAIL fehlt — Let's-Encrypt-Kontakt in deploy/.env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddydata:/data
+      - caddyconfig:/config
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "5"}}
     restart: unless-stopped
 
 secrets:
@@ -136,10 +142,10 @@ secrets:
   migration_database_url: {file: ../secrets/migration_database_url}
   secret_key: {file: ../secrets/secret_key}
   session_secret: {file: ../secrets/session_secret}
-  s3_access_key: {file: ../secrets/s3_access_key}
-  s3_secret_key: {file: ../secrets/s3_secret_key}
 
 volumes:
   pgdata:
-  miniodata:
+  filedata:
   caddydata:
+  caddyconfig:
+  clamdb:

@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     s3_region: str = "eu-central-1"
     s3_access_key: SecretStr | None = None
     s3_secret_key: SecretStr | None = None
+    # Virenprüfung (ClamAV/clamd über TCP) — nur der Dienst `ichq documents-scan` braucht sie
+    clamd_host: str | None = None
+    clamd_port: int = Field(default=3310, ge=1, le=65535)
 
     # E-Mail ist dokumentiert und validiert, wird in M1 aber noch nicht verwendet
     smtp_host: str | None = None

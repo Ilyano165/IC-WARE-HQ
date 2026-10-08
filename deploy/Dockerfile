@@ -4,8 +4,12 @@ FROM python:3.12-slim AS build
 WORKDIR /src
 COPY requirements.lock pyproject.toml ./
 COPY src ./src
-# Abhängigkeiten nur mit geprüften Hashes, das eigene Paket ohne Nachladen
-RUN pip install --no-cache-dir --prefix=/install --require-hashes -r requirements.lock \
+# Abhängigkeiten nur mit geprüften Hashes, das eigene Paket ohne Nachladen.
+# Optional: zusätzliche Wurzel-CA für Netze mit TLS-prüfendem Proxy (Build-Secret „extra_ca", landet NICHT im Image):
+#   docker build --secret id=extra_ca,src=/pfad/ca.pem …
+RUN --mount=type=secret,id=extra_ca,required=false \
+    if [ -s /run/secrets/extra_ca ]; then export PIP_CERT=/run/secrets/extra_ca; fi \
+ && pip install --no-cache-dir --prefix=/install --require-hashes -r requirements.lock \
  && pip install --no-cache-dir --prefix=/install --no-deps .
 
 FROM python:3.12-slim

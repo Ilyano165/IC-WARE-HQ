@@ -5,6 +5,8 @@
 	https_port {$ICHQ_HTTPS_PORT:443}
 	admin off
 	skip_install_trust
+	# Let's-Encrypt-Konto (Ablaufwarnungen); Pflicht, siehe deploy/.env
+	email {$ICHQ_ACME_EMAIL}
 	# Gilt für alle Logs außer dem Zugriffslog — auch Fehlerlogs enthalten die angefragte URI
 	log default {
 		output stdout

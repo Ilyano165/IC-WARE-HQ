@@ -1,0 +1,12 @@
+# IC WARE HQ — Sicherung (Datenbank, Dateien, Geheimnisse) nach @BACKUPDIR@, behält die neuesten 14.
+[Unit]
+Description=IC WARE HQ: Sicherung
+After=docker.service ichq.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=HQ_BACKUP_DIR=@BACKUPDIR@
+ExecStart=@ROOT@/deploy/hq backup @BACKUPDIR@
+TimeoutStartSec=2h
+Nice=10

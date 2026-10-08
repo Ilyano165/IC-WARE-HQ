@@ -18,10 +18,11 @@ Standardwert. Fehlermeldungen nennen nie einen Wert. Prüfen mit `ichq check-con
 | `ICHQ_SESSION_SECRET` | ja | Sitzungsgeheimnis (ab M2), mindestens 32 Zeichen, anders als `SECRET_KEY` |
 | `ICHQ_STORAGE_BACKEND` | nein (`local`) | `local` oder `s3` |
 | `ICHQ_STORAGE_PATH` | bei `local` | Speicherordner |
-| `ICHQ_S3_ENDPOINT_URL` | nein | z. B. `http://minio:9000`; leer = AWS |
+| `ICHQ_S3_ENDPOINT_URL` | nein | S3-kompatibler Endpunkt; leer = AWS. Compose nutzt seit ADR-015 `local` (Volume) |
 | `ICHQ_S3_BUCKET` | bei `s3` | Bucket-Name (privat) |
 | `ICHQ_S3_REGION` | nein (`eu-central-1`) | Region |
 | `ICHQ_S3_ACCESS_KEY` / `ICHQ_S3_SECRET_KEY` | bei `s3` | Zugangsdaten |
+| `ICHQ_CLAMD_HOST` / `ICHQ_CLAMD_PORT` | für `ichq documents-scan` (– / 3310) | ClamAV (clamd, TCP). Ohne erreichbares ClamAV bleiben Uploads in Quarantäne (ADR-015) |
 | `ICHQ_AUTH_DATABASE_URL` | ja | Rolle `ichq_auth` (Anmeldung, Sitzungen, Passwort-Hashes) |
 | `ICHQ_SMTP_HOST`, `_PORT`, `_USER`, `_PASSWORD`, `_FROM`, `_STARTTLS` | für Reset/Einladung | E-Mail-Versand; ohne `HOST`+`FROM` antworten Passwort-Reset und Einladungen mit 503 |
 | `ICHQ_PUBLIC_ORIGIN` | in Produktion | z. B. `https://app.ic-ware.eu` — Basis für Links in Mails und Prüfung des `Origin`-Headers (CSRF) |

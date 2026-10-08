@@ -82,6 +82,9 @@ def main(argv: list[str] | None = None) -> int:
                                              "löschen (auth_events bleiben)")
     ac.add_argument("--days", type=int, default=30, help="Aufbewahrung in Tagen (Standard 30)")
     sub.add_parser("routes-doc", help="Tabelle der geschützten Endpunkte aus dem Code ausgeben (docs/authorization.md)")
+    ds = sub.add_parser("documents-scan", help="Dokumente in Quarantäne mit ClamAV prüfen (ICHQ_CLAMD_HOST)")
+    ds.add_argument("--loop", type=float, default=0, help="Sekunden zwischen Läufen; 0 = einmal")
+    ds.add_argument("--limit", type=int, default=50, help="höchstens so viele Dokumente je Firma und Lauf")
     w = sub.add_parser("worker", help="Outbox-Worker starten")
     w.add_argument("--once", action="store_true")
     sv = sub.add_parser("serve", help="API-Server starten (Produktion: hinter Reverse Proxy)")
@@ -145,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             print(" · ".join(f"{k} {v}" for k, v in bericht.deleted.items()))
             return 0
+        if args.cmd == "documents-scan":
+            return _virenscan(settings, engines, args.loop, args.limit)
         if args.cmd == "worker":
             from ichq.jobs.worker import run_forever, run_once
             if args.once:
@@ -189,6 +194,26 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     finally:
         engines.dispose()
+
+
+def _virenscan(settings: Any, engines: Any, pause: float, limit: int) -> int:
+    """Exitcodes: 0 ok, 1 Firma gescheitert, 2 kein Scanner konfiguriert. Mit --loop endlos (Dienst „scanner")."""
+    import time
+
+    from ichq.documents.scan import ClamdClient, scan_pending
+    from ichq.storage import build_storage
+    if not settings.clamd_host:
+        print("Fehler: ICHQ_CLAMD_HOST fehlt — ohne Virenscanner bleiben Dokumente in Quarantäne.", file=sys.stderr)
+        return 2
+    client, storage = ClamdClient(settings.clamd_host, settings.clamd_port), build_storage(settings)
+    while True:
+        lauf = scan_pending(engines, storage, client, limit)
+        if lauf.clean or lauf.infected or lauf.pending or not pause:
+            print(f"sauber {lauf.clean} · infiziert {lauf.infected} · wartend {lauf.pending} · "
+                  f"Firmen fehlgeschlagen {len(lauf.failed_tenants)}", flush=True)
+        if not pause:
+            return 1 if lauf.failed_tenants else 0
+        time.sleep(pause)
 
 
 def _scan(engines: Any, stichtag: str | None) -> int:
