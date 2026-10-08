@@ -50,6 +50,9 @@ ichq serve --port 8000
 | `ichq tenant-create --name … --slug …` | Firma anlegen (Status `pending`) |
 | `ichq tenant-show <id oder slug>` | Firma nachschlagen |
 | `ichq tenant-status <id> <status> --reason …` | Status wechseln (nur erlaubte Übergänge) |
+| `ichq tenant-admin --email … --tenant <slug>` | gesperrte Rolle „Company Admin" zuweisen (legt Rollenvorlagen an) |
+| `ichq tenant-feature --tenant <slug> <modul> on\|off --reason …` | Fachmodul je Firma schalten (Kernmodule nicht) |
+| `ichq routes-doc` | Tabelle der geschützten Endpunkte aus dem Code (für `docs/authorization.md`) |
 | `ichq worker [--once]` | Outbox-Worker; `--once` endet mit Exit-Code 1 bei Fehlschlägen |
 | `ichq user-create --email … --name … [--username …]` | Konto anlegen (Status `pending`) |
 | `ichq user-set-password --email … [--password-stdin]` | Passwort setzen (wird abgefragt, nie als Argument) |

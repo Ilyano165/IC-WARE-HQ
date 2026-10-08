@@ -18,7 +18,7 @@ Die M0-Reihenfolge wird so abgebildet:
 | --- | --- |
 | 0 Firma/Mitgliedschaft nicht aktiv, Recht unbekannt → NEIN | `get_principal` (Status), `decide` (Registry) |
 | 1 Modul per Feature-Flag aus → NEIN | `tenant_feature_flags` (Modul = Präfix vor dem Punkt); Fehlercode `feature_disabled` |
-| 2 Einzelrecht DENY → NEIN | `membership_permission_overrides.effect = 'deny'` |
+| 2 Einzelrecht DENY → NEIN | `permission_overrides.effect = 'deny'` |
 | 3 Ressourcen-DENY → NEIN | `object_denies` — schlägt auch `objects.read_all`, Freigabe und Erstellerschaft (in `visible_clause`) |
 | 4 Einzelrecht ALLOW → JA | `effect = 'allow'` |
 | 5 Ressourcen-ALLOW → JA | `object_grants` (ADR-009) |
@@ -52,5 +52,16 @@ Beim Aktivieren einer Firma werden Vorlagen angelegt (idempotent): „Company Ad
 
 ## Folgen
 - Jede Rechteänderung wirkt sofort (nächste Anfrage).
-- `membership_permission_overrides`, `object_denies`, `tenant_feature_flags` nach der Mandanten-Checkliste.
+- `permission_overrides`, `object_denies`, `tenant_feature_flags` nach der Mandanten-Checkliste.
 - Neues Recht `users.override` (Einzelrechte vergeben) — wie im Prototyp, getrennt von `roles.assign`.
+
+## Umsetzung (Nachtrag)
+- Migration `0006_m4_rbac`; Code `ichq.authz.{effective,guard,roles,delegation,templates,flags}`, Doku
+  `docs/authorization.md` (Routentabelle aus dem Code, `ichq routes-doc`).
+- Tabelle heißt `permission_overrides` statt `membership_permission_overrides`: Die Namenskonvention der
+  Fremdschlüssel hätte PostgreSQLs Grenze von 63 Zeichen überschritten. Wer ein Einzelrecht gesetzt hat, steht im
+  Mandanten-Audit (keine eigene Spalte).
+- Feature-Flags können Kernmodule (`company`, `users`, `roles`, `audit`, `settings`) nicht abschalten — sonst könnte
+  sich eine Firma aussperren.
+- Ressourcen-DENY sperrt auch die Zuweisung einer Aufgabe an die gesperrte Person (sonst entstünde eine unsichtbare
+  Zuständigkeit).

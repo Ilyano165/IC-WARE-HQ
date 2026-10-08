@@ -12,8 +12,8 @@ Ziel: **Tor 1 — „Isolation bewiesen: Fremd-ID-Tests je Endpunkt grün, RLS g
 | Mitglieder | auflisten (`users.read`, Filter Status/Suche, Cursor), deaktivieren (`users.deactivate` → `suspended`), Firma verlassen (→ `left`). Wirkung sofort: `get_principal` prüft die Mitgliedschaft bei jeder Anfrage. |
 | Einladungen | `users.create`; Token 256 Bit, nur SHA-256 in der DB, 7 Tage, einmalig, widerrufbar; höchstens eine offene Einladung je E-Mail und Firma; Link `…/invite#token=…` ohne Firma, Name, E-Mail. Versand nur mit eingerichtetem Mailer (sonst 503). Audit enthält nur die E-Mail-Domain. |
 | Annehmen | **neues Konto**: öffentlich, mit Token + Name + Passwort (gleiche Passwortregel wie überall); gibt es zur E-Mail schon ein Konto → 409 `account_exists`. **Bestehendes Konto**: nur angemeldet mit genau dem Konto der eingeladenen E-Mail (`accept-existing`) — ein bestehendes Konto wird nie ohne eigene Handlung verknüpft. Einladung verbrauchen + Mitgliedschaft anlegen in **einer** Mandanten-Transaktion. Eine Einladung gibt **keine** Rechte. |
-| Schutzregeln | Niemand deaktiviert sich selbst (403). Die letzte aktive Mitgliedschaft mit Verwaltungsrecht (`users.deactivate` über eine nicht archivierte Rolle) kann weder deaktiviert werden noch austreten (409 `last_admin`) — geprüft unter Sperre aller Mitgliedschaften der Firma. |
-| Übergang bis M4 | `ichq tenant-admin --email … --tenant <slug>` legt die Systemrolle „Company Admin" mit allen Rechten der Registry an (idempotent, zieht neue Rechte nach) und weist sie zu. **Wird mit M4 entfernt.** |
+| Schutzregeln | Niemand deaktiviert sich selbst (403). Die letzte aktive Mitgliedschaft mit Verwaltungsrechten kann weder deaktiviert werden noch austreten (409 `last_admin`) — seit M4 dieselbe Regel wie bei Rollen- und Rechteänderungen (`ichq.authz.guard`, Admin = effektiv `users.deactivate` + `roles.update` + `roles.assign`, `docs/authorization.md`). |
+| Erster Admin | `ichq tenant-admin --email … --tenant <slug>` weist die gesperrte Rolle „Company Admin" zu (M4: Rechte berechnet, Vorlagen werden angelegt). Kein Übergang mehr, sondern Onboarding über die Control Plane. |
 
 ## Routen
 
@@ -50,8 +50,7 @@ die Firma ist beim Annehmen unbekannt) — schreiben kann sie dort nichts.
 | Gegenprobe Mutation | „Route mandantenblind" (RLS-Policy `USING (true)`) ⇒ Generator rot — `scripts/mutation-check.sh`, Abschnitt M3 |
 | CI-Protokoll | **fehlt.** M0: „Ein Tor ist erst passiert, wenn sein Kriterium im CI-Protokoll belegt ist." Die CI läuft auf Pull Requests; es gibt noch keinen PR. Lokal belegt, im CI nicht. |
 
-Nicht in M3 (bleibt M4): Rollen anlegen/ändern/zuweisen per API, Einzelrechte, Ressourcen-DENY, Rollenvorlagen.
-Ohne M4 vergibt nur der CLI-Übergang Rechte.
+Rollen, Einzelrechte, Ressourcen-DENY und Vorlagen: M4, siehe `docs/authorization.md`.
 
 ## Bekannte Grenzen
 - Annehmen mit neuem Konto ist nicht vollständig atomar: Konto (Plattform-Rolle) und Passwort (Auth-Rolle) entstehen

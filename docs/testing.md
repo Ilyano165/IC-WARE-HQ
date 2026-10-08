@@ -33,10 +33,15 @@ diese Passwörter!) und je Lauf eine frische Datenbank. Nur gegen einen eigenen 
 | `test_core_security.py` | C0: **IDOR-Generator über alle Routen mit Pfad-ID** + Gegenprobe, Listen/Suche ohne Fremddaten, Rechte-Matrix, Steuerberater, pausierte Firma |
 | `test_core_notify_search.py` | C0: Rechte beim Zustellen/Lesen, Rückfrage, Fälligkeitsregel, Suche (Gruppen, Präfix, Sonderzeichen), Aktivität ≠ Audit, Audit unveränderbar |
 | `test_core_e2e.py` | C0: echter uvicorn-Prozess, echte Logins, Worker und Scan als CLI-Prozesse — Steuerberater-Szenario |
-| `test_core_docs.py` | Routentabellen in `docs/core-permissions.md` + `docs/m3-mandanten.md` = jede `/api/v1`-Route (außer `/auth`) |
-| `test_m3_tenancy.py` | M3 mit echten Logins: Firmenprofil, zentraler Pause-Schutz, Einladungen (Missbrauch, Zustimmung, Atomarität), Deaktivieren, Verlassen, Last-Admin, CLI-Übergang |
+| `test_core_docs.py` | Routentabellen in `docs/core-permissions.md` + `docs/m3-mandanten.md` + `docs/authorization.md` = jede `/api/v1`-Route (außer `/auth`) |
+| `test_m3_tenancy.py` | M3 mit echten Logins: Firmenprofil, zentraler Pause-Schutz, Einladungen (Missbrauch, Zustimmung, Atomarität), Deaktivieren, Verlassen, Last-Admin, Company Admin per Control Plane |
 | `test_core_followups.py` | eigene Rechte je Objekttyp, Freigabe an Zuweisung gebunden, Kommentar-Tombstones und unveränderbare Historie |
 | `test_auth_cleanup.py` | M2: Aufräum-Job löscht nur Altes, nie `auth_events`; Sperre; CLI; systemd-Units |
+| `test_m4_decision.py` | M4: jede Stufe der Entscheidungsreihenfolge einzeln (Flag, DENY, Ressourcen-DENY, ALLOW, Freigabe, Rolle, sonst) |
+| `test_m4_delegation.py` | M4: Prototyp-Szenarien — Rechteausweitung, Lücken-Löschung, Duplizieren, gesperrte Rolle, Rang, Einzelrechte-Missbrauch, Admin-Eskalation, Bypass, Rollenlöschung |
+| `test_m4_boundaries.py` | M4: letzter Admin auf jedem Weg, Mandantengrenzen, DB-Trigger der gesperrten Rolle, Flags nicht durch die App schreibbar, Wirkung in laufender Sitzung (echter Login) |
+| `test_m4_setup.py` | M4: Migration 0006 mit Übergangsrolle im Bestand, Vorlagen idempotent, CLI `tenant-status`/`tenant-admin`/`tenant-feature` |
+| `test_m4_docs.py` | Tabelle „Geschützte Endpunkte" in `docs/authorization.md` = `ichq routes-doc` |
 | `test_notifications_job.py` | Fälligkeits-Scan: idempotent, Advisory-Lock, Fehler je Firma isoliert, CLI, systemd-Units (`systemd-analyze verify`) |
 
 ## Mutationstests

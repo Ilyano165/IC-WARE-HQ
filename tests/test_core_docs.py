@@ -1,4 +1,5 @@
-"""Doku = Code: core-permissions.md + m3-mandanten.md nennen zusammen JEDE /api/v1-Route (außer /auth) mit echter Marke."""
+"""Doku = Code: core-permissions.md, m3-mandanten.md und authorization.md nennen zusammen JEDE /api/v1-Route
+(außer /auth) mit echter Marke."""
 from __future__ import annotations
 
 import re
@@ -9,7 +10,8 @@ from ichq.app import create_app
 from ichq.core.config import Settings
 from ichq.db.engine import Engines
 
-DOCS = [Path(__file__).resolve().parent.parent / "docs" / n for n in ("core-permissions.md", "m3-mandanten.md")]
+DOCS = [Path(__file__).resolve().parent.parent / "docs" / n
+        for n in ("core-permissions.md", "m3-mandanten.md", "authorization.md")]
 
 
 def test_routentabelle_entspricht_dem_code(settings: Settings, engines: Engines) -> None:

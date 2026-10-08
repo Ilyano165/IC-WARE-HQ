@@ -35,8 +35,10 @@ def _bestand(cw: CoreWorld, mid: Any) -> dict[str, str]:
     p = cw.principal(mid)
     with tenant_transaction(cw.engines.app, p.tenant_id) as s:   # Einladung ohne Mailversand anlegen
         inv, _roh = invite(s, p, email=f"neu-{mid.hex[:8]}@extern.test", title=None)
+    rolle = ok(c.post("/api/v1/roles", json={"name": f"IDOR {mid.hex[:6]}", "rank": 5,
+                                             "permissions": ["tasks.read"]}), 201)
     return {"task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"],
-            "member": cw.public_id(mid), "invitation": inv.public_id}
+            "member": cw.public_id(mid), "invitation": inv.public_id, "role": rolle["id"]}
 
 
 def _notification(cw: CoreWorld, engines: Engines, empfaenger: Any, tid: Any, absender: Any) -> str:
@@ -61,12 +63,22 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("POST", "/api/v1/comments/{ref}/tasks"): {"title": "Eingeschleust"},
     ("POST", "/api/v1/documents/{ref}/review"): {"decision": "approved"},
     ("POST", "/api/v1/members/{member}/deactivate"): {},
+    # M4
+    ("PATCH", "/api/v1/roles/{role}"): {"description": "Übernommen"},
+    ("POST", "/api/v1/roles/{role}/duplicate"): {"name": "Eingeschleust"},
+    ("POST", "/api/v1/roles/{role}/archive"): {},
+    ("POST", "/api/v1/roles/{role}/restore"): {},
+    ("PUT", "/api/v1/members/{member}/roles/{role}"): {},
+    ("PUT", "/api/v1/members/{member}/overrides/{permission}"): {"effect": "deny"},
+    ("PUT", "/api/v1/objects/{ref}/denies/{member}"): {},
 }
 
 
 def _ref_fuer(pfad: str, param: str, refs: dict[str, str]) -> str:
-    if param == "member":
-        return refs["member"]
+    if param in ("member", "role"):
+        return refs[param]
+    if param == "permission":
+        return "tasks.read"
     for praefix, art in (("/api/v1/invitations/", "invitation"), ("/api/v1/tasks/", "task"),
                          ("/api/v1/comments/", "comment"),
                          ("/api/v1/documents/", "document"), ("/api/v1/notifications/", "notification"),

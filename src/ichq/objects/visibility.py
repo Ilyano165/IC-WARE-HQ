@@ -3,7 +3,8 @@
 Ein Objekt ist für einen Principal sichtbar, wenn
 
 1. er das Modulrecht zum Lesen des Objekttyps hat (``OBJECT_TYPES[typ].read``) — sonst nie, und
-2. er ``objects.read_all`` hat (normaler Sichtbereich: alle Objekte des Moduls) ODER
+2. für ihn KEIN Ressourcen-DENY auf dem Objekt liegt (``object_denies``, M4) — schlägt alles Folgende, und
+3. er ``objects.read_all`` hat (normaler Sichtbereich: alle Objekte des Moduls) ODER
    das Objekt selbst angelegt hat ODER es ihm ausdrücklich freigegeben wurde (``object_grants``).
 
 Ohne ``objects.read_all`` (z. B. Rolle „Steuerberater") sieht man also nur, was man angelegt hat oder was
@@ -17,8 +18,8 @@ from typing import Any
 from sqlalchemy import ColumnElement, and_, exists, false, or_, select, text
 from sqlalchemy.orm import Session
 
-from ichq.authz.service import Principal, decide, permissions_for_membership
-from ichq.objects.models import ObjectGrant, ObjectRow
+from ichq.authz.service import Principal, decide, principal_for
+from ichq.objects.models import ObjectDeny, ObjectGrant, ObjectRow
 from ichq.objects.registry import OBJECT_TYPES, readable_types
 
 READ_ALL = "objects.read_all"
@@ -33,7 +34,9 @@ def visible_clause(principal: Principal, obj: Any = ObjectRow) -> ColumnElement[
     typen = types_for(principal)
     if not typen:
         return false()
-    typ_ok: ColumnElement[bool] = obj.type.in_(sorted(typen))
+    verboten = exists().where(ObjectDeny.object_id == obj.id, ObjectDeny.tenant_id == obj.tenant_id,
+                              ObjectDeny.membership_id == principal.membership_id)
+    typ_ok: ColumnElement[bool] = and_(obj.type.in_(sorted(typen)), ~verboten)
     if decide(principal, READ_ALL):
         return typ_ok
     freigabe = exists().where(ObjectGrant.object_id == obj.id, ObjectGrant.tenant_id == obj.tenant_id,
@@ -62,5 +65,4 @@ def principal_for_membership(session: Session, membership_id: uuid.UUID) -> Prin
         {"m": membership_id}).one_or_none()
     if zeile is None:
         return None
-    return Principal(user_id=zeile.user_id, tenant_id=zeile.tenant_id, membership_id=membership_id,
-                     permissions=permissions_for_membership(session, membership_id))
+    return principal_for(session, user_id=zeile.user_id, tenant_id=zeile.tenant_id, membership_id=membership_id)

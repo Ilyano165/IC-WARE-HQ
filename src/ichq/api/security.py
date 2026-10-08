@@ -27,9 +27,9 @@ from sqlalchemy import text
 from ichq.api.cookies import cookie_name
 from ichq.api.state import AppState, get_state
 from ichq.auth import sessions as auth_sessions
-from ichq.authz.registry import is_known
-from ichq.authz.service import Principal, decide, permissions_for_membership
-from ichq.core.errors import AuthenticationRequired, PermissionDenied, TenantPaused, TenantRequired
+from ichq.authz.registry import is_known, module_of
+from ichq.authz.service import Principal, decide, principal_for
+from ichq.core.errors import AuthenticationRequired, FeatureDisabled, PermissionDenied, TenantPaused, TenantRequired
 from ichq.db.session import TenantSession, auth_transaction, tenant_transaction
 from ichq.tenancy.service import TenantInfo, current_tenant
 
@@ -51,7 +51,7 @@ def current_session(request: Request, state: AppState = Depends(get_state)) -> a
 
 
 def get_principal(request: Request, state: AppState = Depends(get_state)) -> Principal | None:
-    """Principal = Sitzung (Authentifizierung) + Mitgliedschaft + Rechte aus Rollen (Autorisierung)."""
+    """Principal = Sitzung (Authentifizierung) + Mitgliedschaft + effektive Rechte (Autorisierung, je Anfrage neu)."""
     info = current_session(request, state)
     if info is None or info.stage != "full" or info.active_tenant_id is None or info.active_membership_id is None:
         return None
@@ -62,9 +62,8 @@ def get_principal(request: Request, state: AppState = Depends(get_state)) -> Pri
             {"m": info.active_membership_id, "u": info.user_id}).scalar()
         if not status:
             return None
-        rechte = permissions_for_membership(s, info.active_membership_id)
-    return Principal(user_id=info.user_id, tenant_id=info.active_tenant_id,
-                     membership_id=info.active_membership_id, permissions=rechte, tenant_status=status)
+        return principal_for(s, user_id=info.user_id, tenant_id=info.active_tenant_id,
+                             membership_id=info.active_membership_id, tenant_status=status)
 
 
 SCHREIBEND = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -139,6 +138,8 @@ def require(*permissions: str) -> Callable[..., Principal]:
         if principal is None:
             raise _ohne_principal(request)
         fehlend = [p for p in permissions if not decide(principal, p)]
+        if any(module_of(p) in principal.disabled_modules for p in fehlend):
+            raise FeatureDisabled(f"Modul abgeschaltet: {', '.join(sorted({module_of(p) for p in fehlend}))}")
         if fehlend:
             raise PermissionDenied(f"Fehlendes Recht: {', '.join(fehlend)}")
         _schreibschutz(request, principal)

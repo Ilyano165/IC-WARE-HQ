@@ -2,9 +2,8 @@
 
 Regeln (docs/m3-mandanten.md):
 * Niemand deaktiviert sich selbst (dafür gibt es „Firma verlassen").
-* Die letzte aktive Mitgliedschaft mit Admin-Recht (``ADMIN_RIGHT``) kann weder deaktiviert werden noch
-  die Firma verlassen. Geprüft unter Sperre aller Mitgliedschaften der Firma — zwei gleichzeitige Anfragen
-  können nicht beide „den anderen" entfernen.
+* Die letzte aktive Mitgliedschaft mit Verwaltungsrechten kann weder deaktiviert werden noch die Firma
+  verlassen (``ichq.authz.guard`` — dieselbe Regel wie bei Rollen- und Rechteänderungen, M4).
 * Einladungen: Token 256 Bit, nur SHA-256 gespeichert, 7 Tage, einmalig, widerrufbar; höchstens eine offene
   Einladung je E-Mail und Firma.
 """
@@ -22,22 +21,18 @@ from sqlalchemy.orm import Session
 
 from ichq.audit.service import record as audit
 from ichq.auth.tokens import new_token
+from ichq.authz.guard import LastAdmin, admin_remains  # noqa: F401  (LastAdmin: bisheriger Importpfad)
 from ichq.authz.service import Principal
-from ichq.core.errors import AppError, Conflict, NotFound, PermissionDenied, ValidationFailed
+from ichq.core.errors import Conflict, NotFound, PermissionDenied, ValidationFailed
 from ichq.db.paging import SortKey, keyset
 from ichq.db.session import current_tenant_id
 from ichq.identity.models import Membership, User
 from ichq.members.models import Invitation
 
-ADMIN_RIGHT = "users.deactivate"
 INVITATION_DAYS = 7
 _EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,189}\.[^@\s]{2,}$")
 _PUBLIC = re.compile(r"^[0-9a-f]{32}$")
 STATUS = ("active", "suspended", "left", "invited")
-
-
-class LastAdmin(AppError):
-    status, code, title = 409, "last_admin", "Letzte Administration"
 
 
 def _ref(ref: str) -> str:
@@ -91,41 +86,14 @@ def list_members(session: Session, *, status: str | None, q: str | None, cursor:
     return list(seite.rows), seite.next_cursor
 
 
-def _admins_ausser(session: Session, ausser: uuid.UUID) -> int:
-    """Aktive Mitgliedschaften (ohne ``ausser``), die das Admin-Recht über eine nicht archivierte Rolle haben."""
-    return int(session.execute(text("""
-        SELECT count(DISTINCT m.id) FROM memberships m
-        JOIN membership_roles mr ON mr.membership_id = m.id AND mr.tenant_id = m.tenant_id
-        JOIN roles r ON r.id = mr.role_id AND r.tenant_id = mr.tenant_id AND r.archived_at IS NULL
-        JOIN role_permissions rp ON rp.role_id = r.id AND rp.tenant_id = r.tenant_id
-        WHERE m.status = 'active' AND m.id <> :x AND rp.permission = :p"""),
-        {"x": ausser, "p": ADMIN_RIGHT}).scalar() or 0)
-
-
-def _ist_admin(session: Session, membership_id: uuid.UUID) -> bool:
-    return bool(session.execute(text("""
-        SELECT 1 FROM membership_roles mr
-        JOIN roles r ON r.id = mr.role_id AND r.tenant_id = mr.tenant_id AND r.archived_at IS NULL
-        JOIN role_permissions rp ON rp.role_id = r.id AND rp.tenant_id = r.tenant_id
-        WHERE mr.membership_id = :m AND rp.permission = :p LIMIT 1"""),
-        {"m": membership_id, "p": ADMIN_RIGHT}).scalar())
-
-
-def _last_admin_schutz(session: Session, membership_id: uuid.UUID) -> None:
-    # Alle Mitgliedschaften der Firma sperren (RLS: nur diese Firma) — serialisiert konkurrierende Entfernungen
-    session.execute(select(Membership.id).where(Membership.status == "active").with_for_update()).all()
-    if _ist_admin(session, membership_id) and _admins_ausser(session, membership_id) == 0:
-        raise LastAdmin("Die letzte aktive Mitgliedschaft mit Verwaltungsrecht kann nicht entfernt werden")
-
-
 def deactivate(session: Session, principal: Principal, ref: str) -> MemberRow:
     m = _member(session, ref, lock=True)
     if m.id == principal.membership_id:
         raise PermissionDenied("Die eigene Mitgliedschaft kann nicht deaktiviert werden — „Firma verlassen“ nutzen")
     if m.status != "active":
         raise Conflict(f"Mitgliedschaft ist nicht aktiv ({m.status})")
-    _last_admin_schutz(session, m.id)
-    session.execute(update(Membership).where(Membership.id == m.id).values(status="suspended"))
+    with admin_remains(session):
+        session.execute(update(Membership).where(Membership.id == m.id).values(status="suspended"))
     audit(session, "membership.deactivated", actor_membership_id=principal.membership_id, target_type="membership",
           target_id=m.public_id)
     return MemberRow(m.id, m.public_id, m.user_id, "suspended")
@@ -133,9 +101,9 @@ def deactivate(session: Session, principal: Principal, ref: str) -> MemberRow:
 
 def leave(session: Session, principal: Principal) -> None:
     session.execute(select(Membership.id).where(Membership.id == principal.membership_id).with_for_update()).one()
-    _last_admin_schutz(session, principal.membership_id)
     pid = session.scalar(select(Membership.public_id).where(Membership.id == principal.membership_id))
-    session.execute(update(Membership).where(Membership.id == principal.membership_id).values(status="left"))
+    with admin_remains(session):
+        session.execute(update(Membership).where(Membership.id == principal.membership_id).values(status="left"))
     audit(session, "membership.left", actor_membership_id=principal.membership_id, target_type="membership",
           target_id=pid)
 

@@ -8,7 +8,7 @@ Mandantenfähige B2B-Plattform („digitales Betriebssystem eines Unternehmens")
 Entwicklung in Meilensteinen M0–M26 (Roadmap: `docs/architecture.md`, M0-Bericht separat).
 
 **Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication ✅ · **C0 Core-Plattform** (vor M3/M4 gebaut, ADR-010) · **M3 Mandanten** umgesetzt
-(`docs/m3-mandanten.md`); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
+(`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
 Tor 1/M3 → C0 → U1 → D0 → S1… — **keine D0-/S-Arbeit vor Tor 1.** Produktvision v2 ist ein **unbestätigter
 Entwurf** (`docs/produktvision-v2.md`). Nichts davon ist produktionsreif.
 
@@ -63,7 +63,7 @@ src/ichq/
   audit/       Mandanten- und Plattform-Audit (nur anhängend)
   tenancy/     Firmen, Statusmaschine
   identity/    Konten, Mitgliedschaften
-  authz/       Rechte-Registry, Rollen-Schema, Entscheidungsfunktion (Vollausbau M4)
+  authz/       Registry, effektive Rechte (EINE Berechnung), Rollen, Delegation, Last-Admin, Vorlagen, Flags (M4)
   auth/        Login, Sitzungen, Passwörter, Reset, TOTP, Drosselung, Auth-Audit (M2)
   jobs/        Transactional Outbox + Worker
   objects/     C0: Typ-Registry, `objects` (Supertyp), Verknüpfungen/Freigaben (Tabellen), Sichtbarkeit (EINE Stelle)
@@ -157,3 +157,14 @@ Keine Steuerfunktion geht vor **Tor S** an Kunden (Vision Abschnitt 5).
 Statusbericht `docs/m2-statusbericht.md`. Dabei gefunden: Daten-Pflege in Migrationen sah wegen FORCE RLS keine Zeile —
 **Daten-Änderungen in Migrationen immer in `with ohne_force(...)`** (`ichq.migrations.datenpflege`).
 Noch offen aus M2: Compose-Smoke-Test (Prompt-Abschnitt 2), echter SMTP-Versand.
+
+## Regeln für Rechte (M4)
+
+- **Effektive Rechte nur über `ichq.authz.effective`** — Reihenfolge Flag → DENY → (Ressourcen-DENY) → ALLOW →
+  (Freigabe) → Rolle. Keine zweite Berechnung, keine Rechte in der Sitzung.
+- **Alles, was Rechte kosten kann, in `admin_remains(session)`** (`ichq.authz.guard`) — sonst ist der
+  Last-Admin-Schutz umgehbar.
+- **Delegation:** Obergrenze, keine Lücken-Löschung, Rang, kein Selbstbedienen — neue Vergabewege über
+  `ichq.authz.delegation.manageable` und die Obergrenzen-Prüfung, nie daran vorbei.
+- **Company Admin** (`grants_all`) speichert keine Rechte; DB-Trigger sperren Änderungen. Plattform-Rechte gibt es nicht.
+- **Neue Route ⇒** `ichq routes-doc` neu erzeugen (`docs/authorization.md`, `tests/test_m4_docs.py`).

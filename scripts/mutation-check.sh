@@ -108,8 +108,8 @@ mutation "C0 Quarantäne-Download erlaubt" "documents/service.py" "    if doc.sc
 # ---------- M3 Mandanten / Tor 1 und C0-Nachträge ----------
 mutation "M3 Pause-Schreibschutz zentral aus" "api/security.py" "    if principal.tenant_status == \"paused\" and request.method in SCHREIBEND:|||    if False:" "tests/test_m3_tenancy.py"
 mutation "M3 Selbst-Deaktivierung erlaubt" "members/service.py" "    if m.id == principal.membership_id:|||    if False:" "tests/test_m3_tenancy.py"
-mutation "M3 Last-Admin-Schutz aus" "members/service.py" "    if _ist_admin(session, membership_id) and _admins_ausser(session, membership_id) == 0:|||    if False:" "tests/test_m3_tenancy.py"
-mutation "M3 Archivierte Rolle zählt als Admin" "members/service.py" " AND r.archived_at IS NULL|||" "tests/test_m3_tenancy.py"
+mutation "M3 Last-Admin-Schutz aus" "authz/guard.py" "    if vorher > 0 and not admins(session):|||    if False:" "tests/test_m3_tenancy.py"
+mutation "M3 Archivierte Rolle zählt als Admin" "authz/effective.py" " AND r.archived_at IS NULL|||" "tests/test_m3_tenancy.py"
 mutation "M3 Einladung mehrfach einlösbar" "members/accept.py" "WHERE id = :i AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()|||WHERE id = :i" "tests/test_m3_tenancy.py"
 mutation "M3 Vorprüfung ignoriert Gültigkeit" "members/accept.py" "    if r is None or not r.gueltig:|||    if r is None:" "tests/test_m3_tenancy.py"
 mutation "M3 Fremdes Konto nimmt Einladung an" "members/accept.py" "    if email != inv.email:|||    if False:" "tests/test_m3_tenancy.py"
@@ -135,5 +135,45 @@ mutation "M2 Aufräumen löscht frisch widerrufene Sitzungen" "auth/cleanup.py" 
 mutation "M2 Aufräumen löscht unbenutzte Recovery-Codes" "auth/cleanup.py" "\"DELETE FROM recovery_codes WHERE used_at < now() - make_interval(days => :d)\"|||\"DELETE FROM recovery_codes WHERE used_at IS NULL OR used_at < now()\"" "tests/test_auth_cleanup.py"
 mutation "M2 Aufräumen ohne Sperre" "db/locks.py" "        erworben = bool(conn.execute(text(\"SELECT pg_try_advisory_lock(:k)\"), {\"k\": key}).scalar())|||        erworben = True" "tests/test_auth_cleanup.py"
 mutation "Migration: Daten-Pflege unter FORCE RLS" "migrations/datenpflege.py" "op.execute(f\"ALTER TABLE {t} NO FORCE ROW LEVEL SECURITY\")|||op.execute(f\"ALTER TABLE {t} FORCE ROW LEVEL SECURITY\")" "tests/test_migrations.py"
+# ---------- M4 Rollen & Rechte: jede Stufe der Entscheidungsreihenfolge, jede Delegationsregel ----------
+M4D="tests/test_m4_decision.py"; M4G="tests/test_m4_delegation.py"; M4B="tests/test_m4_boundaries.py"
+mutation "M4 1 Feature-Flag ignoriert" "authz/effective.py" "        if module_of(p) in aus:|||        if False:" "$M4D"
+mutation "M4 1 Fehlercode feature_disabled fehlt" "api/security.py" "        if any(module_of(p) in principal.disabled_modules for p in fehlend):|||        if False:" "$M4D"
+mutation "M4 1 Kernmodul per CLI abschaltbar" "authz/flags.py" "    if module not in FLAGGABLE_MODULES:|||    if False:" "$M4D"
+mutation "M4 1 Kernmodul-Flag aus der DB wirkt" "authz/effective.py" "    return frozenset(rows) & FLAGGABLE_MODULES|||    return frozenset(rows)" "$M4D"
+mutation "M4 2 Einzelrecht-DENY ignoriert" "authz/effective.py" "        elif einzel.get(p) == \"deny\":|||        elif False:" "$M4D"
+mutation "M4 3 Ressourcen-DENY ignoriert" "objects/visibility.py" "and_(obj.type.in_(sorted(typen)), ~verboten)|||obj.type.in_(sorted(typen))" "$M4D"
+mutation "M4 3 Gesperrte Person zuweisbar" "tasks/service.py" "    if task_obj is not None and session.get(ObjectDeny, (task_obj.id, m.id)) is not None:|||    if False:" "$M4D"
+mutation "M4 4 Einzelrecht-ALLOW ignoriert" "authz/effective.py" "        elif einzel.get(p) == \"allow\":|||        elif False:" "$M4D"
+mutation "M4 6 Company Admin hält nichts" "authz/effective.py" "for p in (PERMISSIONS if alle else|||for p in (set() if alle else" "$M4D"
+mutation "M4 6 Archivierte Rolle wirkt" "authz/effective.py" " AND r.archived_at IS NULL|||" "$M4D"
+mutation "M4 Obergrenze beim Anlegen aus" "authz/roles.py" "    fehlend = sorted(perms - a.permissions)|||    fehlend = []" "$M4G"
+mutation "M4 Lücken-Löschung" "authz/roles.py" "            neu = (gewuenscht & a.permissions) | (alt - a.permissions)|||            neu = gewuenscht & a.permissions" "$M4G"
+mutation "M4 Rang beim Anlegen ignoriert" "authz/roles.py" "    if not 1 <= rank < a.rank:|||    if not 1 <= rank:" "$M4G"
+mutation "M4 Rang beim Verwalten ignoriert" "authz/roles.py" "    if r.priority >= a.rank:|||    if False:" "$M4G"
+mutation "M4 Gesperrte Rolle verwaltbar" "authz/roles.py" "    if r.grants_all:
+        raise RoleLocked|||    if False:
+        raise RoleLocked" "$M4G"
+mutation "M4 Duplizieren kopiert fremde Rechte" "authz/roles.py" "    perms = role_permissions(session, quelle) & a.permissions|||    perms = role_permissions(session, quelle)" "$M4G"
+mutation "M4 Wiederherstellen ohne Obergrenze" "authz/roles.py" "    _obergrenze(a, role_permissions(session, r))      # wie Vergeben|||    pass  # wie Vergeben" "$M4G"
+mutation "M4 Löschen trotz Zuweisung" "authz/roles.py" "    if session.scalar(select(func.count()).select_from(MembershipRole).where(MembershipRole.role_id == r.id)):|||    if False:" "$M4G"
+mutation "M4 Selbstbedienen erlaubt" "authz/delegation.py" "    if t.id == p.membership_id:|||    if False:" "$M4G"
+mutation "M4 Personen-Rang ignoriert" "authz/delegation.py" "    if effective(session, t.id).rank > a.rank:|||    if False:" "$M4G"
+mutation "M4 Rollen-Obergrenze beim Vergeben aus" "authz/delegation.py" "    fehlend = sorted(role_permissions(session, r) - a.permissions)|||    fehlend = []" "$M4G"
+mutation "M4 Rollen-Rang beim Vergeben aus" "authz/delegation.py" "    if r.priority > a.rank:
+        raise PermissionDenied(\"Rollen über dem eigenen Rang können nicht vergeben werden\")|||    pass" "$M4G"
+mutation "M4 Archivierte Rolle vergebbar" "authz/delegation.py" "    if r.archived_at is not None:
+        raise Conflict|||    if False:
+        raise Conflict" "$M4G"
+mutation "M4 Einzelrecht-Obergrenze aus" "authz/delegation.py" "    if permission not in a.permissions:|||    if False:" "$M4G"
+mutation "M4 Letzter Admin ungeschützt" "authz/guard.py" "    if vorher > 0 and not admins(session):|||    if False:" "$M4B"
+mutation "M4 Last-Admin ohne Sperre (Nebenläufigkeit)" "authz/guard.py" "(\" FOR UPDATE\" if lock else \"\")|||(\"\")" "$M4B"
+mutation "M4 Admin = nur ein Recht" "authz/registry.py" "frozenset({\"users.deactivate\", \"roles.update\", \"roles.assign\"})|||frozenset({\"users.deactivate\"})" "$M4B"
+mutation "M4 Archivieren ohne Last-Admin-Schutz" "authz/roles.py" "        with admin_remains(session):
+            session.execute(update(Role).where(Role.id == r.id).values(archived_at=func.now()))|||        if True:
+            session.execute(update(Role).where(Role.id == r.id).values(archived_at=func.now()))" "$M4B"
+mutation "M4 DB-Sperre der gesperrten Rolle aus" "migrations/versions/0006_m4_rbac.py" "      IF OLD.grants_all AND (NEW.name|||      IF false AND (NEW.name" "$M4B"
+mutation "M4 App-Rolle schreibt Feature-Flags" "migrations/versions/0006_m4_rbac.py" "    GRANT SELECT ON tenant_feature_flags TO ichq_app;|||    GRANT SELECT, INSERT ON tenant_feature_flags TO ichq_app;" "$M4B"
+mutation "M4 Migration lässt Rechteliste der Übergangsrolle stehen" "migrations/versions/0006_m4_rbac.py" "        op.execute(\"DELETE FROM role_permissions rp USING roles r WHERE r.id = rp.role_id AND r.grants_all\")|||        pass" "tests/test_m4_setup.py"
 echo "---"; echo "erkannt $ERKANNT · unbemerkt $UNBEMERKT · ungültig $UNGUELTIG"
 [ "$UNBEMERKT" -eq 0 ] && [ "$UNGUELTIG" -eq 0 ]

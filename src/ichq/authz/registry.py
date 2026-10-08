@@ -13,7 +13,7 @@ _FORMAT = re.compile(r"^[a-z][a-z_]*(\.[a-z][a-z_]*)+$")
 PERMISSIONS: frozenset[str] = frozenset({
     "dashboard.read",
     "company.read", "company.update",
-    "users.read", "users.create", "users.update", "users.deactivate",
+    "users.read", "users.create", "users.update", "users.deactivate", "users.override",
     "roles.read", "roles.create", "roles.update", "roles.delete", "roles.assign",
     "customers.read", "customers.create", "customers.update", "customers.delete", "customers.export",
     "projects.read", "projects.create", "projects.update", "projects.delete", "projects.assign",
@@ -44,3 +44,29 @@ assert all(_FORMAT.match(p) for p in PERMISSIONS), "Rechte-Format verletzt"
 
 def is_known(permission: str) -> bool:
     return permission in PERMISSIONS
+
+
+def module_of(permission: str) -> str:
+    return permission.split(".", 1)[0]
+
+
+MODULES: frozenset[str] = frozenset(module_of(p) for p in PERMISSIONS)
+
+# Module, die ein Feature-Flag NIE abschalten kann: ohne sie ließe sich die Firma nicht mehr verwalten
+# (Rechte, Mitglieder, Profil) oder nicht mehr prüfen (Audit). Feature-Flags sind für Fachmodule da.
+CORE_MODULES: frozenset[str] = frozenset({"company", "users", "roles", "audit", "settings"})
+FLAGGABLE_MODULES: frozenset[str] = MODULES - CORE_MODULES
+
+# Rechte, mit denen man Rechte, Personen oder festgeschriebene Daten verändert — in Oberfläche und Doku
+# hervorgehoben (Prototyp: „kritisch"). Keine Entscheidungslogik hängt daran.
+CRITICAL: frozenset[str] = frozenset({
+    "users.update", "users.deactivate", "users.override",
+    "roles.create", "roles.update", "roles.delete", "roles.assign",
+    "company.update", "settings.update", "invoices.approve", "finance.approve", "projects.assign",
+    "objects.read_all", "objects.share", "audit.export",
+})
+
+# Verwaltungsrechte: wer alle drei effektiv hat, zählt als Admin (Last-Admin-Schutz, ADR-011)
+ADMIN_PERMISSIONS: frozenset[str] = frozenset({"users.deactivate", "roles.update", "roles.assign"})
+
+assert CRITICAL <= PERMISSIONS and ADMIN_PERMISSIONS <= PERMISSIONS and CORE_MODULES <= MODULES

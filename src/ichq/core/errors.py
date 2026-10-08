@@ -40,6 +40,10 @@ class TenantPaused(AppError):
     status, code, title = 403, "tenant_paused", "Firma ist pausiert — nur Lesen möglich"
 
 
+class FeatureDisabled(AppError):
+    status, code, title = 403, "feature_disabled", "Modul ist für diese Firma nicht freigeschaltet"
+
+
 class TooManyAttempts(AppError):
     status, code, title = 429, "too_many_attempts", "Zu viele Versuche"
 

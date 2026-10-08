@@ -23,7 +23,7 @@ from ichq.comments.models import Comment
 from ichq.core.errors import NotFound, PermissionDenied, ValidationFailed
 from ichq.db.paging import SortKey, keyset
 from ichq.jobs.service import emit_event
-from ichq.objects.models import ObjectRow
+from ichq.objects.models import ObjectDeny, ObjectRow
 from ichq.objects.service import Member, clean_title, create_object, member, resolve
 from ichq.objects.visibility import READ_ALL, principal_for_membership
 from ichq.relations.service import drop_assignment_grant, grant_for_assignment
@@ -61,6 +61,8 @@ def _verantwortlich(session: Session, principal: Principal, ref: str, task_obj: 
     ziel = principal_for_membership(session, m.id)
     if ziel is None or not decide(ziel, "tasks.read"):
         raise ValidationFailed("Dieses Mitglied darf keine Aufgaben sehen (tasks.read fehlt)")
+    if task_obj is not None and session.get(ObjectDeny, (task_obj.id, m.id)) is not None:
+        raise ValidationFailed("Für dieses Mitglied ist die Aufgabe gesperrt (Ressourcen-DENY)")
     if task_obj is not None and not decide(ziel, READ_ALL):
         grant_for_assignment(session, principal, task_obj, m)
     return m

@@ -16,6 +16,7 @@ import secrets
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import psycopg
 import pytest
@@ -163,6 +164,13 @@ class World:
 @pytest.fixture
 def world(engines: Engines) -> World:
     return World(engines)
+
+
+@pytest.fixture
+def rw(world: World, engines: Engines, settings: Settings) -> Any:
+    """M4-Testwelt (Rollenvorlagen, Company Admin je Firma) — tests/m4_helpers.py."""
+    from tests.m4_helpers import RbacWorld
+    return RbacWorld(world, engines, settings)
 
 
 @pytest.fixture

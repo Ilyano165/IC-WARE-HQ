@@ -260,14 +260,18 @@ def test_mitgliederliste_nur_eigene_firma_und_mit_recht(chef: Any, world: World,
     assert ohne.get("/api/v1/invitations").status_code == 403
 
 
-def test_cli_company_admin_uebergang(world: World, engines: Engines, settings: Settings) -> None:
-    from ichq.authz.service import ensure_company_admin, permissions_for_membership
+def test_company_admin_per_control_plane(world: World, engines: Engines, settings: Settings) -> None:
+    """M4 ersetzt den M3-Übergang: gesperrte Rolle mit berechneten Rechten (keine gespeicherte Liste)."""
+    from ichq.authz.service import permissions_for_membership
+    from ichq.authz.templates import make_company_admin
     mid = _mitglied(world, engines, settings, world.a.id, "boot@alpha.test", [])
     with tenant_transaction(engines.app, world.a.id) as s:
-        ensure_company_admin(s, mid)
-        ensure_company_admin(s, mid)                                  # idempotent
+        assert make_company_admin(s, mid) is True
+        assert make_company_admin(s, mid) is False                    # idempotent
         assert permissions_for_membership(s, mid) == PERMISSIONS
-    assert db(engines, "SELECT count(*) FROM roles WHERE name = 'Company Admin'")[0][0] == 1
+    assert db(engines, "SELECT count(*) FROM roles WHERE name = 'Company Admin' AND grants_all")[0][0] == 1
+    assert db(engines, "SELECT count(*) FROM role_permissions rp JOIN roles r ON r.id = rp.role_id "
+                       "WHERE r.grants_all")[0][0] == 0
     with tenant_transaction(engines.app, world.b.id) as s:
         assert permissions_for_membership(s, mid) == frozenset()   # nur in Firma A
 

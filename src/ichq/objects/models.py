@@ -132,3 +132,20 @@ class ObjectGrant(TenantScoped, Base):
         _mitglied_fk("granted_by_membership_id"),
         Index("ix_object_grants_tenant_membership", "tenant_id", "membership_id"),
     )
+
+
+class ObjectDeny(TenantScoped, Base):
+    """Ressourcen-DENY (M4, ADR-011): Die Mitgliedschaft sieht das Objekt nie — schlägt ``objects.read_all``,
+    Freigabe und Erstellerschaft."""
+
+    __tablename__ = "object_denies"
+    object_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    membership_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    created_by_membership_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    __table_args__ = (
+        _objekt_fk("object_id", "CASCADE"),
+        _mitglied_fk("membership_id", "CASCADE"),
+        _mitglied_fk("created_by_membership_id"),
+        Index("ix_object_denies_tenant_membership", "tenant_id", "membership_id"),
+    )

@@ -14,6 +14,7 @@ from ichq.authz.service import Principal
 from ichq.core.errors import ValidationFailed
 from ichq.objects import service as objects
 from ichq.objects.registry import OBJECT_TYPES
+from ichq.relations import denies
 from ichq.relations import service as relations
 
 router = APIRouter(prefix="/api/v1", tags=["core"])
@@ -85,6 +86,33 @@ def delete_grant(ref: str, member: str, p: Principal = Depends(require("objects.
     with writing(db) as s:
         obj = objects.resolve(s, p, ref)
         relations.revoke(s, p, obj, objects.member(s, member, active_only=False))
+    return Response(status_code=204)
+
+
+@router.get("/objects/{ref}/denies")
+def list_denies(ref: str, p: Principal = Depends(require("objects.share")),
+                db: TenantDB = Depends(tenant_db)) -> dict[str, Any]:
+    """Ressourcen-DENY (M4): für wen das Objekt gesperrt ist."""
+    with db() as s:
+        obj = objects.resolve(s, p, ref)
+        ids = denies.denies_of(s, obj)
+        refs = refs_for(s, set(ids))
+        return {"items": [refs[m] for m in ids if m in refs]}
+
+
+@router.put("/objects/{ref}/denies/{member}")
+def create_deny(ref: str, member: str, p: Principal = Depends(require("objects.share")),
+                db: TenantDB = Depends(tenant_db)) -> dict[str, Any]:
+    with writing(db) as s:
+        obj = objects.resolve(s, p, ref)
+        return {"object": obj.public_id, "member": member, "created": denies.deny(s, p, obj, member)}
+
+
+@router.delete("/objects/{ref}/denies/{member}", status_code=204)
+def delete_deny(ref: str, member: str, p: Principal = Depends(require("objects.share")),
+                db: TenantDB = Depends(tenant_db)) -> Response:
+    with writing(db) as s:
+        denies.undeny(s, p, objects.resolve(s, p, ref), member)
     return Response(status_code=204)
 
 

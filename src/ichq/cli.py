@@ -64,10 +64,15 @@ def main(argv: list[str] | None = None) -> int:
     us.add_argument("--email", required=True)
     us.add_argument("status", choices=["active", "locked", "suspended", "deactivated", "pending"])
     us.add_argument("--reason", required=True)
-    ta = sub.add_parser("tenant-admin", help="ÜBERGANG bis M4: Rolle „Company Admin“ (alle Rechte) zuweisen")
+    ta = sub.add_parser("tenant-admin", help="Gesperrte Rolle „Company Admin“ zuweisen (Onboarding; legt Vorlagen an)")
     ta.add_argument("--email", required=True)
     ta.add_argument("--tenant", required=True, help="Slug der Firma")
-    ma = sub.add_parser("membership-add", help="Konto einer Firma zuordnen (ohne Rollen — Rechte kommen aus M4)")
+    tf = sub.add_parser("tenant-feature", help="Fachmodul einer Firma an- oder abschalten (Control Plane)")
+    tf.add_argument("--tenant", required=True, help="Slug der Firma")
+    tf.add_argument("module")
+    tf.add_argument("state", choices=["on", "off"])
+    tf.add_argument("--reason", required=True)
+    ma = sub.add_parser("membership-add", help="Konto einer Firma zuordnen (ohne Rollen)")
     ma.add_argument("--email", required=True)
     ma.add_argument("--tenant", required=True, help="Slug der Firma")
     ns = sub.add_parser("notifications-scan", help="Geplante Benachrichtigungsregeln (z. B. überfällige Aufgaben) "
@@ -76,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
     ac = sub.add_parser("auth-cleanup", help="Alte Anmeldeversuche, Sitzungen, Reset-Tokens, benutzte Recovery-Codes "
                                              "löschen (auth_events bleiben)")
     ac.add_argument("--days", type=int, default=30, help="Aufbewahrung in Tagen (Standard 30)")
+    sub.add_parser("routes-doc", help="Tabelle der geschützten Endpunkte aus dem Code ausgeben (docs/authorization.md)")
     w = sub.add_parser("worker", help="Outbox-Worker starten")
     w.add_argument("--once", action="store_true")
     sv = sub.add_parser("serve", help="API-Server starten (Produktion: hinter Reverse Proxy)")
@@ -105,6 +111,12 @@ def main(argv: list[str] | None = None) -> int:
 
     from ichq.core.logging import configure_logging
     configure_logging(settings.log_level, settings.log_format)
+
+    if args.cmd == "routes-doc":
+        from ichq.api.routes_doc import render
+        from ichq.app import create_app
+        print(render(create_app(settings)), end="")
+        return 0
 
     if args.cmd == "serve":
         import uvicorn
@@ -145,6 +157,13 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.cmd.startswith(("user-", "membership-")) or args.cmd == "tenant-admin":
             return _konten(args, settings, engines)
+        if args.cmd == "tenant-feature":
+            from ichq.authz.flags import set_flag
+            tenant = tenancy_lookup(engines, args.tenant)
+            with platform_transaction(engines.platform) as s:
+                set_flag(s, tenant.id, args.module, args.state == "on", actor=_actor(), reason=args.reason)
+            print(f"{tenant.slug}: {args.module} {args.state}")
+            return 0
         with platform_transaction(engines.platform) as s:
             if args.cmd == "tenant-create":
                 t = tenancy.create_tenant(s, name=args.name, slug=args.slug, legal_name=args.legal_name,
@@ -156,6 +175,13 @@ def main(argv: list[str] | None = None) -> int:
                     t = tenancy.get_tenant_by_slug(s, args.ref)
             else:
                 t = tenancy.set_status(s, args.tenant_id, args.status, actor=_actor(), reason=args.reason)
+        if args.cmd == "tenant-status" and t.status == "active":
+            from ichq.authz.templates import install
+            from ichq.db.session import tenant_transaction
+            with tenant_transaction(engines.app, t.id) as s:
+                neu = install(s)
+            if neu:
+                print("Rollenvorlagen angelegt: " + ", ".join(neu))
         print(f"{t.id}  {t.slug}  {t.status}  {t.name}")
         return 0
     except AppError as e:
@@ -221,7 +247,7 @@ def _konten(args: argparse.Namespace, settings: Any, engines: Any) -> int:
         print("Fehler (not_found): Konto nicht gefunden", file=sys.stderr)
         return 1
     if args.cmd == "tenant-admin":
-        from ichq.authz.service import ensure_company_admin
+        from ichq.authz.templates import make_company_admin
         tenant = tenancy_lookup(engines, args.tenant)
         with tenant_transaction(engines.app, tenant.id) as s:
             mid = s.execute(text("SELECT id FROM memberships WHERE user_id = :u AND status = 'active'"),
@@ -229,8 +255,8 @@ def _konten(args: argparse.Namespace, settings: Any, engines: Any) -> int:
             if mid is None:
                 print("Fehler (not_found): keine aktive Mitgliedschaft in dieser Firma", file=sys.stderr)
                 return 1
-            ensure_company_admin(s, mid)
-        print(f"Company Admin (Übergang bis M4) → {args.email} @ {tenant.slug}")
+            neu = make_company_admin(s, mid)
+        print(f"Company Admin → {args.email} @ {tenant.slug}" + ("" if neu else " (war schon zugewiesen)"))
         return 0
     if tenant is not None:
         with tenant_transaction(engines.app, tenant.id) as s:
