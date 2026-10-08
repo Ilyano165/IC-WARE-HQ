@@ -53,4 +53,5 @@ dreimal grün; als Mutation eingetragen.
   getrennt, App-Rolle kann Flags nicht schreiben. Getestet + IDOR-Generator deckt alle neuen Pfad-ID-Routen ab.
 - **Defense in depth:** gesperrte Rolle zusätzlich per Trigger; Flag-Zweitsicherung in `decide` und `effective`.
 - **Nebenläufigkeit:** zwei Admins entziehen sich gleichzeitig die Rechte → genau einer scheitert (`last_admin`). Getestet.
-- **Offen:** kein externer Pentest; CI-Lauf für M4 steht noch aus (wird mit diesem Push gestartet).
+- **CI:** Lauf 6 auf e89b789 erfolgreich (https://github.com/Ilyano165/IC-WARE-HQ/actions/runs/37759214330).
+- **Offen:** kein externer Pentest.
