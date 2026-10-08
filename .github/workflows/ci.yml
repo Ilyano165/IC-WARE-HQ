@@ -1,0 +1,62 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-admin
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+    env:
+      ICHQ_TEST_ADMIN_URL: postgresql://postgres:ci-admin@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Installieren (Lockfile mit Hashes)
+        run: |
+          pip install --require-hashes -r requirements.lock
+          pip install --no-deps -e .
+          pip install "pytest>=8" "httpx>=0.27" "moto[s3]>=5" "ruff>=0.6" "mypy>=1.11" "import-linter>=2" pip-audit
+      - name: Lint
+        run: ruff check src tests
+      - name: Typen
+        run: mypy
+      - name: Schichtregeln
+        run: lint-imports
+      - name: Tests gegen PostgreSQL
+        run: pytest -q
+      - name: Bekannte Sicherheitslücken
+        run: pip-audit -r requirements.lock --require-hashes
+      - name: Image bauen
+        run: docker build -f deploy/Dockerfile -t ic-ware-hq:ci .
+
+  mutation:
+    # Prüft, ob die Tests eingebaute Sicherheitslücken finden. Langsamer, deshalb eigener Job.
+    runs-on: ubuntu-24.04
+    needs: checks
+    services:
+      postgres:
+        image: postgres:16
+        env: {POSTGRES_PASSWORD: ci-admin}
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+    env:
+      ICHQ_TEST_ADMIN_URL: postgresql://postgres:ci-admin@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: |
+          pip install --require-hashes -r requirements.lock
+          pip install --no-deps -e .
+          pip install "pytest>=8" "httpx>=0.27" "moto[s3]>=5"
+      - run: scripts/mutation-check.sh

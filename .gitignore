@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+secrets/
+var/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+build/
+dist/
+.import_linter_cache/

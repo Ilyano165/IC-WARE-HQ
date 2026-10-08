@@ -1,0 +1,1 @@
+"""Datenbankzugriff. Kennt keine Fachmodule."""

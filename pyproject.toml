@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ic-ware-hq"
+version = "0.1.0"
+description = "IC WARE HQ — mandantenfähige Unternehmensplattform (M1 Foundation)"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "sqlalchemy>=2.0,<3",
+  "alembic>=1.13,<2",
+  "psycopg[binary]>=3.2,<4",
+  "pydantic-settings>=2.4,<3",
+  "boto3>=1.34,<2",
+  "argon2-cffi>=23,<26",
+  "cryptography>=42",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27", "moto[s3]>=5", "ruff>=0.6", "mypy>=1.11", "import-linter>=2"]
+
+[project.scripts]
+ichq = "ichq.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ichq = ["migrations/script.py.mako", "migrations/alembic.ini", "auth/data/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = ["postgres: braucht einen laufenden PostgreSQL-Server (ICHQ_TEST_ADMIN_URL)"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
+ignore = ["S101", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI-Abhängigkeiten werden bewusst als Standardwert notiert
+extend-immutable-calls = ["fastapi.Depends", "ichq.api.security.require", "ichq.api.security.authenticated",
+                          "ichq.api.security.public", "ichq.api.security.signed_in", "ichq.api.security.mfa_challenge",
+                          "ichq.api.security.any_session"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S108", "S603", "S608", "S607", "SIM117", "E501"]
+"src/ichq/migrations/**" = ["E501", "S608"]   # SQL aus festen Konstanten, keine Eingaben
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["ichq"]
+mypy_path = "src"
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["boto3.*", "botocore.*"]
+ignore_missing_imports = true
+
+# Schichtregeln (M0, Abschnitt 37): höhere Schichten dürfen tiefere importieren, nie umgekehrt.
+# Module in derselben Zeile ("|") sind unabhängig voneinander.
+[tool.importlinter]
+root_package = "ichq"
+
+[[tool.importlinter.contracts]]
+name = "Schichten"
+type = "layers"
+layers = [
+  "ichq.cli | ichq.migrations",
+  "ichq.app",
+  "ichq.api",
+  "ichq.models",
+  "ichq.health | ichq.jobs | ichq.tenancy | ichq.identity | ichq.authz | ichq.auth",
+  "ichq.audit",
+  "ichq.db | ichq.storage",
+  "ichq.core",
+]
