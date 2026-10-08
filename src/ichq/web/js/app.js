@@ -107,18 +107,21 @@ async function zeige() {
     else a.removeAttribute("aria-current");
   }
   const r = finde(pfad);
-  if (!r) { ersetze(inhalt, h("h1", {}, "Nicht gefunden"), h("p", { class: "muted" }, "Diese Seite gibt es nicht.")); return; }
+  if (!r) { ersetze(inhalt, h("div", { class: "view" }, h("h1", {}, "Nicht gefunden"), h("p", { class: "muted" }, "Diese Seite gibt es nicht."))); return; }
   if (r.recht && !darf(r.recht)) {
-    ersetze(inhalt, h("h1", {}, "Keine Berechtigung"), h("p", { class: "muted" }, `Dafür fehlt das Recht ${r.recht}.`));
+    ersetze(inhalt, h("div", { class: "view" }, h("h1", {}, "Keine Berechtigung"), h("p", { class: "muted" }, `Dafür fehlt das Recht ${r.recht}.`)));
     return;
   }
-  ersetze(inhalt, h("p", { class: "muted" }, "Lädt …"));
+  // Jeder Seitenwechsel rendert in einen EIGENEN Container. Kommt eine langsame, ältere Ansicht erst nach einem
+  // neueren Wechsel zurück, schreibt sie in ihren abgehängten Container und überschreibt die neue Seite nicht.
+  const ziel = h("div", { class: "view" }, h("p", { class: "muted" }, "Lädt …"));
+  ersetze(inhalt, ziel);
   try {
-    await r.ansicht(inhalt, r.params, query);
+    await r.ansicht(ziel, r.params, query);
   } catch (e) {
-    ersetze(inhalt, alertBox(meldung(e)));
+    ersetze(ziel, alertBox(meldung(e)));
   }
-  ungelesen();
+  if (ziel.isConnected) ungelesen();
 }
 
 export async function start() {

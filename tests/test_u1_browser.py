@@ -36,6 +36,10 @@ class Seite:
         self.fehler: list[str] = []
         self.page.on("console", lambda m: self.fehler.append(m.text) if m.type == "error" else None)
         self.page.on("pageerror", lambda e: self.fehler.append(str(e)))
+        # Diagnose: erscheint bei einem Fehlschlag unter „Captured stdout"
+        self.page.on("console", lambda m: print(f"[console {m.type}] {m.text}"))
+        self.page.on("response", lambda r: print(f"[{r.status}] {r.request.method} {r.url}") if r.status >= 400 else None)
+        self.page.on("framenavigated", lambda f: print(f"[nav] {f.url}") if f == self.page.main_frame else None)
         self.page.set_default_timeout(20000)   # CI-Rechner und parallele Läufe sind langsam
 
     def anmelden(self, email: str) -> None:
@@ -161,4 +165,26 @@ def test_mobil_ohne_querscrollen(browser: Any, server: str, leute: dict[str, Any
     p.get_by_role("button", name="Menü").click()
     s.gehe("Aufgaben")
     p.get_by_role("heading", name="Aufgaben").wait_for()
+    s.sauber()
+
+
+def test_langsame_alte_seite_ueberschreibt_neue_nicht(browser: Any, server: str, leute: dict[str, Any]) -> None:  # noqa: F811
+    """Gefundener Fehler: Die Übersicht lud noch, der Mensch wechselte schon die Seite — die verspätete Übersicht
+    überschrieb dann die neue Seite. Hier künstlich erzwungen: Aufgaben-Abfrage der Übersicht 1,5 s verzögert."""
+    s = Seite(browser, server)
+    s.anmelden("max@alpha.test")
+    p = s.page
+
+    def langsam(route: Any) -> None:
+        p.wait_for_timeout(1500)
+        route.continue_()
+    p.route("**/api/v1/tasks?assignee=me*", langsam)
+    p.goto("/app/#/aufgaben")
+    p.get_by_role("heading", name="Aufgaben").wait_for()
+    p.evaluate("location.hash = '#/'")                       # Übersicht starten (langsam) …
+    p.evaluate("location.hash = '#/konto'")                  # … und sofort weiter
+    p.get_by_role("heading", name="Konto & Sicherheit").wait_for()
+    p.wait_for_timeout(2500)                                  # die verspätete Übersicht ist jetzt zurück
+    assert p.get_by_role("heading", name="Konto & Sicherheit").is_visible()
+    assert p.get_by_role("heading", name="Hallo max").count() == 0
     s.sauber()

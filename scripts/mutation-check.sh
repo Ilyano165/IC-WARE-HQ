@@ -183,6 +183,7 @@ mutation "U1 Beliebige Dateitypen" "api/ui.py" " or datei.suffix not in TYPES:||
 mutation "U1 Sicherheits-Header fehlen" "api/ui.py" "    resp.headers.update(HEADERS)|||    pass" "$U1S"
 mutation "U1 Zwei CSP (Middleware überschreibt nicht)" "api/middleware.py" "headers.extend(h for h in standard if h[0] not in gesetzt)|||headers.extend(standard)" "$U1S"
 mutation "U1 Text als HTML eingefügt" "web/js/dom.js" "    el.append(k instanceof Node ? k : document.createTextNode(String(k)));|||    if (k instanceof Node) el.append(k); else el.insertAdjacentHTML(\"beforeend\", String(k));" "$U1S $U1B"
+mutation "U1 Veraltete Ansicht überschreibt neue Seite" "web/js/app.js" "    await r.ansicht(ziel, r.params, query);|||    await r.ansicht(inhalt, r.params, query);" "$U1B"
 mutation "U1 Navigation ohne Rechtefilter" "web/js/app.js" "NAV.filter((n) => !n.recht || darf(n.recht))|||NAV.filter(() => true)" "$U1B"
 echo "---"; echo "erkannt $ERKANNT · unbemerkt $UNBEMERKT · ungültig $UNGUELTIG"
 [ "$UNBEMERKT" -eq 0 ] && [ "$UNGUELTIG" -eq 0 ]

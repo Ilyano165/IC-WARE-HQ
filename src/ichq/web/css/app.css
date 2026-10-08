@@ -12,6 +12,7 @@
 .card{border:1px solid var(--line);border-radius:var(--r-lg);
   background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));padding:clamp(1.2rem,3vw,1.8rem)}
 .card + .card{margin-top:1rem}
+.grid2 > .card + .card{margin-top:0}
 .card h2{margin-bottom:.9rem}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem}
 
@@ -137,5 +138,8 @@ dialog h2{margin-bottom:1rem}
   .shell.nav-open .side{transform:none;box-shadow:0 0 0 100vmax rgba(0,0,0,.55)}
   .menu-btn{display:inline-flex}
   .top .who-name{display:none}
+  .top{flex-wrap:wrap;height:auto;padding:.6rem 1rem;row-gap:.5rem}
+  .top .search{order:9;flex:1 0 100%;max-width:none}
+  .top .bell{margin-left:auto}
   th.opt,td.opt{display:none}
 }
