@@ -229,8 +229,10 @@ def _virenscan(settings: Any, engines: Any, pause: float, limit: int) -> int:
         print("Fehler: ICHQ_CLAMD_HOST fehlt — ohne Virenscanner bleiben Dokumente in Quarantäne.", file=sys.stderr)
         return 2
     client, storage = ClamdClient(settings.clamd_host, settings.clamd_port), build_storage(settings)
+    from ichq.jobs.worker import heartbeat
     while True:
         lauf = scan_pending(engines, storage, client, limit)
+        heartbeat("/tmp/ichq-scanner.heartbeat")   # noqa: S108 — Lebenszeichen für den Container-Healthcheck
         if lauf.clean or lauf.infected or lauf.pending or not pause:
             print(f"sauber {lauf.clean} · infiziert {lauf.infected} · wartend {lauf.pending} · "
                   f"Firmen fehlgeschlagen {len(lauf.failed_tenants)}", flush=True)

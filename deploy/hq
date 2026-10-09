@@ -2,22 +2,25 @@
 # IC WARE HQ — Bedienung einer Einzelserver-Installation (ADR-015). Einrichtung: deploy/install.sh.
 #
 #   deploy/hq status                 Dienste, Gesundheit, HTTPS von außen
+#   deploy/hq check [--alert]        Betriebsprüfung (Dienste, Zertifikat, Jobs, Mail, Platte, Sicherung); Alarm-Mail
 #   deploy/hq start | stop | restart
 #   deploy/hq logs [dienst]          z. B. logs app, logs caddy (folgt der Ausgabe)
 #   deploy/hq build                  Image bauen (ic-ware-hq:local)
 #   deploy/hq update                 Sicherung → git pull --ff-only → Images aktualisieren → bauen → starten
-#   deploy/hq backup [ordner]        Datenbank + Dateien + Geheimnisse (Standard /var/backups/ichq, behält 14)
-#   deploy/hq restore <datei> --yes  stellt eine Sicherung vollständig wieder her (überschreibt alles!)
+#   deploy/hq backup                 verschlüsselte Sicherung (restic) nach HQ_BACKUP_REPOSITORY (ADR-016)
+#   deploy/hq backup-init            Sicherungsschlüssel anlegen (einmal; getrennt vom Server aufbewahren!)
+#   deploy/hq backup-verify          Wiederherstellungstest in Wegwerf-Umgebung (Prüfsummen, Daten, Dateien)
+#   deploy/hq backup-status          letzte Sicherung/Prüfung, Snapshots
+#   deploy/hq restore [snap] --yes   Sicherung vollständig wiederherstellen (überschreibt alles!)
 #   deploy/hq setup-admin            erste Firma + Company Admin anlegen (fragt alles ab)
 #   deploy/hq ichq <befehl> …        beliebiger ichq-Befehl im App-Container, z. B. ichq tenant-show <slug>
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+HQ_SELF="$(readlink -f "$0")"
+ROOT="$(cd "$(dirname "$HQ_SELF")/.." && pwd)"
 DEPLOY="$ROOT/deploy"
 ENVFILE="$DEPLOY/.env"
 IMAGE="ic-ware-hq:local"
-BACKUP_DIR_DEFAULT="${HQ_BACKUP_DIR:-/var/backups/ichq}"
-BACKUP_KEEP="${HQ_BACKUP_KEEP:-14}"
 
 fehler() { echo "Fehler: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
@@ -43,6 +46,12 @@ bauen() {
   [ -n "${HTTPS_PROXY:-}" ] && args+=(--build-arg "HTTPS_PROXY=$HTTPS_PROXY" --network host)
   info "Image bauen ($IMAGE)"
   DOCKER_BUILDKIT=1 docker build "${args[@]}" "$ROOT"
+  local b=(-f "$DEPLOY/backup/Dockerfile" -t "$BACKUP_IMAGE")
+  [ "${1:-}" = "--pull" ] && b+=(--pull)
+  [ -n "$spiegel" ] && b+=(--build-arg "RESTIC_IMAGE=$spiegel/restic/restic:0.18.1"
+                         --build-context "postgres:16-alpine=docker-image://$spiegel/library/postgres:16-alpine")
+  info "Sicherungs-Image bauen ($BACKUP_IMAGE)"
+  DOCKER_BUILDKIT=1 docker build "${b[@]}" "$DEPLOY/backup"
 }
 
 app_bereit() {
@@ -70,7 +79,9 @@ warten() {
 }
 
 starten() {
-  docker image inspect "$IMAGE" >/dev/null 2>&1 || bauen
+  if ! docker image inspect "$IMAGE" >/dev/null 2>&1 || ! docker image inspect "$BACKUP_IMAGE" >/dev/null 2>&1; then
+    bauen
+  fi
   info "Dienste starten"
   compose up -d --remove-orphans
   warten
@@ -80,66 +91,7 @@ status() {
   compose ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
   if app_bereit; then echo "App: bereit"; else echo "App: NICHT bereit"; fi
   if https_pruefen; then echo "HTTPS: ok (https://$(env_wert ICHQ_DOMAIN))"; else echo "HTTPS: NICHT erreichbar"; fi
-  echo "Wartende Virenprüfungen / Fehler: deploy/hq logs scanner"
-}
-
-backup() {
-  local ziel="${1:-$BACKUP_DIR_DEFAULT}" stempel arbeit datei
-  umask 077
-  stempel="$(date -u +%Y%m%d-%H%M%S)"
-  mkdir -p "$ziel" && chmod 700 "$ziel"
-  arbeit="$TMP/ichq-backup-$stempel" && mkdir -m 700 "$arbeit"
-  info "Datenbank sichern (pg_dump)"
-  compose exec -T postgres pg_dump -U postgres -Fc ichq > "$arbeit/db.dump"
-  # Dateien NACH der Datenbank: Speicherschlüssel sind versioniert und werden nie überschrieben — so enthält die
-  # Sicherung jede Datei, auf die die Datenbank zeigt (höchstens ein paar mehr).
-  info "Dateien sichern (Speicher-Volume)"
-  compose run --rm --no-deps -T -u 0 --entrypoint tar app -C /var/lib/ichq/storage -czf - . > "$arbeit/storage.tar.gz"
-  info "Geheimnisse + Konfiguration sichern"
-  tar -C "$ROOT" -cf "$arbeit/secrets.tar" secrets
-  cp "$ENVFILE" "$arbeit/env"
-  { echo "erstellt=$stempel"; echo "git=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unbekannt)"
-    echo "migration=$(compose exec -T postgres psql -U postgres -d ichq -tAc 'SELECT version_num FROM alembic_version')"
-  } > "$arbeit/manifest"
-  datei="$ziel/ichq-backup-$stempel.tar"
-  (umask 077 && tar -C "$arbeit" -cf "$datei.part" . && mv "$datei.part" "$datei")
-  # Aufbewahrung: die neuesten $BACKUP_KEEP behalten
-  find "$ziel" -maxdepth 1 -name 'ichq-backup-*.tar' -printf '%f\n' | sort -r | tail -n +"$((BACKUP_KEEP + 1))" \
-    | while read -r alt; do rm -f "$ziel/$alt"; echo "alte Sicherung gelöscht: $alt"; done
-  info "Sicherung: $datei ($(du -h "$datei" | cut -f1)) — enthält Geheimnisse: sicher und verschlüsselt auslagern!"
-}
-
-restore() {
-  local datei="${1:-}" ja="${2:-}" a
-  [ -f "$datei" ] || fehler "Sicherungsdatei fehlt: deploy/hq restore <datei> --yes"
-  [ "$ja" = "--yes" ] || fehler "Überschreibt Datenbank, Dateien und Geheimnisse. Zum Bestätigen: --yes anhängen."
-  a="$TMP/restore" && mkdir -m 700 "$a"
-  tar -C "$a" -xf "$datei"
-  for f in db.dump storage.tar.gz secrets.tar manifest; do [ -s "$a/$f" ] || fehler "Sicherung unvollständig: $f fehlt"; done
-  info "Sicherung: $(tr '\n' ' ' < "$a/manifest")"
-  info "Dienste anhalten"
-  compose stop caddy app worker jobs scanner >/dev/null 2>&1 || true
-  info "Geheimnisse aus der Sicherung übernehmen"
-  if [ -d "$ROOT/secrets" ]; then mv "$ROOT/secrets" "$ROOT/secrets.vor-restore-$(date -u +%Y%m%d-%H%M%S)"; fi
-  tar -C "$ROOT" -xf "$a/secrets.tar"
-  "$DEPLOY/fix-secret-permissions.sh"
-  info "Datenbank neu anlegen und einspielen"
-  compose up -d --force-recreate postgres   # neu erzeugen: bindet die wiederhergestellten Secret-Dateien ein
-  for _ in $(seq 1 60); do compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1 && break; sleep 2; done
-  # Superuser-Passwort gilt seit der Erstinstallation des Clusters — an das wiederhergestellte Secret angleichen.
-  # Lokaler Socket (trust im Container); das Passwort liest psql im Container, es steht in keiner Befehlszeile.
-  compose exec -T postgres psql -U postgres -v ON_ERROR_STOP=1 -q <<'SQL'
-\set pw `cat /run/secrets/pg_admin_password`
-ALTER ROLE postgres PASSWORD :'pw';
-DROP DATABASE IF EXISTS ichq WITH (FORCE);
-SQL
-  compose run --rm -T db-init >/dev/null   # Datenbank + Rollen, Passwörter aus den (wiederhergestellten) Secrets
-  compose exec -T postgres pg_restore -U postgres -d ichq --exit-on-error < "$a/db.dump"
-  info "Dateien einspielen"
-  compose run --rm --no-deps -T -u 0 --entrypoint sh app -c \
-    'find /var/lib/ichq/storage -mindepth 1 -delete && tar -C /var/lib/ichq/storage -xzf -' < "$a/storage.tar.gz"
-  starten
-  info "Wiederherstellung abgeschlossen."
+  echo "Betriebsprüfung mit Warnungen: deploy/hq check · Sicherungen: deploy/hq backup-status"
 }
 
 eingabe() {   # eingabe <variable> <frage> [geheim]
@@ -166,31 +118,42 @@ setup_admin() {
   info "Fertig. Anmelden: https://$(env_wert ICHQ_DOMAIN)/app/ mit $mail"
 }
 
+# shellcheck source=deploy/lib/sicherung.sh
+. "$DEPLOY/lib/sicherung.sh"
+# shellcheck source=deploy/lib/pruefung.sh
+. "$DEPLOY/lib/pruefung.sh"
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 befehl="${1:-status}"; shift || true
 case "$befehl" in
-  -h|--help|help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help|help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 voraussetzungen
 case "$befehl" in
   status) status ;;
+  check) check "$@" ;;
   start) starten ;;
   stop) compose stop ;;
   restart) compose stop && starten ;;
   logs) compose logs -f --tail 100 "$@" ;;
   build) bauen ;;
   update)
-    backup "$BACKUP_DIR_DEFAULT"
+    backup
     info "Code aktualisieren (git pull --ff-only)"
     git -C "$ROOT" pull --ff-only
     info "Fremd-Images aktualisieren (PostgreSQL 16.x, Caddy 2, ClamAV) — Sicherheitsupdates"
     compose pull --ignore-pull-failures postgres caddy clamav || echo "WARNUNG: Pull fehlgeschlagen, alte Images bleiben" >&2
     bauen --pull || fehler "Bau fehlgeschlagen (z. B. Docker-Hub-Limit 429 → docker login). Die bisherige Version läuft
        unverändert weiter; später erneut: deploy/hq update"
-    starten || fehler "Update gescheitert. Zurück: git checkout <alter Stand> && deploy/hq build && deploy/hq restore <letzte Sicherung> --yes"
+    starten || fehler "Update gescheitert. Zurück: git checkout <alter Stand> && deploy/hq build && deploy/hq restore --yes"
     ;;
-  backup) backup "$@" ;;
+  __backup_kern) backup_kern ;;     # intern (streng): eigener Prozess, set -e greift
+  __verify_kern) verify_kern ;;
+  backup) backup ;;
+  backup-init) backup_init ;;
+  backup-verify) backup_verify ;;
+  backup-status) backup_status ;;
   restore) restore "$@" ;;
   setup-admin) setup_admin ;;
   ichq) if [ -t 0 ]; then compose exec app ichq "$@"; else compose exec -T app ichq "$@"; fi ;;

@@ -19,6 +19,15 @@ x-app-env: &app-env
   ICHQ_STORAGE_BACKEND: local
   ICHQ_STORAGE_PATH: /var/lib/ichq/storage
   ICHQ_LOG_FORMAT: json
+  # E-Mail (ADR-016) — Werte aus deploy/.env (deploy/install.sh --smtp-…), Passwort als Secret-Datei
+  ICHQ_SMTP_HOST: ${ICHQ_SMTP_HOST:-}
+  ICHQ_SMTP_PORT: ${ICHQ_SMTP_PORT:-587}
+  ICHQ_SMTP_USER: ${ICHQ_SMTP_USER:-}
+  ICHQ_SMTP_FROM: ${ICHQ_SMTP_FROM:-}
+  ICHQ_SMTP_STARTTLS: ${ICHQ_SMTP_STARTTLS:-true}
+  ICHQ_SMTP_SSL: ${ICHQ_SMTP_SSL:-false}
+  ICHQ_SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+  ICHQ_ALERT_EMAIL: ${ICHQ_ALERT_EMAIL:-}
 
 x-app-secrets: &app-secrets
   - database_url
@@ -28,6 +37,7 @@ x-app-secrets: &app-secrets
   - migration_database_url
   - secret_key
   - session_secret
+  - smtp_password
 
 x-app: &app
   image: ic-ware-hq:local     # gebaut von deploy/hq build (install/update), nie aus einer Registry
@@ -82,7 +92,10 @@ services:
     <<: *app
     depends_on: {migrate: {condition: service_completed_successfully}}
     command: ["ichq", "worker"]
-    healthcheck: {disable: true}
+    healthcheck:   # Lebenszeichen je Runde; hängt der Worker, wird er "unhealthy" (deploy/hq check meldet das)
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(time.time()-os.path.getmtime('/tmp/ichq-worker.heartbeat')>120)"]
+      interval: 30s
+      start_period: 60s
     restart: unless-stopped
 
   jobs:             # geplante Jobs ohne Host-Abhängigkeit: idempotent, Advisory-Lock gegen Parallellauf (ADR-015)
@@ -92,10 +105,13 @@ services:
     command:
       - >
         while :; do
-        ichq notifications-scan || echo "notifications-scan fehlgeschlagen";
-        ichq auth-cleanup || echo "auth-cleanup fehlgeschlagen";
+        ichq notifications-scan && ichq auth-cleanup && touch /tmp/ichq-jobs.heartbeat
+        || echo "Job fehlgeschlagen — Lebenszeichen bleibt alt, deploy/hq check meldet das";
         sleep 3600; done
-    healthcheck: {disable: true}
+    healthcheck:   # nur bei Erfolg erneuert: ein dauerhaft scheiternder Job fällt nach 2 h auf
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(time.time()-os.path.getmtime('/tmp/ichq-jobs.heartbeat')>7500)"]
+      interval: 5m
+      start_period: 10m
     restart: unless-stopped
 
   clamav:           # Virenscanner (ClamAV); lädt beim ersten Start Signaturen (einige Minuten), ~1,5 GB RAM
@@ -111,7 +127,10 @@ services:
       <<: *app-env
       ICHQ_CLAMD_HOST: clamav
     command: ["ichq", "documents-scan", "--loop", "10"]
-    healthcheck: {disable: true}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(time.time()-os.path.getmtime('/tmp/ichq-scanner.heartbeat')>120)"]
+      interval: 30s
+      start_period: 60s
     restart: unless-stopped
 
   caddy:
@@ -142,6 +161,7 @@ secrets:
   migration_database_url: {file: ../secrets/migration_database_url}
   secret_key: {file: ../secrets/secret_key}
   session_secret: {file: ../secrets/session_secret}
+  smtp_password: {file: ../secrets/smtp_password}      # leer = kein SMTP-Login
 
 volumes:
   pgdata:

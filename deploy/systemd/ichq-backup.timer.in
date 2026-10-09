@@ -1,9 +1,9 @@
-# IC WARE HQ — tägliche Sicherung um 03:15 (verpasste Läufe werden nach dem Booten nachgeholt).
+# IC WARE HQ — Sicherung alle 6 Stunden (höchstens 6 h Datenverlust; ADR-016). Verpasste Läufe werden nachgeholt.
 [Unit]
-Description=IC WARE HQ: tägliche Sicherung
+Description=IC WARE HQ: Sicherung alle 6 Stunden
 
 [Timer]
-OnCalendar=*-*-* 03:15:00
+OnCalendar=*-*-* 00/6:15:00
 RandomizedDelaySec=10min
 Persistent=true
 

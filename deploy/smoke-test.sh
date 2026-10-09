@@ -5,7 +5,8 @@
 #   sudo deploy/smoke-test.sh --wegwerf [--docker-neustart]
 #
 # Voraussetzung: deploy/install.sh ist gelaufen. Prüft: HTTP→HTTPS, Sicherheits-Header, setup-admin, Anmeldung über
-# HTTPS, Aufgabe, Upload, echte Virenprüfung (EICAR gesperrt, sauberes Dokument ladbar), Sicherung, Totalverlust
+# HTTPS, Aufgabe, Upload, echte Virenprüfung (EICAR gesperrt, sauberes Dokument ladbar), verschlüsselte Sicherung,
+# Wiederherstellungstest, Betriebsprüfung, Totalverlust
 # (Volumes + Geheimnisse gelöscht), Neuinstallation, Wiederherstellung, Daten + Anmeldung danach, optional
 # Neustart des Docker-Dienstes.
 # shellcheck disable=SC2016,SC2034  # Prüfungen absichtlich einfach gequotet: pruefe wertet sie per eval aus
@@ -97,17 +98,22 @@ pruefe "Logs ohne Passwort" '! grep -qF "$PW" "$T/logs"'
 pruefe "Logs ohne Sitzungs-Token" '[ -n "$SITZUNG" ] && ! grep -qF "$SITZUNG" "$T/logs"'
 pruefe "Logs ohne Query-Strings" '! grep -q "filename=gut.txt" "$T/logs"'
 
-schritt "Sicherung → Totalverlust → Neuinstallation → Wiederherstellung"
-"$HQ" backup "$T/sicherung" > "$T/backup.log" 2>&1 || { tail -30 "$T/backup.log"; exit 1; }
-SICHERUNG="$(ls "$T"/sicherung/ichq-backup-*.tar)"
-pruefe "Sicherung nur für root lesbar (600)" '[ "$(stat -c %a "$SICHERUNG")" = 600 ]'
+schritt "Verschlüsselte Sicherung → Prüfung → Totalverlust → Neuinstallation → Wiederherstellung"
+"$HQ" backup > "$T/backup.log" 2>&1 || { tail -30 "$T/backup.log"; exit 1; }
+pruefe "Sicherung erfolgreich (Status ok)" 'grep -q "\"ergebnis\":\"ok\"" /var/lib/ichq/backup.json'
+echo "falscher-schluessel" > "$T/falsch.key"
+pruefe "ohne richtigen Schlüssel nicht lesbar" 'HQ_BACKUP_KEY_FILE="$T/falsch.key" "$HQ" backup-status 2>&1 | grep -q "nicht erreichbar"'
+"$HQ" backup-verify > "$T/verify.log" 2>&1 || { tail -30 "$T/verify.log"; exit 1; }
+pruefe "Wiederherstellungstest (Wegwerf-DB, Prüfsummen, jede Datei)" 'grep -q "Wiederherstellungstest ok" "$T/verify.log"'
+"$HQ" check > "$T/check.log" 2>&1 || { cat "$T/check.log"; exit 1; }
+pruefe "Betriebsprüfung ohne FEHLER" '! grep -q "^FEHLER" "$T/check.log"'
 docker compose -f "$ROOT/deploy/docker-compose.yml" --env-file "$ROOT/deploy/.env" down -v > /dev/null 2>&1
-rm -rf "$ROOT/secrets"
+rm -rf "$ROOT/secrets"   # Totalverlust: Daten UND Geheimnisse weg; nur der getrennt verwahrte Sicherungsschlüssel bleibt
 "$ROOT/deploy/install.sh" --domain "$DOMAIN" --email "$EMAIL" --skip-dns-check --no-systemd \
   --no-build ${CA_BAU:+--ca-file "$CA_BAU"} > "$T/install.log" 2>&1 || { tail -30 "$T/install.log"; exit 1; }
 curl_opts
 pruefe "nach Totalverlust: Konto existiert nicht mehr" '! anmelden'
-"$HQ" restore "$SICHERUNG" --yes > "$T/restore.log" 2>&1 || { tail -30 "$T/restore.log"; exit 1; }
+"$HQ" restore latest --yes > "$T/restore.log" 2>&1 || { tail -30 "$T/restore.log"; exit 1; }
 curl_opts
 pruefe "nach Wiederherstellung: Anmeldung mit altem Passwort" anmelden
 pruefe "Aufgabe wieder da" '[ "$(api "$B/api/v1/tasks")" = 200 ] && grep -q "Smoke-Aufgabe $SLUG" "$T/body"'

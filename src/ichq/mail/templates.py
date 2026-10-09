@@ -95,6 +95,7 @@ def security_notice(event: str, zeitpunkt: datetime | None = None) -> Rendered:
 
 
 def alert(betreff: str, nachricht: str, server: str) -> Rendered:
-    return _mail(f"WARNUNG — {betreff}", betreff, [nachricht, f"Server: {server}"],
+    kopf = betreff if betreff.startswith("Entwarnung") else f"WARNUNG — {betreff}"
+    return _mail(kopf, betreff, [nachricht, f"Server: {server}"],
                  hinweis="Automatische Betreiberwarnung (deploy/hq check). Details: deploy/hq status und "
                          "deploy/hq logs.")

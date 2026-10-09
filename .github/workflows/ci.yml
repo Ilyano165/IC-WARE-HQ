@@ -75,8 +75,23 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Installieren (wie auf einem Server, Domain localhost)
-        run: sudo deploy/install.sh --domain localhost --email ci@example.org --skip-dns-check --no-systemd
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: S3-Testziel für die Sicherung (moto, nur Test)
+        run: |
+          pip install "moto[server]>=5,<6"
+          nohup moto_server -H 127.0.0.1 -p 9000 > /tmp/moto.log 2>&1 &
+          sleep 5
+          AWS_ACCESS_KEY_ID=ci AWS_SECRET_ACCESS_KEY=ci python -c "import boto3; boto3.client('s3',
+            endpoint_url='http://127.0.0.1:9000', region_name='eu-central-1').create_bucket(Bucket='ichq-ci',
+            CreateBucketConfiguration={'LocationConstraint': 'eu-central-1'})"
+          sudo install -d -m 700 /etc/ichq
+          printf 'AWS_ACCESS_KEY_ID=ci\nAWS_SECRET_ACCESS_KEY=ci\nAWS_DEFAULT_REGION=eu-central-1\n' \
+            | sudo tee /etc/ichq/backup-s3.env > /dev/null
+      - name: Installieren (wie auf einem Server, Domain localhost, Sicherung nach S3)
+        run: >
+          sudo deploy/install.sh --domain localhost --email ci@example.org --skip-dns-check --no-systemd
+          --backup-repository s3:http://127.0.0.1:9000/ichq-ci/hq
       - name: Ende-zu-Ende-Test
         run: sudo deploy/smoke-test.sh --wegwerf --docker-neustart
       - name: Logs bei Fehler

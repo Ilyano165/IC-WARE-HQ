@@ -21,11 +21,18 @@ import yaml
 REPO = Path(__file__).resolve().parents[1]
 DEPLOY = Path(os.environ.get("ICHQ_DEPLOY_DIR", REPO / "deploy"))
 SKRIPTE = ["install.sh", "hq", "smoke-test.sh", "generate-secrets.sh", "fix-secret-permissions.sh"]
+BIBLIOTHEKEN = ["lib/sicherung.sh", "lib/pruefung.sh"]
 LANGLAUFEND = {"postgres", "app", "worker", "jobs", "clamav", "scanner", "caddy"}
 
 
 def _compose() -> dict[str, Any]:
     return dict(yaml.safe_load((DEPLOY / "docker-compose.yml").read_text()))
+
+
+def _app_secrets() -> set[str]:
+    m = re.search(r'^APP="([^"]+)"', (DEPLOY / "fix-secret-permissions.sh").read_text(), re.M)
+    assert m
+    return set(m.group(1).split())
 
 
 def _bash(*args: str, **kw: Any) -> subprocess.CompletedProcess[str]:
@@ -45,7 +52,8 @@ def test_shellcheck() -> None:
         if os.environ.get("CI"):
             pytest.fail("shellcheck fehlt in CI")
         pytest.skip("shellcheck nicht installiert (pip install shellcheck-py)")
-    r = subprocess.run([sc, *(str(DEPLOY / s) for s in SKRIPTE)], capture_output=True, text=True)
+    r = subprocess.run([sc, "-x", *(str(DEPLOY / s) for s in SKRIPTE + BIBLIOTHEKEN)], capture_output=True, text=True,
+                       cwd=DEPLOY.parent)
     assert r.returncode == 0, r.stdout
 
 
@@ -92,8 +100,8 @@ def test_generate_secrets_ueberschreibt_nie(tmp_path: Path) -> None:
     assert oct(sec.stat().st_mode & 0o777) == "0o700"
     for f in sec.iterdir():
         assert f.stat().st_mode & 0o077 == 0, f.name                            # nie für Gruppe/andere lesbar
-        if os.geteuid() == 0:
-            assert f.stat().st_uid == (10001 if "url" in f.name or "secret" in f.name else 0), f.name
+        if os.geteuid() == 0:   # App-Secrets (APP= im Rechte-Skript) gehören UID 10001, PostgreSQL-Passwörter root
+            assert f.stat().st_uid == (10001 if f.name in _app_secrets() else 0), f.name
     url = (sec / "database_url").read_text()
     assert url.startswith("postgresql://ichq_app:") and (sec / "pg_app_password").read_text().strip() in url
     vorher = {f.name: f.read_bytes() for f in sec.iterdir()}
@@ -108,7 +116,13 @@ def test_generate_secrets_ueberschreibt_nie(tmp_path: Path) -> None:
     (["--domain", "hq.example.de\nevil", "--email", "a@b.de"], "ungültige Domain"),
     (["--domain", "hq.example.de", "--email", "a{b}@c.de"], "ungültige E-Mail"),     # Caddyfile-Injektion
     (["--domain", "hq.example.de", "--email", "a b@c.de"], "ungültige E-Mail"),
-    (["--domain", "hq.example.de", "--email", "a@b.de", "--backup-dir", "rel/pfad"], "absoluter Pfad"),
+    (["--domain", "hq.example.de", "--email", "a@b.de", "--backup-repository", "s3:http://h/b; rm -rf /"],
+     "ungültiges --backup-repository"),
+    (["--domain", "hq.example.de", "--email", "a@b.de", "--backup-repository", "relativ/pfad"],
+     "ungültiges --backup-repository"),
+    (["--domain", "hq.example.de", "--email", "a@b.de", "--smtp-host", "mail.x.de"], "braucht --smtp-from"),
+    (["--domain", "hq.example.de", "--email", "a@b.de", "--smtp-from", "x$(id)@a.de"], "ungültiger --smtp-from"),
+    (["--domain", "hq.example.de", "--email", "a@b.de", "--alert-email", "a b@c.de"], "ungültige --alert-email"),
 ])
 def test_installer_lehnt_falsche_eingaben_ab(args: list[str], meldung: str) -> None:
     r = _bash(str(DEPLOY / "install.sh"), *args)
@@ -128,19 +142,70 @@ def test_launcher_hilfe_und_unbekannter_befehl() -> None:
 
 
 def test_restore_verlangt_bestaetigung() -> None:
-    hq = (DEPLOY / "hq").read_text()
-    teil = hq[hq.index("restore() {"):hq.index("eingabe() {")]
+    lib = (DEPLOY / "lib/sicherung.sh").read_text()
+    teil = lib[lib.index("restore() {"):lib.index("backup_verify() {")]
     pruefung, stopp = teil.index('[ "$ja" = "--yes" ] || fehler'), teil.index("compose stop")
     assert pruefung < stopp                                                    # erst bestätigen, dann anfassen
 
 
-def test_systemd_units() -> None:
-    for f in ("ichq.service.in", "ichq-backup.service.in", "ichq-backup.timer.in"):
-        assert (DEPLOY / "systemd" / f).exists()
+EINHEITEN = ("ichq.service", "ichq-backup.service", "ichq-backup.timer", "ichq-backup-verify.service",
+             "ichq-backup-verify.timer", "ichq-check.service", "ichq-check.timer")
+
+
+def test_systemd_units(tmp_path: Path) -> None:
     install = (DEPLOY / "install.sh").read_text()
-    assert "systemctl enable ichq.service" in install and "enable --now ichq-backup.timer" in install
+    assert "systemctl enable ichq.service" in install
+    assert "enable --now ichq-backup.timer ichq-backup-verify.timer ichq-check.timer" in install
+    for f in EINHEITEN:
+        assert f in install, f
+        (tmp_path / f).write_text((DEPLOY / "systemd" / f"{f}.in").read_text().replace("@ROOT@", str(DEPLOY.parent)))
+    assert "OnCalendar=*-*-* 00/6:15:00" in (tmp_path / "ichq-backup.timer").read_text()     # RPO ≤ 6 h (ADR-016)
     if not shutil.which("systemd-analyze"):
         pytest.skip("systemd-analyze fehlt")
+    r = subprocess.run(["systemd-analyze", "verify", *(str(tmp_path / f) for f in EINHEITEN)],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+
+
+# ---- Sicherung (deploy/lib/sicherung.sh): nur mit Stubs, ohne Docker -----------------------------------------
+def _lib(tmp_path: Path, skript: str, **env: str) -> subprocess.CompletedProcess[str]:
+    kopf = (f'set -euo pipefail; fehler() {{ echo "Fehler: $*" >&2; exit 1; }}; info() {{ :; }}; '
+            f'env_wert() {{ :; }}; . "{DEPLOY}/lib/sicherung.sh"; ')
+    return subprocess.run(["bash", "-c", kopf + skript], capture_output=True, text=True, timeout=60, cwd=tmp_path,
+                          env={**os.environ, **env})
+
+
+@pytest.mark.parametrize("eintrag,ok", [("secrets/database_url", True), ("secrets/../../etc/cron.d/x", False),
+                                        ("deploy/hq", False), ("secrets/Böse Datei", False), ("link", False)])
+def test_secrets_archiv_wird_vor_dem_entpacken_geprueft(tmp_path: Path, eintrag: str, ok: bool) -> None:
+    import tarfile
+    with tarfile.open(tmp_path / "s.tar", "w") as t:
+        d = tarfile.TarInfo("secrets/")
+        d.type = tarfile.DIRTYPE
+        t.addfile(d)
+        info = tarfile.TarInfo(eintrag)
+        if eintrag == "link":
+            info.name, info.type, info.linkname = "secrets/link", tarfile.SYMTYPE, "/etc/shadow"
+        t.addfile(info)
+    r = _lib(tmp_path, f'secrets_pruefen "{tmp_path}/s.tar" && echo GEPRUEFT')
+    assert ("GEPRUEFT" in r.stdout) is ok, (r.stdout, r.stderr)
+
+
+def test_streng_meldet_fehler_auch_im_if(tmp_path: Path) -> None:
+    """Bash ignoriert set -e in Funktionen im if-Zusammenhang — ein Fehler mitten in der Sicherung darf trotzdem
+    nie als Erfolg zählen (im Live-Test gefunden: pg_restore scheiterte, Prüfung meldete ok)."""
+    stub = tmp_path / "hq"
+    stub.write_text('#!/usr/bin/env bash\nset -euo pipefail\nfalse\necho WEITERGELAUFEN\n')
+    stub.chmod(0o755)
+    r = _lib(tmp_path, 'if streng irgendwas; then echo FALSCH-OK; else echo RICHTIG-FEHLER; fi; echo "[$AUSGABE]"',
+             HQ_SELF=str(stub))
+    assert "RICHTIG-FEHLER" in r.stdout and "WEITERGELAUFEN" not in r.stdout, r.stdout
+
+
+def test_repository_nur_bei_nachgewiesenem_fehlen_angelegt() -> None:
+    lib = (DEPLOY / "lib/sicherung.sh").read_text()
+    teil = lib[lib.index("repo_bereit() {"):lib.index("manifest() {")]
+    assert '*"wrong password"*) fehler' in teil and teil.index('"does not exist"') < teil.index("init")
 
 
 def test_caddy_acme_email_pflicht() -> None:

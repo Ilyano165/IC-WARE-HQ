@@ -1,4 +1,4 @@
-# IC WARE HQ — Sicherung (Datenbank, Dateien, Geheimnisse) nach @BACKUPDIR@, behält die neuesten 14.
+# IC WARE HQ — verschlüsselte Sicherung (restic, ADR-016) nach HQ_BACKUP_REPOSITORY. Fehler ⇒ Alarm-Mail.
 [Unit]
 Description=IC WARE HQ: Sicherung
 After=docker.service ichq.service
@@ -6,7 +6,6 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-Environment=HQ_BACKUP_DIR=@BACKUPDIR@
-ExecStart=@ROOT@/deploy/hq backup @BACKUPDIR@
-TimeoutStartSec=2h
+ExecStart=@ROOT@/deploy/hq backup
+TimeoutStartSec=3h
 Nice=10

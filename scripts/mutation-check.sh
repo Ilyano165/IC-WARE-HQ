@@ -286,15 +286,23 @@ mutation_deploy "Betrieb: Datenbank-Port nach außen" "docker-compose.yml" "    
     environment:|||    image: postgres:16-alpine
     ports: [\"5432:5432\"]
     environment:" "$DEP"
-mutation_deploy "Betrieb: Scanner ohne Neustart" "docker-compose.yml" "    command: [\"ichq\", \"documents-scan\", \"--loop\", \"10\"]
-    healthcheck: {disable: true}
-    restart: unless-stopped|||    command: [\"ichq\", \"documents-scan\", \"--loop\", \"10\"]
-    healthcheck: {disable: true}" "$DEP"
-mutation_deploy "Betrieb: App-Secret nicht für UID 10001" "fix-secret-permissions.sh" " secret_key session_secret\"||| secret_key\"" "$DEP"
+mutation_deploy "Betrieb: Scanner ohne Neustart" "docker-compose.yml" "      start_period: 60s
+    restart: unless-stopped
+
+  caddy:|||      start_period: 60s
+
+  caddy:" "$DEP"
+mutation_deploy "Betrieb: App-Secret nicht für UID 10001" "fix-secret-permissions.sh" " session_secret smtp_password\"||| smtp_password\"" "$DEP"
 mutation_deploy "Betrieb: Secrets werden überschrieben" "generate-secrets.sh" "[ -e secrets ] && { echo \"secrets/ existiert bereits — Abbruch, nichts überschrieben.\"; exit 1; }|||" "$DEP"
 mutation_deploy "Betrieb: Rollen-Passwort nicht angeglichen" "postgres/init-roles.sql" "SELECT format('ALTER ROLE ichq_app PASSWORD %L', :'app_pw') \\gexec|||" "$DEP"
 mutation_deploy "Betrieb: E-Mail ungeprüft (Caddyfile-Injektion)" "install.sh" "[[ \"\$EMAIL\" =~ ^[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\\.)+[A-Za-z]{2,63}\$ ]]|||[[ \"\$EMAIL\" =~ ^.+\$ ]]" "$DEP"
 mutation_deploy "Betrieb: Domain ungeprüft" "install.sh" "|| fehler \"ungültige Domain|||| true \"ungültige Domain" "$DEP"
-mutation_deploy "Betrieb: Restore ohne Bestätigung" "hq" "  [ \"\$ja\" = \"--yes\" ] || fehler|||  true || fehler" "$DEP"
+mutation_deploy "Betrieb: Restore ohne Bestätigung" "lib/sicherung.sh" "  [ \"\$ja\" = \"--yes\" ] || fehler|||  true || fehler" "$DEP"
+mutation_deploy "Sicherung: Fehler zählt als Erfolg (set -e im if)" "lib/sicherung.sh" "  AUSGABE=\"\$(\"\$HQ_SELF\" \"__\$1\" 2>&1)\" || rc=\$?|||  AUSGABE=\"\$(\"\$HQ_SELF\" \"__\$1\" 2>&1)\" || true" "$DEP"
+mutation_deploy "Sicherung: secrets.tar mit fremden Pfaden" "lib/sicherung.sh" "      [[ \"\${pfad#secrets/}\" =~ ^[a-z_]+\$ ]] || fehler|||      true || fehler" "$DEP"
+mutation_deploy "Sicherung: secrets.tar mit Links" "lib/sicherung.sh" "      *) fehler \"unerwarteter Eintrag in secrets.tar: \$typ \$pfad\" ;; esac|||      *) ;; esac" "$DEP"
+mutation_deploy "Sicherung: Init bei falschem Schlüssel" "lib/sicherung.sh" "    *\"wrong password\"*) fehler|||    *\"wrong password\"*) restic_lauf -- init; fehler" "$DEP"
+mutation_deploy "Sicherung: Timer seltener als 6 h" "systemd/ichq-backup.timer.in" "OnCalendar=*-*-* 00/6:15:00|||OnCalendar=daily" "$DEP"
+mutation_deploy "Installer: Sicherungsziel ungeprüft" "install.sh" "|| fehler \"ungültiges --backup-repository|||| true \"ungültiges --backup-repository" "$DEP"
 echo "---"; echo "erkannt $ERKANNT · unbemerkt $UNBEMERKT · ungültig $UNGUELTIG"
 [ "$UNBEMERKT" -eq 0 ] && [ "$UNGUELTIG" -eq 0 ]

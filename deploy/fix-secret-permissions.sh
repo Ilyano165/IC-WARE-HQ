@@ -5,8 +5,9 @@
 set -eu
 cd "$(dirname "$0")/.."
 [ -d secrets ] || { echo "secrets/ fehlt — zuerst deploy/generate-secrets.sh"; exit 1; }
-APP="database_url platform_database_url worker_database_url auth_database_url migration_database_url secret_key session_secret"
+APP="database_url platform_database_url worker_database_url auth_database_url migration_database_url secret_key session_secret smtp_password"
 chmod 700 secrets
+[ -e secrets/smtp_password ] || : > secrets/smtp_password   # ältere Installationen: leer = kein SMTP-Login
 if [ "$(id -u)" -ne 0 ]; then
   echo "Hinweis: nicht als root — Besitzer nicht gesetzt. Die App (UID 10001) kann die Secrets so nicht lesen;"
   echo "         als root erneut ausführen: sudo deploy/fix-secret-permissions.sh"
