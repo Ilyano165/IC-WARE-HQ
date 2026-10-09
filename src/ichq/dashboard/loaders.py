@@ -149,10 +149,11 @@ def company(s: Any, p: Principal, ctx: Context) -> Data:
     z = s.execute(text("""SELECT (SELECT count(*) FROM memberships WHERE status = 'active') AS aktiv,
         (SELECT count(*) FROM invitations WHERE accepted_at IS NULL AND revoked_at IS NULL) AS einladungen""")).one()
     kennzahlen = [Metric("members", "Aktive Mitglieder", int(z.aktiv), {"status": "active"}),
-                  Metric("invitations", "Offene Einladungen", int(z.einladungen), {})]
+                  Metric("invitations", "Offene Einladungen", int(z.einladungen), {}, linked=False)]
     if decide(p, "roles.read"):
         n = len(admins(s))
-        kennzahlen.append(Metric("admins", "Mit Verwaltungsrechten", n, {}, "warn" if n <= 1 else "neutral"))
+        kennzahlen.append(Metric("admins", "Mit Verwaltungsrechten", n, {}, "warn" if n <= 1 else "neutral",
+                                 linked=False))
     return Data("members", tuple(kennzahlen), (), "")
 
 

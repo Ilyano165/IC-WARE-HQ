@@ -39,7 +39,7 @@ mutation "Schwaches Secret erlaubt" "core/config.py" "        if len(roh) < MIN_
 mutation "Leere _FILE-Variable als gesetzt" "core/config.py" " or not pfad.strip():|||:" "tests/test_config.py"
 mutation "Readiness ignoriert Speicher" "api/health.py" "    bereit = all(c.ok for c in checks)|||    bereit = checks[0].ok" "tests/test_api_health.py"
 mutation "Modellregistrierung fehlt in der CLI" "cli.py" "from ichq.models import assert_complete|||assert_complete = lambda: 0" "tests/test_entrypoints.py"
-mutation "Worker meldet Fehlschlag als Erfolg" "cli.py" "                return 0 if r.ok else 1|||                return 0" "tests/test_entrypoints.py"
+mutation "Worker meldet Fehlschlag als Erfolg" "cli.py" "                return 0 if r.ok and (mail is None or mail.failed == 0) else 1|||                return 0" "tests/test_entrypoints.py"
 mutation "Modellprüfung prüft nichts" "models.py" "        if fk.target_fullname.split(\".\")[0] not in Base.metadata.tables|||        if False" "tests/test_entrypoints.py"
 
 # ---------- M2 Authentication ----------
@@ -113,7 +113,7 @@ mutation "M3 Archivierte Rolle zählt als Admin" "authz/effective.py" " AND r.ar
 mutation "M3 Einladung mehrfach einlösbar" "members/accept.py" "WHERE id = :i AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()|||WHERE id = :i" "tests/test_m3_tenancy.py"
 mutation "M3 Vorprüfung ignoriert Gültigkeit" "members/accept.py" "    if r is None or not r.gueltig:|||    if r is None:" "tests/test_m3_tenancy.py"
 mutation "M3 Fremdes Konto nimmt Einladung an" "members/accept.py" "    if email != inv.email:|||    if False:" "tests/test_m3_tenancy.py"
-mutation "M3 Bestehendes Konto ohne Zustimmung" "members/accept.py" "        if s.execute(text(\"SELECT 1 FROM users WHERE lower(email) = :e\"), {\"e\": inv.email}).scalar():|||        if False:" "tests/test_m3_tenancy.py"
+mutation "M3 Bestehendes Konto ohne Zustimmung" "members/accept.py" "        if vorhanden is not None and not _verwaist(engines, vorhanden):|||        if False:" "tests/test_m3_tenancy.py"
 mutation "M3 Firmenprofil ohne Validierung" "tenancy/service.py" "    _pruefen(t.slug, name, str(neu[\"timezone\"]), str(neu[\"language\"]), str(neu[\"currency\"]))|||    pass" "tests/test_m3_tenancy.py"
 mutation "M3 Route mandantenblind (RLS) → IDOR-Generator" "migrations/versions/0003_core.py" "                           USING (tenant_id = ichq_current_tenant())
                            WITH CHECK|||                           USING (true)
@@ -218,6 +218,15 @@ mutation "Scan: Web-App schreibt Prüfergebnis" "migrations/versions/0007_docume
 mutation "Scan: Worker sieht fremde Firmen" "migrations/versions/0007_documents_scan.py" "    CREATE POLICY p_documents_scan_worker ON documents FOR SELECT TO ichq_worker
       USING (tenant_id = ichq_current_tenant());|||    CREATE POLICY p_documents_scan_worker ON documents FOR SELECT TO ichq_worker
       USING (true);" "$SCAN"
+# ---------- UI-Prüfung vor dem Launch ----------
+UIL="tests/test_launch_browser.py"
+mutation "UI: falsches Passwort meldet ab" "web/js/api.js" "    if (fehler.code === \"authentication_required\") window.dispatchEvent|||    if (r.status === 401) window.dispatchEvent" "$UIL"
+mutation "UI: Doppelklick löst doppelt aus" "web/js/views/kommentare.js" "form.addEventListener(\"submit\", einmal(async () => {|||form.addEventListener(\"submit\", (async (e) => { e.preventDefault();" "$UIL"
+mutation "UI: Bearbeiten an fremden Kommentaren" "web/js/views/kommentare.js" "  if (!k.deleted && k.own) {   // bearbeiten nur eigene|||  if (!k.deleted) {   // bearbeiten nur eigene" "$UIL"
+mutation "UI: Menü schließt nicht mit Escape" "web/js/app.js" "if (e.key === \"Escape\" && huelle.classList.contains(\"nav-open\"))|||if (false)" "$UIL"
+mutation "UI: Benachrichtigung zeigt undefined" "web/js/views/inbox.js" "n.object ? \` · \${art(n.object.type)}\` : \"\"|||n.object ? \` · \${n.object.title}\` : \"\"" "$UIL"
+mutation "UI: Anhänge-Knopf fehlt" "web/js/views/aufgaben.js" "  const knopf = darf(\"tasks.update\") ? h(|||  const knopf = false ? h(" "$UIL"
+mutation "D0: Zahl ohne passende Liste verlinkt" "dashboard/loaders.py" "int(z.einladungen), {}, linked=False)]|||int(z.einladungen), {})]" "tests/test_d0_dashboard.py"
 # ---------- Launch-Sicherheitsprüfung (docs/security-review.md) ----------
 SEC="tests/test_security_launch.py"
 mutation "MFA-Fehlversuche je Konto ungezählt" "auth/login.py" "    if throttle.is_throttled(s, settings, \"mfa\", subjekt, ip):|||    if False:" "$SEC"

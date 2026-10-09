@@ -43,7 +43,8 @@ class TaskFromCommentIn(Strict):
     priority: Priority = "normal"
 
 
-def comment_out(s: TenantSession, c: Comment, mentions: list[Any] | None = None) -> dict[str, Any]:
+def comment_out(s: TenantSession, c: Comment, mentions: list[Any] | None = None,
+                p: Principal | None = None) -> dict[str, Any]:
     ids = {c.author_membership_id, c.deleted_by_membership_id, *(mentions or [])}
     refs = refs_for(s, ids)
     return {"id": c.public_id, "kind": c.kind, "body": c.body if c.deleted_at is None else None,
@@ -51,7 +52,9 @@ def comment_out(s: TenantSession, c: Comment, mentions: list[Any] | None = None)
             "deleted": c.deleted_at is not None, "deleted_at": c.deleted_at,
             "deleted_by": refs.get(c.deleted_by_membership_id) if c.deleted_by_membership_id else None,
             "delete_reason": c.delete_reason,
-            "mentions": [refs[m] for m in (mentions or []) if m in refs]}
+            "mentions": [refs[m] for m in (mentions or []) if m in refs],
+            # nur Anzeige (Knopf „Bearbeiten"): ob der Server eine Änderung durch diese Person zulassen würde
+            "own": p is not None and c.author_membership_id == p.membership_id}
 
 
 @router.get("/questions")
@@ -61,7 +64,7 @@ def list_questions(p: Principal = Depends(require("comments.read")), db: TenantD
     Person (Regel: ``ichq.comments.questions``). Jede Zeile nennt das Objekt — Wert → Liste → Objekt (D0)."""
     with db() as s:
         rows, weiter = questions.list_questions(s, p, open_only=open_only, cursor=cursor, limit=limit)
-        return {"items": [{**comment_out(s, c), "object": {"id": o.public_id, "type": o.type, "title": o.title}}
+        return {"items": [{**comment_out(s, c, p=p), "object": {"id": o.public_id, "type": o.type, "title": o.title}}
                           for c, o, *_ in rows], "next_cursor": weiter}
 
 
@@ -72,7 +75,7 @@ def list_comments(ref: str, p: Principal = Depends(require("comments.read")), db
         obj = objects.resolve(s, p, ref)
         rows, weiter = comments.list_for(s, obj, cursor=cursor, limit=limit)
         erw = comments.mentions_of(s, [r[0].id for r in rows])
-        return {"items": [comment_out(s, r[0], erw.get(r[0].id)) for r in rows], "next_cursor": weiter}
+        return {"items": [comment_out(s, r[0], erw.get(r[0].id), p) for r in rows], "next_cursor": weiter}
 
 
 @router.post("/objects/{ref}/comments", status_code=201)
@@ -81,7 +84,7 @@ def create_comment(ref: str, body: CommentIn, p: Principal = Depends(require("co
     with writing(db) as s:
         obj = objects.resolve(s, p, ref)
         c = comments.create(s, p, obj, body=body.body, kind=body.kind, mentions=body.mentions)
-        return comment_out(s, c, comments.mentions_of(s, [c.id]).get(c.id))
+        return comment_out(s, c, comments.mentions_of(s, [c.id]).get(c.id), p)
 
 
 @router.patch("/comments/{ref}")
@@ -89,7 +92,7 @@ def edit_comment(ref: str, body: CommentPatch, p: Principal = Depends(require("c
                  db: TenantDB = Depends(tenant_db)) -> dict[str, Any]:
     with writing(db) as s:
         c = comments.edit(s, p, ref, body.body)
-        return comment_out(s, c, comments.mentions_of(s, [c.id]).get(c.id))
+        return comment_out(s, c, comments.mentions_of(s, [c.id]).get(c.id), p)
 
 
 @router.delete("/comments/{ref}", status_code=204)

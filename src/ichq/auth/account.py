@@ -67,6 +67,9 @@ def change_password(s: Session, settings: Settings, current: sessions.SessionInf
     verstoss = check_policy(new, email=u.email, username=u.username)
     if verstoss:
         return Outcome(False, "password_policy", data={"policy": verstoss.code, "message": verstoss.message})
+    if new == old:
+        return Outcome(False, "password_policy", data={
+            "policy": "same_as_old", "message": "Das neue Passwort muss sich vom bisherigen unterscheiden."})
     _setze_passwort(s, settings, current.user_id, new)
     n = sessions.revoke_all(s, current.user_id, "password_changed", except_id=current.id)
     roh, sid = sessions.rotate(s, settings, current, "password_changed", ip=ip, user_agent=user_agent,

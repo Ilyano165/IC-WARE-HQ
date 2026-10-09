@@ -145,7 +145,7 @@ def test_jede_zahl_entspricht_der_verlinkten_liste(rw: RbacWorld) -> None:
         if w.get("list") not in LISTEN:
             continue
         for m in w["metrics"]:
-            if m["filter"] or w["list"] == "questions":
+            if m["linked"]:   # JEDE verlinkte Zahl, auch mit leerem Filter (UI-Audit: zwei Zahlen ohne passende Liste)
                 assert _anzahl(a, LISTEN[w["list"]], m["filter"]) == m["value"], (w["key"], m["key"])
                 geprueft += 1
     assert geprueft >= 10

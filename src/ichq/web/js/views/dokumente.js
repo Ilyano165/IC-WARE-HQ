@@ -1,5 +1,5 @@
 // Dokumente (C0): Liste, Hochladen (Quarantäne bis Virenprüfung), Detail mit Download und Prüfung, Kommentare.
-import { alertBox, datum, ersetze, h, groesse, toast, zeit } from "../dom.js";
+import { einmal, alertBox, datum, ersetze, h, groesse, toast, zeit } from "../dom.js";
 import { get, hochladen, meldung, post, query } from "../api.js";
 import { gehe } from "../router.js";
 import { darf } from "../state.js";
@@ -49,18 +49,23 @@ export async function liste(el, _p, q) {
     href: `#/dokumente${query({ ...f, cursor: daten.next_cursor })}` }, "Weitere")) : null);
 }
 
-export async function detail(el, { ref }) {
+export async function detail(el, { ref }, _q, runde = 0) {
   const d = await get(`/documents/${ref}`);
+  if (d.scan_status === "quarantined" && runde < 24) {   // Prüfung läuft: bis 2 min alle 5 s neu laden, solange sichtbar
+    setTimeout(() => { if (el.isConnected) detail(el, { ref }, _q, runde + 1).catch(() => {}); }, 5000);
+  }
   const kom = h("section", { class: "card" });
   const aktionen = [];
   if (d.scan_status === "clean") {
     aktionen.push(h("a", { class: "btn btn--ghost", href: `/api/v1/documents/${ref}/content`, download: d.filename }, "Herunterladen"));
   }
   if (darf("files.update") && d.review_status === "pending") {
-    for (const [entscheidung, text] of [["approved", "Freigeben"], ["rejected", "Ablehnen"]]) {
-      aktionen.push(h("button", { class: `btn${entscheidung === "rejected" ? " btn--danger" : ""}`, type: "button", on: { click: async () => {
+    // Freigeben erst nach bestandener Virenprüfung (der Server lehnt sonst ab); Ablehnen geht immer
+    const moeglich = d.scan_status === "clean" ? [["approved", "Freigeben"], ["rejected", "Ablehnen"]] : [["rejected", "Ablehnen"]];
+    for (const [entscheidung, text] of moeglich) {
+      aktionen.push(h("button", { class: `btn${entscheidung === "rejected" ? " btn--danger" : ""}`, type: "button", on: { click: einmal(async () => {
         try { await post(`/documents/${ref}/review`, { decision: entscheidung }); toast("Gespeichert."); detail(el, { ref }); } catch (e) { toast(meldung(e), "error"); }
-      } } }, text));
+      }) } }, text));
     }
   }
   ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("a", { href: "#/dokumente", class: "small" }, "← Dokumente"), h("h1", {}, d.title)),
