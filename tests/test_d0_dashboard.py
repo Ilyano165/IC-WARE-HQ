@@ -110,6 +110,7 @@ def _szenario(rw: RbacWorld) -> dict[str, Any]:
     docs = [ok(a.post(f"/api/v1/documents?filename=b{i}.pdf", **PDF), 201) for i in range(3)]
     t = ok(a.post("/api/v1/tasks", json={"title": "Mit Anhang"}), 201)
     ok(a.post(f"/api/v1/tasks/{t['id']}/attachments", json={"document": docs[0]["id"]}), 201)
+    db(rw.engines, "UPDATE documents SET scan_status = 'clean'")      # Freigabe erst nach Virenprüfung (ADR-015)
     ok(a.post(f"/api/v1/documents/{docs[1]['id']}/review", json={"decision": "approved"}))
     ok(rw.client(rw.gf).post(f"/api/v1/objects/{t['id']}/comments", json={"body": "Wozu?", "kind": "question"}), 201)
     return {"docs": docs, "task": t}

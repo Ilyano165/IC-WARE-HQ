@@ -24,23 +24,25 @@ from ichq.api.v1.objects import router as objects_router
 from ichq.api.v1.roles import router as roles_router
 from ichq.api.v1.router import router as v1_router
 from ichq.api.v1.tasks import router as tasks_router
-from ichq.auth.mailer import Mailer, build_mailer
 from ichq.core.config import Settings, get_settings
 from ichq.core.logging import configure_logging
 from ichq.db.engine import Engines, build_engines
+from ichq.db.paging import configure_cursor_key
+from ichq.mail.delivery import Provider, build_provider
 from ichq.models import assert_complete
 from ichq.storage import Storage, build_storage
 
 
 def create_app(settings: Settings | None = None, *, engines: Engines | None = None,
-               storage: Storage | None = None, mailer: Mailer | None = None,
+               storage: Storage | None = None, mailer: Provider | None = None,
                extra_routers: tuple[object, ...] = ()) -> FastAPI:
     settings = settings or get_settings()
     assert_complete()
     configure_logging(settings.log_level, settings.log_format)
     engines = engines or build_engines(settings)
     storage = storage or build_storage(settings)
-    mailer = mailer or build_mailer(settings)
+    mail_enabled = mailer is not None or build_provider(settings) is not None
+    configure_cursor_key(settings.secret_key.get_secret_value())
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -53,7 +55,7 @@ def create_app(settings: Settings | None = None, *, engines: Engines | None = No
         redoc_url=None,
         openapi_url="/openapi.json" if settings.expose_docs else None,
     )
-    app.state.ichq = AppState(settings=settings, engines=engines, storage=storage, mailer=mailer)
+    app.state.ichq = AppState(settings=settings, engines=engines, storage=storage, mail_enabled=mail_enabled)
     install_error_handlers(app)
     app.include_router(health_routes.router)
     app.include_router(ui_router)

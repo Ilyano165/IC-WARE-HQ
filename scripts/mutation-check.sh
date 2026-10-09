@@ -218,6 +218,50 @@ mutation "Scan: Web-App schreibt Prüfergebnis" "migrations/versions/0007_docume
 mutation "Scan: Worker sieht fremde Firmen" "migrations/versions/0007_documents_scan.py" "    CREATE POLICY p_documents_scan_worker ON documents FOR SELECT TO ichq_worker
       USING (tenant_id = ichq_current_tenant());|||    CREATE POLICY p_documents_scan_worker ON documents FOR SELECT TO ichq_worker
       USING (true);" "$SCAN"
+# ---------- Launch-Sicherheitsprüfung (docs/security-review.md) ----------
+SEC="tests/test_security_launch.py"
+mutation "MFA-Fehlversuche je Konto ungezählt" "auth/login.py" "    if throttle.is_throttled(s, settings, \"mfa\", subjekt, ip):|||    if False:" "$SEC"
+mutation "MFA-Zähler aus veralteter Sitzung" "auth/login.py" "        versuche = s.execute(text(\"UPDATE auth_sessions SET mfa_attempts = mfa_attempts + 1 WHERE id = :id \"
+                                  \"RETURNING mfa_attempts\"), {\"id\": challenge.id}).scalar_one()|||        versuche = challenge.mfa_attempts + 1
+        s.execute(text(\"UPDATE auth_sessions SET mfa_attempts = :n WHERE id = :id\"), {\"n\": versuche, \"id\": challenge.id})" "$SEC"
+mutation "MFA widerrufene Challenge nicht neu geprüft" "auth/login.py" "    if not noch_gueltig:
+        return Outcome(False, \"mfa_invalid\")|||    if False:
+        return Outcome(False, \"mfa_invalid\")" "$SEC"
+mutation "Reset hebt Betreiber-Sperre auf" "auth/account.py" "    return status in (\"pending\", \"active\") or (status == \"locked\" and locked_until is not None)|||    return status in (\"pending\", \"active\", \"locked\")" "$SEC"
+mutation "Passwort setzen entsperrt jede Sperre" "auth/account.py" "status = CASE WHEN status = 'pending' OR (status = 'locked' AND locked_until IS NOT NULL)|||status = CASE WHEN status IN ('pending', 'locked')" "$SEC"
+mutation "Passwort-Orakel hinter Sitzung ungedrosselt" "auth/account.py" "    if throttle.is_throttled(s, settings, \"login\", subjekt, ip):
+        sessions.revoke(s, current.id, \"reauth_throttled\")|||    if False:
+        sessions.revoke(s, current.id, \"reauth_throttled\")" "$SEC"
+mutation "2FA aus lässt andere Sitzungen offen" "auth/account.py" "    n = sessions.revoke_all(s, current.user_id, \"totp_disabled\", except_id=current.id)   # Audit F8|||    n = 0" "$SEC"
+mutation "Wiedereintritt mit alten Rollen" "members/accept.py" "\"DELETE FROM membership_roles WHERE membership_id = :m\",|||" "$SEC"
+mutation "Verwaistes Konto bleibt aktiv" "members/accept.py" "            s.execute(text(\"UPDATE users SET password_hash = NULL, status = 'pending' WHERE id = :u\"), {\"u\": uid})|||            pass" "$SEC"
+mutation "Einladungspasswort gekürzt" "api/v1/members.py" "    password: Annotated[str, StringConstraints(strip_whitespace=False)] = Field(min_length=1, max_length=512)|||    password: str = Field(min_length=1, max_length=512)" "$SEC"
+mutation "Freigabe ohne Virenprüfung" "documents/service.py" "    if decision == \"approved\" and doc.scan_status != \"clean\":|||    if False:" "tests/test_core_api.py"
+mutation "Selbstprüfung unsichtbar" "documents/service.py" "    selbst = obj.created_by_membership_id == principal.membership_id|||    selbst = False" "$SEC"
+mutation "Upload ohne Ratenlimit" "documents/service.py" "    if zuletzt >= UPLOADS_PER_MEMBER_HOUR:|||    if False:" "$SEC"
+mutation "Upload ohne Kontingent" "documents/service.py" "    if belegt + neu > TENANT_QUOTA_BYTES:|||    if False:" "$SEC"
+mutation "Cursor unverschlüsselt" "db/paging.py" "    if _SCHLUESSEL:
+        nonce = os.urandom(12)|||    if False:
+        nonce = os.urandom(12)" "$SEC"
+# ---------- E-Mail (ADR-016) ----------
+MAIL="tests/test_mail.py"
+mutation "Mail: Token im Klartext gespeichert" "mail/outbox.py" "    if secret_key is not None:
+        werte[\"be\"] = seal(secret_key, mid, mail)|||    if False:
+        werte[\"be\"] = seal(secret_key, mid, mail)" "$MAIL"
+mutation "Mail: Inhalt nach Versand behalten" "mail/delivery.py" "        s.execute(text(\"UPDATE mail_outbox SET status='sent', sent_at=now(), locked_at=NULL, last_error=NULL, \"
+                       \"body_enc=NULL, body_text=NULL, body_html=NULL WHERE id=:id\"), {\"id\": mid})|||        s.execute(text(\"UPDATE mail_outbox SET status='sent', sent_at=now(), locked_at=NULL WHERE id=:id\"), {\"id\": mid})" "$MAIL"
+mutation "Mail: abgelaufene Mail wird gesendet" "mail/delivery.py" "WHERE status IN ('pending','failed') AND expires_at IS NOT NULL AND expires_at < now()|||WHERE false" "$MAIL"
+mutation "Mail: kein Ratenlimit" "mail/delivery.py" "        if schon >= settings.mail_per_recipient_hour:|||        if False:" "$MAIL"
+mutation "Mail: Fehler sofort endgültig" "mail/delivery.py" "        endgueltig = z.attempts >= z.max_attempts  # type: ignore[attr-defined]|||        endgueltig = True" "$MAIL"
+mutation "Mail: keine Wartezeit vor Wiederholung" "mail/delivery.py" "    return int(min(60 * 4 ** max(versuch - 1, 0), 6 * 3600))|||    return 0" "$MAIL"
+mutation "Mail: App-Rolle liest Outbox" "migrations/versions/0008_mail_outbox.py" "    GRANT INSERT ON mail_outbox TO ichq_app, ichq_auth;|||    GRANT SELECT, INSERT ON mail_outbox TO ichq_app, ichq_auth;
+    CREATE POLICY p_mail_lesen ON mail_outbox FOR SELECT TO ichq_app, ichq_auth USING (true);" "$MAIL"
+mutation "Mail: App-Rolle schreibt für fremde Firma" "migrations/versions/0008_mail_outbox.py" "      WITH CHECK (tenant_id = ichq_current_tenant());
+    CREATE POLICY p_mail_outbox_auth_insert|||      WITH CHECK (true);
+    CREATE POLICY p_mail_outbox_auth_insert" "$MAIL"
+mutation "Mail: kein Sicherheitshinweis" "auth/events.py" "    if event in templates.SICHERHEIT and user_id is not None:|||    if False:" "$MAIL"
+mutation "Mail: HTML unmaskiert" "mail/templates.py" "    teile = \"\".join(f'<p style=\"margin:0 0 14px\">{escape(a)}</p>' for a in absaetze)|||    teile = \"\".join(f'<p style=\"margin:0 0 14px\">{a}</p>' for a in absaetze)" "$MAIL"
+mutation "Mail: Warnung ohne Direktversand bei DB-Ausfall" "betrieb.py" "    provider = provider or build_provider(settings)|||    return 1" "$MAIL"
 # Wie mutation, aber in einer Kopie von deploy/ (Tests lesen ICHQ_DEPLOY_DIR)
 mutation_deploy() {
   local name="$1" datei="$2" ersatz="$3" tests="$4"

@@ -27,21 +27,43 @@ def _user(s: Session, user_id: uuid.UUID) -> Any:
                              FROM users WHERE id = :id FOR UPDATE"""), {"id": user_id}).one()
 
 
+def _reset_erlaubt(status: str, locked_until: Any) -> bool:
+    return status in ("pending", "active") or (status == "locked" and locked_until is not None)
+
+
+def _passwort_erneut(s: Session, settings: Settings, current: sessions.SessionInfo, u: Any, password: str,
+                     ip: str, ereignis: str) -> Outcome | None:
+    """Passwort-Abfrage hinter einer Sitzung (Passwort ändern, 2FA). Gedrosselt je Konto: ein gestohlenes
+    Sitzungs-Cookie darf kein unbegrenztes Passwort-Orakel sein (Audit F4). Zu viele Fehler ⇒ Sitzung beendet."""
+    subjekt = keyed_hash(settings.session_secret.get_secret_value(), f"reauth:{current.user_id}")
+    if throttle.is_throttled(s, settings, "login", subjekt, ip):
+        sessions.revoke(s, current.id, "reauth_throttled")
+        events.record(s, "reauth_throttled", user_id=current.user_id, session_id=current.id, ip=ip)
+        return Outcome(False, "too_many_attempts", data={"retry_after": settings.throttle_window_minutes * 60})
+    if not verify_password(settings, u.password_hash, password)[0]:
+        throttle.record_attempt(s, "login", subjekt, ip, False)
+        events.record(s, ereignis, user_id=current.user_id, session_id=current.id, ip=ip, reason="bad_password")
+        return Outcome(False, "invalid_credentials")
+    throttle.record_attempt(s, "login", subjekt, ip, True)
+    return None
+
+
 def _setze_passwort(s: Session, settings: Settings, user_id: uuid.UUID, neu: str) -> None:
     s.execute(text("""UPDATE users SET password_hash = :h, password_changed_at = now(), failed_logins = 0,
                       locked_until = NULL,
-                      status = CASE WHEN status IN ('pending','locked') THEN 'active' ELSE status END
+                      -- nur die AUTOMATISCHE Sperre (mit Ablauf) endet; eine Betreiber-Sperre (locked_until NULL)
+                      -- hebt kein Passwort auf (Audit F3)
+                      status = CASE WHEN status = 'pending' OR (status = 'locked' AND locked_until IS NOT NULL)
+                                    THEN 'active' ELSE status END
                       WHERE id = :id"""), {"h": hash_password(settings, neu), "id": user_id})
 
 
 def change_password(s: Session, settings: Settings, current: sessions.SessionInfo, old: str, new: str, *,
                     ip: str, user_agent: str | None) -> Outcome:
     u = _user(s, current.user_id)
-    stimmt, _ = verify_password(settings, u.password_hash, old)
-    if not stimmt:
-        events.record(s, "password_change_failed", user_id=current.user_id, session_id=current.id, ip=ip,
-                      reason="bad_password")
-        return Outcome(False, "invalid_credentials")
+    fehler = _passwort_erneut(s, settings, current, u, old, ip, "password_change_failed")
+    if fehler:
+        return fehler
     verstoss = check_policy(new, email=u.email, username=u.username)
     if verstoss:
         return Outcome(False, "password_policy", data={"policy": verstoss.code, "message": verstoss.message})
@@ -66,9 +88,9 @@ def request_reset(s: Session, settings: Settings, login_name: str, *,
         events.record(s, "password_reset_throttled", ip=ip)
         return Outcome(True), None, None             # nach außen identisch
     throttle.record_attempt(s, "reset", subjekt, ip, False)   # jede Anfrage zählt
-    u = s.execute(text("SELECT id, email, status FROM users WHERE lower(email) = :i OR lower(username) = :i"),
-                  {"i": ident}).one_or_none()
-    if u is None or u.status not in ("pending", "active", "locked"):
+    u = s.execute(text("SELECT id, email, status, locked_until FROM users WHERE lower(email) = :i "
+                       "OR lower(username) = :i"), {"i": ident}).one_or_none()
+    if u is None or not _reset_erlaubt(u.status, u.locked_until):
         events.record(s, "password_reset_requested", user_id=u.id if u else None, ip=ip,
                       delivered=False, reason="no_eligible_account")
         return Outcome(True), None, None
@@ -86,11 +108,11 @@ def confirm_reset(s: Session, settings: Settings, token: str, new: str, *, ip: s
     if not token or len(token) > 128:
         return Outcome(False, "invalid_token")
     t = s.execute(text("""
-        SELECT r.id, r.user_id, u.email, u.username, u.status,
+        SELECT r.id, r.user_id, u.email, u.username, u.status, u.locked_until,
                r.used_at IS NULL AND r.invalidated_at IS NULL AND r.expires_at > now() AS gueltig
         FROM password_reset_tokens r JOIN users u ON u.id = r.user_id
         WHERE r.token_hash = :h FOR UPDATE OF r"""), {"h": hash_token(token)}).one_or_none()
-    if t is None or not t.gueltig or t.status not in ("pending", "active", "locked"):
+    if t is None or not t.gueltig or not _reset_erlaubt(t.status, t.locked_until):
         events.record(s, "password_reset_failed", user_id=t.user_id if t else None, ip=ip,
                       reason="unknown" if t is None else ("not_valid" if not t.gueltig else f"status_{t.status}"))
         return Outcome(False, "invalid_token")
@@ -151,10 +173,9 @@ def set_status(s: Session, user_id: uuid.UUID, new_status: str, *, actor: str, r
 # ---------- 2FA ----------
 def totp_setup(s: Session, settings: Settings, current: sessions.SessionInfo, password: str, *, ip: str) -> Outcome:
     u = _user(s, current.user_id)
-    if not verify_password(settings, u.password_hash, password)[0]:
-        events.record(s, "totp_setup_failed", user_id=current.user_id, session_id=current.id, ip=ip,
-                      reason="bad_password")
-        return Outcome(False, "invalid_credentials")
+    fehler = _passwort_erneut(s, settings, current, u, password, ip, "totp_setup_failed")
+    if fehler:
+        return fehler
     if u.totp_enabled_at:
         return Outcome(False, "totp_already_enabled")
     geheimnis = totp.new_secret()
@@ -194,10 +215,8 @@ def totp_enable(s: Session, settings: Settings, current: sessions.SessionInfo, c
     return Outcome(True, data={"recovery_codes": codes})
 
 
-def _zweiter_faktor(settings: Settings, u: Any, password: str, code: str) -> int | None:
-    """Passwort UND aktueller TOTP-Code. Gibt den verwendeten Zeitschritt zurück oder None."""
-    if not verify_password(settings, u.password_hash, password)[0]:
-        return None
+def _zweiter_faktor(settings: Settings, u: Any, code: str) -> int | None:
+    """Aktueller TOTP-Code (das Passwort prüft vorher ``_passwort_erneut``). Zeitschritt oder None."""
     geheimnis = totp.decrypt(settings.secret_key.get_secret_value(), u.totp_secret_enc, str(u.id))
     return totp.verify(geheimnis, code, u.totp_last_step)
 
@@ -207,13 +226,17 @@ def totp_disable(s: Session, settings: Settings, current: sessions.SessionInfo, 
     u = _user(s, current.user_id)
     if not u.totp_enabled_at:
         return Outcome(False, "totp_not_enabled")
-    if _zweiter_faktor(settings, u, password, code) is None:
+    fehler = _passwort_erneut(s, settings, current, u, password, ip, "totp_disable_failed")
+    if fehler:
+        return fehler
+    if _zweiter_faktor(settings, u, code) is None:
         events.record(s, "totp_disable_failed", user_id=current.user_id, session_id=current.id, ip=ip)
         return Outcome(False, "mfa_invalid")
     s.execute(text("""UPDATE users SET totp_secret_enc = NULL, totp_pending_enc = NULL, totp_enabled_at = NULL,
                       totp_last_step = NULL WHERE id = :id"""), {"id": current.user_id})
     s.execute(text("DELETE FROM recovery_codes WHERE user_id = :u"), {"u": current.user_id})
-    events.record(s, "totp_disabled", user_id=current.user_id, session_id=current.id, ip=ip)
+    n = sessions.revoke_all(s, current.user_id, "totp_disabled", except_id=current.id)   # Audit F8
+    events.record(s, "totp_disabled", user_id=current.user_id, session_id=current.id, ip=ip, other_sessions_ended=n)
     return Outcome(True)
 
 
@@ -222,7 +245,10 @@ def regenerate_recovery_codes(s: Session, settings: Settings, current: sessions.
     u = _user(s, current.user_id)
     if not u.totp_enabled_at:
         return Outcome(False, "totp_not_enabled")
-    schritt = _zweiter_faktor(settings, u, password, code)
+    fehler = _passwort_erneut(s, settings, current, u, password, ip, "recovery_codes_failed")
+    if fehler:
+        return fehler
+    schritt = _zweiter_faktor(settings, u, code)
     if schritt is None:
         events.record(s, "recovery_codes_failed", user_id=current.user_id, session_id=current.id, ip=ip)
         return Outcome(False, "mfa_invalid")

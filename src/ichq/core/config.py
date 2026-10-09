@@ -76,13 +76,16 @@ class Settings(BaseSettings):
     clamd_host: str | None = None
     clamd_port: int = Field(default=3310, ge=1, le=65535)
 
-    # E-Mail ist dokumentiert und validiert, wird in M1 aber noch nicht verwendet
+    # E-Mail (ichq.mail): Versand über den Worker aus der Tabelle mail_outbox
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_user: str | None = None
     smtp_password: SecretStr | None = None
     smtp_from: str | None = None
     smtp_starttls: bool = True
+    smtp_ssl: bool = False                    # implizites TLS (Port 465); hat Vorrang vor STARTTLS
+    mail_per_recipient_hour: int = Field(default=10, ge=1, le=1000)   # danach zurückgestellt, nicht verworfen
+    alert_email: str | None = None            # Betreiber-Adresse für Systemwarnungen (ichq alert, Monitoring)
 
     # Anmeldung (M2)
     public_origin: str | None = None          # z. B. https://app.ic-ware.eu — Pflicht in Produktion
@@ -136,6 +139,8 @@ class Settings(BaseSettings):
             raise ValueError("storage_path ist bei storage_backend=local Pflicht")
         if self.storage_backend == "s3" and not (self.s3_bucket and self.s3_access_key and self.s3_secret_key):
             raise ValueError("s3_bucket, s3_access_key und s3_secret_key sind bei storage_backend=s3 Pflicht")
+        if self.smtp_host and self.smtp_user and not (self.smtp_starttls or self.smtp_ssl):
+            raise ValueError("SMTP-Anmeldung nur verschlüsselt: smtp_starttls oder smtp_ssl einschalten")
         if self.env == "production":
             if self.expose_docs:
                 raise ValueError("expose_docs darf in Produktion nicht aktiv sein")

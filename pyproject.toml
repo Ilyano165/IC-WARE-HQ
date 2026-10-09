@@ -86,7 +86,7 @@ layers = [
   "ichq.activity",
   "ichq.objects",
   "ichq.health | ichq.jobs | ichq.tenancy | ichq.identity | ichq.authz | ichq.auth",
-  "ichq.audit",
+  "ichq.audit | ichq.mail",
   "ichq.db | ichq.storage",
   "ichq.core",
 ]

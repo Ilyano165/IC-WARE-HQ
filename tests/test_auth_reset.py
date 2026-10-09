@@ -152,7 +152,7 @@ def test_drosselung_von_reset_anfragen(engines: Engines, settings: Settings) -> 
 def test_ohne_mailserver_503(engines: Engines, settings: Settings) -> None:
     from tests.api_helpers import make_client
     c, app = make_client(settings, engines)
-    app.state.ichq = app.state.ichq.__class__(**{**app.state.ichq.__dict__, "mailer": None})
+    app.state.ichq = app.state.ichq.__class__(**{**app.state.ichq.__dict__, "mail_enabled": False})
     r = c.post("/api/v1/auth/password-reset/request", json={"login": "x@y.test"})
     assert r.status_code == 503 and r.json()["code"] == "password_reset_unavailable"
 
