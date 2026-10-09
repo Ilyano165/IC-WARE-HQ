@@ -23,6 +23,12 @@ verifiziert ist noch nichts (es gibt noch keinen Produktionsserver). Was vor dem
   Passwortabfragen hinter einer Sitzung gedrosselt; Wiedereintritt ohne alte Rechte; Beleg-Freigabe erst nach
   Virenprüfung; Upload-Kontingente; verschlüsselte Paging-Cursor.
 
+**Oberfläche (UI-Prüfung mit Browser, Desktop + Mobil)**
+* Falsches Passwort/Code im Konto zeigt eine Meldung statt abzumelden; entzogener Firmenzugang führt zur Firmenwahl.
+* Dokumente lassen sich an Aufgaben anhängen; „Freigeben" erst nach der Virenprüfung (Seite aktualisiert sich).
+* Doppelklick legt nichts doppelt an; „Bearbeiten" nur an eigenen Kommentaren; mobiles Menü schließbar.
+* Dashboard verlinkt nur Zahlen, deren Liste dieselbe Zahl zeigt; verständliche deutsche Meldungen.
+
 ## Upgrade von 0.1.0
 Migrationen 0007 (Virenprüfung) und 0008 (Mail-Outbox) laufen automatisch vor dem App-Start; Bestandsdokumente
 bleiben in Quarantäne, bis der Scanner sie prüft. Getestet: Upgrade von 0006 mit Bestand und Rückweg
