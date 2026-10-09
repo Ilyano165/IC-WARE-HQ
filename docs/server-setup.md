@@ -1,6 +1,6 @@
 # Server-Betrieb (feste Domain)
 
-Entscheidungen und Grenzen: ADR-005, ADR-015, ADR-016. Was wirklich geprüft ist: Abschnitt „Prüfstand".
+Entscheidungen und Grenzen: ADR-005, ADR-015, ADR-016, ADR-017. Was wirklich geprüft ist: Abschnitt „Prüfstand".
 
 ## 1. Was man braucht
 
@@ -14,6 +14,28 @@ Entscheidungen und Grenzen: ADR-005, ADR-015, ADR-016. Was wirklich geprüft ist
 | **S3-kompatibler Speicher an einem anderen Ort** (Bucket + Zugangsschlüssel; z. B. Hetzner Object Storage, AWS S3, Backblaze B2 über S3) | Sicherung, die den Verlust des Servers übersteht |
 | Betreiber-Adresse für Warnungen | `deploy/hq check --alert` |
 | optional: externer Ping-Dienst (z. B. healthchecks.io) | Alarm, wenn der ganze Server ausfällt |
+
+## 1a. Domain einrichten (vor der Installation)
+
+Alle Nutzer arbeiten mit **einer** zentralen Instanz unter **einer** festen Adresse, z. B. `https://hq.ihre-firma.de`.
+
+1. Server mieten; seine **öffentliche IPv4** (und ggf. IPv6) aus dem Kundenbereich des Anbieters notieren.
+2. Beim Domain-Anbieter (DNS-Verwaltung) für die Subdomain anlegen:
+
+   | Typ | Name | Wert | TTL |
+   | --- | --- | --- | --- |
+   | `A` | `hq` | `<öffentliche IPv4 des Servers>` | 300 |
+   | `AAAA` | `hq` | `<öffentliche IPv6 des Servers>` — **nur** wenn der Server IPv6 hat | 300 |
+
+   **Kein AAAA-Eintrag, der woanders hinzeigt** (z. B. Rest einer alten Website): Let's Encrypt prüft bevorzugt über
+   IPv6 und scheitert dann, obwohl der A-Eintrag stimmt. Der Installer lehnt das ab; `deploy/hq diagnose` erklärt es.
+   Kein CDN/Proxy (z. B. Cloudflare „orange Wolke") davor — siehe Grenzen.
+3. In der **Firewall des Anbieters** (Cloud-Firewall/Security Group) eingehend erlauben: TCP 22, 80, 443, UDP 443.
+4. Prüfen: `getent ahosts hq.ihre-firma.de` auf dem Server zeigt nur die eigenen Adressen.
+
+Danach Installation (Abschnitt 2). Das Zertifikat holt Caddy automatisch bei Let's Encrypt und **erneuert es selbst**
+(etwa 30 Tage vor Ablauf); `deploy/hq check` warnt ab 20 Tagen Restlaufzeit, Fehler ab 7 Tagen. HTTP wird dauerhaft
+(308) auf HTTPS umgeleitet, HSTS ist gesetzt.
 
 ## 2. Installation
 
@@ -47,11 +69,23 @@ Erneut ausführen ist sicher (z. B. Domain oder SMTP ändern). Alle Optionen: `d
 SMTP-Varianten: Standard STARTTLS (Port 587); `--smtp-ssl` für Port 465; `--smtp-plain` nur für ein lokales Relay
 ohne Anmeldung. Anmeldung ohne TLS lehnt die Konfiguration ab.
 
+## 2a. Zugriff für Nutzer (überall, jedes Gerät)
+
+* **Browser:** `https://hq.ihre-firma.de` — Windows, Mac, Linux, Handy, Tablet; jedes Netz. Sitzungen sind nicht an
+  die IP gebunden (Netzwechsel, z. B. WLAN → Mobilfunk, meldet nicht ab). Neue Nutzer kommen per Einladung
+  (Mitglieder → Einladen; braucht SMTP).
+* **Als App installieren:** Edge/Chrome → Menü → „App installieren"; Android „Zum Startbildschirm"; iPhone/iPad
+  Safari → Teilen → „Zum Home-Bildschirm" (Web-App-Manifest, eigenes Fenster und Icon).
+* **Windows-Installer:** `IC-WARE-HQ-Setup-<version>.exe` (Startmenü, Desktop-Verknüpfung, prüft die Adresse,
+  verständliche Fehlermeldungen). Er installiert **nur den Zugang** — keine Datenbank, keine Firmendaten.
+  Details, stille Verteilung, Grenzen: `docs/windows.md`.
+
 ## 3. Bedienung: `deploy/hq`
 
 | Befehl | Wirkung |
 | --- | --- |
 | `status` | Dienste, App-Bereitschaft, HTTPS |
+| `diagnose` | Warum ist die Adresse nicht erreichbar? DNS (A/AAAA), Ports, ufw, interne Dienste, HTTP→HTTPS, Zertifikat, ACME-Fehler im Caddy-Log — in Klartext |
 | `check [--alert]` | Betriebsprüfung, Exitcode 1 bei FEHLER; `--alert` mailt (läuft per Timer alle 5 min) |
 | `logs [dienst]` | Logs folgen (`app`, `worker`, `scanner`, `caddy`, …) |
 | `start` / `stop` / `restart` | Stack (Migration läuft vor jedem App-Start) |
@@ -113,7 +147,7 @@ PostgreSQL-16-/Caddy-/ClamAV-Images, baut und startet; die Migration läuft vor 
 
 | Meldung | Ursache / Abhilfe |
 | --- | --- |
-| `https: kein gültiges Zertifikat` | DNS zeigt nicht auf den Server, Port 80/443 zu → `deploy/hq logs caddy` |
+| `https: kein gültiges Zertifikat` | `deploy/hq diagnose` — nennt die Ursache (DNS, AAAA, Firewall, CAA, Let's-Encrypt-Limit) |
 | `dienst-X: Healthcheck schlägt fehl` | `deploy/hq logs X`; `deploy/hq restart` |
 | `mail: N Mails gescheitert` | SMTP-Daten prüfen (`install.sh --smtp-…`), dann `deploy/hq ichq mail-retry` |
 | `mail-smtp: kein SMTP` | `install.sh … --smtp-host … --smtp-from …` |
@@ -153,6 +187,11 @@ des Docker-Dienstes.
 **Von Hand in der Testumgebung** (09.10.2026): S3-Inhalt ohne Klartext (Dateiinhalt, DB-Passwort, E-Mail, Tabellen-
 name, Dump-Kopf gesucht — nichts gefunden); negative Proben: fehlende Dokument-Datei, falscher Schlüssel,
 manipuliertes S3-Objekt — jeweils rot mit Alarm-Mail; Alarm und Entwarnung kommen per SMTP an.
+
+**Seit ADR-017 zusätzlich im Ende-zu-Ende-Test:** gefälschtes `X-Forwarded-For` ist wirkungslos (Drosselung nicht
+umgehbar), `deploy/hq diagnose` ohne FEHLER und meldet „nur Caddy veröffentlicht Ports"; Gegenprobe von Hand:
+gestoppter Caddy → Weiterleitung, Zertifikat, HTTPS jeweils FEHLER, Exitcode 1. DNS-Abgleich und ACME-Deutung:
+`tests/test_deploy_diagnose.py`. Windows-Installer: CI-Job `windows` (echte Installation auf windows-latest).
 
 **Nicht geprüft:** echtes Let's-Encrypt-Zertifikat, echte Domain/DNS-Prüfung, echter S3-Anbieter, echter
 SMTP-Anbieter, Docker-Installation per apt, ufw, systemd-Timer im Betrieb (nur `systemd-analyze verify`), Neustart

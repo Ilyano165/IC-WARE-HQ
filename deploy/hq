@@ -3,6 +3,7 @@
 #
 #   deploy/hq status                 Dienste, Gesundheit, HTTPS von außen
 #   deploy/hq check [--alert]        Betriebsprüfung (Dienste, Zertifikat, Jobs, Mail, Platte, Sicherung); Alarm-Mail
+#   deploy/hq diagnose               Warum ist die Domain nicht erreichbar? DNS (A/AAAA), Ports, Firewall, Zertifikat
 #   deploy/hq start | stop | restart
 #   deploy/hq logs [dienst]          z. B. logs app, logs caddy (folgt der Ausgabe)
 #   deploy/hq build                  Image bauen (ic-ware-hq:local)
@@ -75,7 +76,8 @@ warten() {
   app_bereit || { compose ps; compose logs --tail 40 migrate app; fehler "App wird nicht bereit — siehe Logs oben."; }
   info "App bereit. Prüfe HTTPS über $(env_wert ICHQ_DOMAIN) …"
   for _ in $(seq 1 30); do https_pruefen && { info "HTTPS ok: https://$(env_wert ICHQ_DOMAIN)"; return 0; }; sleep 4; done
-  echo "WARNUNG: HTTPS noch nicht erreichbar. Zertifikat? DNS? Ports 80/443? → deploy/hq logs caddy" >&2
+  echo "WARNUNG: HTTPS noch nicht erreichbar — Diagnose:" >&2
+  diagnose >&2 || true
 }
 
 starten() {
@@ -122,17 +124,20 @@ setup_admin() {
 . "$DEPLOY/lib/sicherung.sh"
 # shellcheck source=deploy/lib/pruefung.sh
 . "$DEPLOY/lib/pruefung.sh"
+# shellcheck source=deploy/lib/diagnose.sh
+. "$DEPLOY/lib/diagnose.sh"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 befehl="${1:-status}"; shift || true
 case "$befehl" in
-  -h|--help|help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help|help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 voraussetzungen
 case "$befehl" in
   status) status ;;
   check) check "$@" ;;
+  diagnose) diagnose ;;
   start) starten ;;
   stop) compose stop ;;
   restart) compose stop && starten ;;

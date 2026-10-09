@@ -3,6 +3,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_call:
 
 jobs:
   checks:
@@ -32,7 +33,9 @@ jobs:
           pip install "playwright==1.56.0"
           python -m playwright install --with-deps chromium
       - name: Lint
-        run: ruff check src tests
+        run: ruff check src tests windows scripts
+      - name: Typen Windows-Launcher
+        run: mypy --strict windows/launcher
       - name: Typen
         run: mypy
       - name: Schichtregeln
@@ -97,3 +100,7 @@ jobs:
       - name: Logs bei Fehler
         if: failure()
         run: sudo docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs --tail 150
+
+  windows:
+    # Windows-Installer bauen und auf einem echten Windows-Runner installieren/prüfen (ADR-017)
+    uses: ./.github/workflows/windows.yml

@@ -86,6 +86,13 @@ pruefe "Worker hat alle Outbox-Ereignisse erledigt" '[ "$(sql "SELECT count(*) F
 CADDY_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$("${C[@]}" ps -q caddy)")"
 LOGIN_IP="$(sql "SELECT ip FROM auth_events WHERE event = 'login_succeeded' ORDER BY occurred_at DESC LIMIT 1")"
 pruefe "echte Client-IP in auth_events ($LOGIN_IP), nicht die von Caddy" '[ -n "$LOGIN_IP" ] && [ "$LOGIN_IP" != "$CADDY_IP" ]'
+# Gefälschtes X-Forwarded-For darf die Drosselung nicht umgehen: Caddy ersetzt den Kopf durch die echte Adresse
+api -X POST -H 'content-type: application/json' -H 'X-Forwarded-For: 203.0.113.66' \
+  --data "{\"login\":\"$MAIL\",\"password\":\"falsch-falsch-falsch\"}" "$B/api/v1/auth/login" > /dev/null
+FALSCH_IP="$(sql "SELECT ip FROM auth_events WHERE event = 'login_failed' ORDER BY occurred_at DESC LIMIT 1")"
+pruefe "gefälschtes X-Forwarded-For wirkungslos ($FALSCH_IP)" '[ "$FALSCH_IP" = "$LOGIN_IP" ]'
+"$HQ" diagnose > "$T/diagnose.log" 2>&1 || true
+pruefe "Diagnose (DNS/Ports/Weiterleitung/Zertifikat/intern) ohne FEHLER" '! grep -q "^FEHLER" "$T/diagnose.log" && grep -q "^OK *intern" "$T/diagnose.log"'
 "${C[@]}" stop app > /dev/null 2>&1
 for _ in $(seq 1 10); do [ "$(api "$B/readiness")" = 503 ] && break; sleep 2; done   # erst 502, nach Health-Check 503
 pruefe "App gestoppt → Caddy 503" '[ "$(api "$B/readiness")" = 503 ]'

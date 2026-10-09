@@ -21,7 +21,7 @@ import yaml
 REPO = Path(__file__).resolve().parents[1]
 DEPLOY = Path(os.environ.get("ICHQ_DEPLOY_DIR", REPO / "deploy"))
 SKRIPTE = ["install.sh", "hq", "smoke-test.sh", "generate-secrets.sh", "fix-secret-permissions.sh"]
-BIBLIOTHEKEN = ["lib/sicherung.sh", "lib/pruefung.sh"]
+BIBLIOTHEKEN = ["lib/sicherung.sh", "lib/pruefung.sh", "lib/diagnose.sh"]
 LANGLAUFEND = {"postgres", "app", "worker", "jobs", "clamav", "scanner", "caddy"}
 
 

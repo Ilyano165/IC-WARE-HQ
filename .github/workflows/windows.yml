@@ -1,0 +1,35 @@
+name: Windows-Installer
+# Baut den Windows-Launcher + Installer (ADR-017) und prüft ihn ECHT auf einem Windows-Runner: stille Installation,
+# Verknüpfungen, Launcher-Kommandozeile, Deinstallation. Wird von CI (jeder PR) und Release (Tag v*) aufgerufen.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Launcher-Logik (ohne Server; die Prüfung gegen den echten Server läuft im Linux-Job)
+        shell: pwsh
+        run: |
+          python windows/launcher/ichq_launcher.py --version
+          python windows/launcher/ichq_launcher.py --check http://hq.beispiel-firma.de; if ($LASTEXITCODE -ne 2) { throw "http:// nicht abgelehnt" }
+          python -c "import tkinter; print('tkinter', tkinter.TkVersion)"
+      - name: Bauen (PyInstaller + Inno Setup)
+        shell: pwsh
+        run: windows/build.ps1
+      - name: Installer prüfen (installieren, Verknüpfungen, Launcher, deinstallieren)
+        shell: pwsh
+        run: windows/test-installer.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IC-WARE-HQ-Windows-Installer
+          path: |
+            dist/IC-WARE-HQ-Setup-*.exe
+            dist/IC-WARE-HQ-Setup-*.exe.sha256
+          if-no-files-found: error
+          retention-days: 30

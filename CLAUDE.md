@@ -8,7 +8,8 @@ Mandantenfähige B2B-Plattform („digitales Betriebssystem eines Unternehmens")
 Entwicklung in Meilensteinen M0–M26 (Roadmap: `docs/architecture.md`, M0-Bericht separat).
 
 **Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication ✅ · **C0 Core-Plattform** (vor M3/M4 gebaut, ADR-010) · **M3 Mandanten** umgesetzt
-(`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **U1 Oberfläche** im IC-Ware-Design (`docs/ui.md`, ADR-013); **D0 Dashboard** (`docs/d0-dashboard.md`, ADR-014); **Betrieb** mit Installer/Launcher, Virenprüfung (`docs/server-setup.md`, ADR-015); **Launch-Vorbereitung 1.0.0rc1**: E-Mail-Outbox, verschlüsselte externe Sicherung mit Wiederherstellungstest, Monitoring, Sicherheitsprüfung (ADR-016, `docs/security-review.md`); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
+(`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **U1 Oberfläche** im IC-Ware-Design (`docs/ui.md`, ADR-013); **D0 Dashboard** (`docs/d0-dashboard.md`, ADR-014); **Betrieb** mit Installer/Launcher, Virenprüfung (`docs/server-setup.md`, ADR-015); **Launch-Vorbereitung 1.0.0rc1**: E-Mail-Outbox, verschlüsselte externe Sicherung mit Wiederherstellungstest, Monitoring, Sicherheitsprüfung (ADR-016, `docs/security-review.md`); **Zugang**: öffentliche Adresse mit Diagnose, Web-App-Manifest,
+Windows-Launcher + Installer (ADR-017, `docs/windows.md`); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
 Tor 1/M3 → C0 → U1 → D0 → S1… — **keine D0-/S-Arbeit vor Tor 1.** Produktvision v2 ist ein **unbestätigter
 Entwurf** (`docs/produktvision-v2.md`). Nichts davon ist produktionsreif.
 
@@ -82,7 +83,8 @@ src/ichq/
   models.py    registriert ALLE Tabellen — jeder Einstiegspunkt lädt es
   app.py, cli.py, asgi.py, migrations/
 tests/         echte PostgreSQL-Tests, Unterprozess-Tests, Mutationsliste in scripts/
-deploy/        install.sh, hq (Launcher), lib/ (sicherung.sh, pruefung.sh), backup/ (restic-Image), smoke-test.sh, Dockerfile,
+windows/       ADR-017: Launcher (launcher/, nur Standardbibliothek), Inno-Setup-Skript, build.ps1, test-installer.ps1
+deploy/        install.sh, hq (Launcher), lib/ (sicherung.sh, pruefung.sh, diagnose.sh), backup/ (restic-Image), smoke-test.sh, Dockerfile,
                docker-compose.yml, Caddyfile, init-roles.sql, Secrets-Skripte, systemd/
 docs/          Architektur, Setup, Konfiguration, Migrationen, Tests, ADRs
 ```
@@ -208,5 +210,14 @@ Noch offen aus M2: echter SMTP-Versand. (Compose-Smoke-Test erledigt: `deploy/sm
 - **Bash-Fehlerbehandlung:** `set -e` greift in Funktionen im `if`/`&&`-Zusammenhang NICHT — Kernschritte über `streng`
   (eigener Prozess). Jede Prüfung braucht eine Gegenprobe, die rot wird.
 - **Neues Problem, das der Betrieb merken muss ⇒ Prüfung in `deploy/lib/pruefung.sh`** (meldet per Mail).
+- **Erreichbarkeit:** jeder A/AAAA-Eintrag muss auf den Server zeigen (`dns_vergleich`); neue Ursache, warum die
+  Adresse nicht erreichbar ist ⇒ in `deploy/lib/diagnose.sh` mit verständlichem Satz + Test.
 - Tor 2: Sicherung verschlüsselt und extern möglich, wöchentlicher Wiederherstellungstest vorhanden; **kein WAL/PITR**
   (bis zu 6 h Datenverlust, ADR-016).
+
+## Regeln für den Windows-Zugang (ADR-017)
+
+- **Nie ein zweiter Server oder eine lokale Datenbank** auf Arbeitsplätzen — der Launcher speichert nur die Adresse.
+- Ungültiges Zertifikat ⇒ harter Fehler, kein „trotzdem öffnen"; `http://` nur für localhost; keinen Weiterleitungen folgen.
+- Version des Launchers = `ichq.__version__` (Test + `build.ps1`); Release nur per Tag `v<version>` (`release.yml`).
+- Neue Sicherheitsregel im Launcher ⇒ `mutation_windows` in `scripts/mutation-check.sh`.

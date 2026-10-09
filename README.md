@@ -36,11 +36,15 @@ sudo HQ_SMTP_PASSWORD='…' deploy/install.sh --domain hq.example.de --email adm
   --smtp-host smtp.example.de --smtp-user hq@example.de --smtp-from hq@example.de \
   --alert-email betrieb@example.de --backup-repository s3:https://<endpunkt>/<bucket>/ichq
 sudo deploy/hq setup-admin                                    # erste Firma + Admin
-sudo deploy/hq status | check | update | backup | backup-verify | restore --yes | logs
+sudo deploy/hq status | check | diagnose | update | backup | backup-verify | restore --yes | logs
 ```
 
 Den angezeigten Sicherungsschlüssel getrennt vom Server aufbewahren. Details, Grenzen, was geprüft ist:
 [docs/server-setup.md](docs/server-setup.md), ADR-015, ADR-016, [docs/security-review.md](docs/security-review.md).
+
+**Zugriff:** alle Nutzer über `https://<domain>` (Browser, als App installierbar auf PC/Handy/Tablet) oder unter
+Windows mit dem Installer `IC-WARE-HQ-Setup-<version>.exe` (Artefakt des CI-Jobs `windows` bzw. GitHub-Release) —
+ein Zugang zur zentralen Instanz, kein zweiter Server: [docs/windows.md](docs/windows.md), ADR-017.
 
 ## Schnellstart (Entwicklung)
 
@@ -81,7 +85,8 @@ ichq serve --port 8000
 | [docs/m0-zielarchitektur.md](docs/m0-zielarchitektur.md) | Verbindliche Zielarchitektur, Roadmap, Tore |
 | [docs/architecture.md](docs/architecture.md) | Schichten, Datenbankrollen, Mandantenisolation, Abweichungen von M0 |
 | [docs/development.md](docs/development.md) | Lokale Einrichtung |
-| [docs/server-setup.md](docs/server-setup.md) | Server mit fester Domain: Installer, `deploy/hq`, Sicherung, Virenprüfung |
+| [docs/server-setup.md](docs/server-setup.md) | Server mit fester Domain: DNS, Installer, `deploy/hq`, Sicherung, Virenprüfung |
+| [docs/windows.md](docs/windows.md) | Windows-Installer und Desktop-Launcher (Zugang zur zentralen Instanz) |
 | [docs/configuration.md](docs/configuration.md) | Alle Umgebungsvariablen |
 | [docs/migrations.md](docs/migrations.md) | Migrationen schreiben und ausführen |
 | [docs/testing.md](docs/testing.md) | Tests und Mutationstests |

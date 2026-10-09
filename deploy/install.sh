@@ -110,16 +110,12 @@ if ! eigener_stack && command -v ss >/dev/null; then
 fi
 
 if [ "$DNS" -eq 1 ] && [ "$DOMAIN" != localhost ]; then
-  info "DNS prüfen: $DOMAIN"
-  aufgeloest="$(getent ahosts "$DOMAIN" | awk '{print $1}' | sort -u || true)"
-  [ -n "$aufgeloest" ] || fehler "$DOMAIN löst nicht auf. A-Eintrag auf diesen Server setzen (oder --skip-dns-check)."
-  eigene="$( (ip -o addr show 2>/dev/null | awk '{sub(/\/.*/, "", $4); print $4}'
-             curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null; echo
-             curl -6 -fsS --max-time 5 https://api64.ipify.org 2>/dev/null; echo) | grep -v '^$' | sort -u)"
-  treffer="$(comm -12 <(echo "$aufgeloest") <(echo "$eigene"))"
-  [ -n "$treffer" ] || fehler "$DOMAIN zeigt auf $(echo "$aufgeloest" | tr '\n' ' '), dieser Server hat $(echo "$eigene" | tr '\n' ' ').
-  Ohne passenden DNS-Eintrag scheitert das Let's-Encrypt-Zertifikat. DNS korrigieren oder --skip-dns-check."
-  info "DNS ok ($treffer)"
+  info "DNS prüfen: $DOMAIN (A und AAAA — JEDER Eintrag muss auf diesen Server zeigen)"
+  # shellcheck source=deploy/lib/diagnose.sh
+  . "$DEPLOY/lib/diagnose.sh"
+  dns_pruefen "$DOMAIN" || fehler "DNS passt nicht (siehe oben). Ohne passenden Eintrag scheitert das Let's-Encrypt-Zertifikat.
+  Korrigieren und erneut ausführen — oder --skip-dns-check (z. B. DNS noch nicht verteilt)."
+  info "DNS ok"
 fi
 
 # --- 4. Konfiguration + Geheimnisse ---------------------------------------------------------------------------------

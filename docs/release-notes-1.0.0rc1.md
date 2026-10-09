@@ -14,6 +14,15 @@ verifiziert ist noch nichts (es gibt noch keinen Produktionsserver). Was vor dem
   Wiederherstellungstest in einer Wegwerf-Datenbank.
 * Betriebsprüfung alle 5 min mit Alarm-Mail und externem Totmannschalter.
 
+**Zugang von überall (ADR-017)**
+* Eine zentrale Instanz unter fester HTTPS-Adresse; `deploy/hq diagnose` erklärt DNS-, Firewall- und
+  Zertifikatsprobleme in Klartext. Der Installer verlangt, dass **jeder** A/AAAA-Eintrag auf den Server zeigt.
+* „App installieren" auf PC, Android, iPhone/iPad (Web-App-Manifest, Icons).
+* **Windows-Installer** `IC-WARE-HQ-Setup-1.0.0rc1.exe`: Startmenü, Desktop-Verknüpfung, eigenes Fenster;
+  prüft vor dem Öffnen, dass wirklich IC WARE HQ mit gültigem Zertifikat antwortet. Nur Zugang — keine lokale
+  Datenbank. Stille Verteilung mit `/URL=`. Noch **nicht signiert** (SmartScreen-Hinweis).
+* Geprüft: gefälschtes `X-Forwarded-For` hinter Caddy ist wirkungslos.
+
 **E-Mail (ADR-016)**
 * Einladungen, Passwort-Reset, Sicherheitshinweise (Passwort/2FA geändert, Sperre), Betreiberwarnungen — über eine
   Outbox mit Wiederholung, Ablauf, Dedup und Ratenlimit; Token-Mails nur verschlüsselt gespeichert.
@@ -41,5 +50,6 @@ Totmannschalter — Schritte in `docs/server-setup.md`. Danach `deploy/hq check`
 
 ## Bekannte Grenzen
 Bis zu 6 h Datenverlust (kein WAL/PITR); ein Server ohne Hochverfügbarkeit; keine externe Sicherheitsprüfung;
-nicht real geprüft: Let's-Encrypt mit echter Domain, echter S3- und SMTP-Anbieter, systemd-Timer im Betrieb.
+nicht real geprüft: Let's-Encrypt mit echter Domain, echter S3- und SMTP-Anbieter, systemd-Timer im Betrieb,
+Windows-Launcher mit echtem Nutzer gegen eine echte Instanz (Installer nur auf dem CI-Windows-Runner geprüft).
 Steuerfunktionen sind nicht enthalten (Tor S).

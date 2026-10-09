@@ -273,11 +273,11 @@ mutation "Mail: HTML unmaskiert" "mail/templates.py" "    teile = \"\".join(f'<p
 mutation "Mail: Aufräumen löscht wartende Mails" "mail/delivery.py" "\"DELETE FROM mail_outbox WHERE status IN ('sent','expired','failed','cancelled') \"|||\"DELETE FROM mail_outbox WHERE status IS NOT NULL \"" "$MAIL"
 mutation "Mail: Warnung ohne Direktversand bei DB-Ausfall" "betrieb.py" "    provider = provider or build_provider(settings)|||    return 1" "$MAIL"
 # Wie mutation, aber in einer Kopie von deploy/ (Tests lesen ICHQ_DEPLOY_DIR)
-mutation_deploy() {
-  local name="$1" datei="$2" ersatz="$3" tests="$4"
+mutation_kopie() {   # mutation_kopie <ordner> <umgebungsvariable> <name> <datei> <ersatz> <tests> — Kopie statt src/
+  local ordner="$1" var="$2" name="$3" datei="$4" ersatz="$5" tests="$6"
   local tmp; tmp=$(mktemp -d)
-  cp -a deploy "$tmp/deploy"
-  if ! python3 - "$tmp/deploy/$datei" "$ersatz" <<'PY'
+  cp -a "$ordner" "$tmp/$ordner"
+  if ! python3 - "$tmp/$ordner/$datei" "$ersatz" <<'PY'
 import sys, pathlib
 p = pathlib.Path(sys.argv[1]); alt, neu = sys.argv[2].split("|||")
 t = p.read_text()
@@ -286,11 +286,13 @@ if alt not in t:
 p.write_text(t.replace(alt, neu, 1))
 PY
   then echo "UNGÜLTIG  | $name (Muster nicht gefunden — Mutation nicht angewendet)"; UNGUELTIG=$((UNGUELTIG+1)); rm -rf "$tmp"; return; fi
-  local ergebnis; ergebnis=$(ICHQ_DEPLOY_DIR="$tmp/deploy" timeout 300 python3 -m pytest -q -p no:cacheprovider $tests 2>&1 | tail -1)
+  local ergebnis; ergebnis=$(env "$var=$tmp/$ordner" timeout 300 python3 -m pytest -q -p no:cacheprovider $tests 2>&1 | tail -1)
   if echo "$ergebnis" | grep -q "failed"; then echo "ERKANNT   | $name"; ERKANNT=$((ERKANNT+1))
   else echo "UNBEMERKT | $name | $ergebnis"; UNBEMERKT=$((UNBEMERKT+1)); fi
   rm -rf "$tmp"
 }
+mutation_deploy() { mutation_kopie deploy ICHQ_DEPLOY_DIR "$@"; }
+mutation_windows() { mutation_kopie windows ICHQ_WINDOWS_DIR "$@"; }
 DEP="tests/test_deploy.py"
 mutation_deploy "Betrieb: Datenbank-Port nach außen" "docker-compose.yml" "    image: postgres:16-alpine
     environment:|||    image: postgres:16-alpine
@@ -314,5 +316,17 @@ mutation_deploy "Sicherung: secrets.tar mit Links" "lib/sicherung.sh" "      *) 
 mutation_deploy "Sicherung: Init bei falschem Schlüssel" "lib/sicherung.sh" "    *\"wrong password\"*) fehler|||    *\"wrong password\"*) restic_lauf -- init; fehler" "$DEP"
 mutation_deploy "Sicherung: Timer seltener als 6 h" "systemd/ichq-backup.timer.in" "OnCalendar=*-*-* 00/6:15:00|||OnCalendar=daily" "$DEP"
 mutation_deploy "Installer: Sicherungsziel ungeprüft" "install.sh" "|| fehler \"ungültiges --backup-repository|||| true \"ungültiges --backup-repository" "$DEP"
+DIAG="tests/test_deploy_diagnose.py"
+mutation_deploy "Diagnose: fremder AAAA-Eintrag nur Hinweis" "lib/diagnose.sh" "      fremd=1; echo \"FEHLER|dns|AAAA-Eintrag|||      echo \"FEHLER|dns|AAAA-Eintrag" "$DIAG"
+mutation_deploy "Diagnose: ein passender Eintrag genügt" "lib/diagnose.sh" "  [ \"\$passend\" -eq 1 ] && [ \"\$fremd\" -eq 0 ]|||  [ \"\$passend\" -eq 1 ]" "$DIAG"
+mutation_deploy "Diagnose: ACME-Verbindungsfehler übersehen" "lib/diagnose.sh" "  _hat 'acme:error:connection' &&|||  _hat 'acme:error:connectionX' &&" "$DIAG"
+
+# ---------- Windows-Launcher (ADR-017) ----------
+WIN="tests/test_windows_launcher.py"
+mutation_windows "Launcher: http:// zu fremdem Host" "launcher/ichq_launcher.py" "    if teile.scheme == \"http\" and host not in _LOKAL:|||    if False:" "$WIN"
+mutation_windows "Launcher: Zertifikat nicht geprüft" "launcher/ichq_launcher.py" "    ctx = ctx or ssl.create_default_context()|||    ctx = ssl._create_unverified_context()" "$WIN"
+mutation_windows "Launcher: folgt Weiterleitung auf fremden Host" "launcher/ichq_launcher.py" "        return None                                        # /health|||        return super().redirect_request(*args, **kw)  # /health" "$WIN"
+mutation_windows "Launcher: jede JSON-Antwort ist HQ" "launcher/ichq_launcher.py" "or \"application\" not in daten:|||or False:" "$WIN"
+mutation_windows "Launcher: Zugangsdaten in der Adresse" "launcher/ichq_launcher.py" "    if teile.username or teile.password:|||    if False:" "$WIN"
 echo "---"; echo "erkannt $ERKANNT · unbemerkt $UNBEMERKT · ungültig $UNGUELTIG"
 [ "$UNBEMERKT" -eq 0 ] && [ "$UNGUELTIG" -eq 0 ]
