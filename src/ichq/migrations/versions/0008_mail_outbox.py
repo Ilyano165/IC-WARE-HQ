@@ -65,6 +65,7 @@ def upgrade() -> None:
     ALTER TABLE mail_outbox FORCE ROW LEVEL SECURITY;
     GRANT INSERT ON mail_outbox TO ichq_app, ichq_auth;
     GRANT SELECT, INSERT, UPDATE ON mail_outbox TO ichq_worker, ichq_platform;
+    GRANT DELETE ON mail_outbox TO ichq_worker;   -- Aufräumen: abgeschlossene Mails nach 90 Tagen (Datensparsamkeit)
     CREATE POLICY p_mail_outbox_app_insert ON mail_outbox FOR INSERT TO ichq_app
       WITH CHECK (tenant_id = ichq_current_tenant());
     CREATE POLICY p_mail_outbox_auth_insert ON mail_outbox FOR INSERT TO ichq_auth

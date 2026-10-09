@@ -1,125 +1,168 @@
 # Server-Betrieb (feste Domain)
 
-Status: **lauffähig und Ende-zu-Ende getestet, aber nicht produktionsreif für Kundendaten** — Tor 2 (verschlüsselte
-Sicherung an zweitem Standort, Restore-Test automatisiert) fehlt noch. Entscheidungen und Grenzen: ADR-005, ADR-015.
+Entscheidungen und Grenzen: ADR-005, ADR-015, ADR-016. Was wirklich geprüft ist: Abschnitt „Prüfstand".
 
-## Was man braucht
+## 1. Was man braucht
 
-* Linux-Server (Debian 12 / Ubuntu 22.04+ empfohlen; andere Distributionen mit vorinstalliertem Docker), **≥ 4 GB RAM**
-  (ClamAV ~1,5 GB), ~20 GB Platte, root-Zugang.
-* Eine **feste Domain** mit DNS-A-Eintrag (und ggf. AAAA) auf die öffentliche IP des Servers, z. B. `hq.ic-ware.eu`.
-* Ports **80 und 443** aus dem Internet erreichbar (Let's Encrypt prüft über Port 80/443).
-* Eine E-Mail-Adresse für Let's Encrypt (Warnungen vor Zertifikatsablauf).
+| Was | Wofür |
+| --- | --- |
+| Linux-Server, Debian 12 / Ubuntu 22.04+ (andere Linux mit vorinstalliertem Docker gehen auch), **≥ 4 GB RAM**, ≥ 20 GB Platte, root | ClamAV braucht ~1,5 GB |
+| **Feste Domain**, DNS-A-Eintrag (ggf. AAAA) auf die öffentliche IP des Servers, z. B. `hq.ic-ware.eu` | HTTPS-Zertifikat (Let's Encrypt) |
+| Ports **80 und 443** aus dem Internet erreichbar | Let's Encrypt prüft über 80/443 |
+| E-Mail-Adresse für Let's Encrypt | Ablaufwarnungen |
+| **SMTP-Zugang** (Host, Port, Benutzer, Passwort, Absender) — z. B. vom Mail-Anbieter der Domain | Einladungen, Passwort-Reset, Sicherheitshinweise, Alarm-Mails |
+| **S3-kompatibler Speicher an einem anderen Ort** (Bucket + Zugangsschlüssel; z. B. Hetzner Object Storage, AWS S3, Backblaze B2 über S3) | Sicherung, die den Verlust des Servers übersteht |
+| Betreiber-Adresse für Warnungen | `deploy/hq check --alert` |
+| optional: externer Ping-Dienst (z. B. healthchecks.io) | Alarm, wenn der ganze Server ausfällt |
 
-## Installation (einmal)
+## 2. Installation
 
 ```bash
-sudo git clone https://github.com/ilyano165/ic-ware-hq.git /opt/ic-ware-hq   # oder Archiv entpacken
-cd /opt/ic-ware-hq
-sudo deploy/install.sh --domain hq.ic-ware.eu --email admin@ic-ware.eu [--firewall]
-sudo deploy/hq setup-admin          # erste Firma + Company Admin (fragt alles ab, Passwort verdeckt)
+sudo git clone https://github.com/ilyano165/ic-ware-hq.git /opt/ic-ware-hq && cd /opt/ic-ware-hq
+sudo HQ_SMTP_PASSWORD='…' deploy/install.sh \
+  --domain hq.example.de --email admin@example.de \
+  --smtp-host smtp.example.de --smtp-port 587 --smtp-user hq@example.de --smtp-from hq@example.de \
+  --alert-email betrieb@example.de \
+  --backup-repository s3:https://<s3-endpunkt>/<bucket>/ichq \
+  --firewall
 ```
 
-Danach: `https://hq.ic-ware.eu/app/` — anmelden mit dem eben angelegten Admin.
+1. Der Installer zeigt am Ende einen **SICHERUNGSSCHLÜSSEL** an. Sofort getrennt vom Server aufbewahren
+   (Passwortmanager/Tresor). Ohne ihn ist keine Sicherung lesbar — auch nicht durch IC Ware.
+2. S3-Zugang eintragen: `sudo nano /etc/ichq/backup-s3.env`
+   (`AWS_ACCESS_KEY_ID=…`, `AWS_SECRET_ACCESS_KEY=…`, `AWS_DEFAULT_REGION=…`; Modus 600).
+3. Erste Sicherung und Wiederherstellungstest: `sudo deploy/hq backup && sudo deploy/hq backup-verify`
+4. Erste Firma + Company Admin: `sudo deploy/hq setup-admin` (Kürzel z. B. `ic-ware-gbr`; reserviert sind u. a.
+   `ic-ware`, `admin`, `api`, `app`).
+5. Prüfen: `sudo deploy/hq check` — alles `OK` (Warnungen erklären sich selbst).
+6. Optional Totmannschalter: `HQ_HEARTBEAT_URL=https://hc-ping.com/<uuid>` in `deploy/.env` eintragen.
 
-`install.sh` macht, in dieser Reihenfolge: Eingaben prüfen → Docker installieren (nur Debian/Ubuntu, falls fehlend) →
-RAM, Ports 80/443 und DNS prüfen → `deploy/.env` schreiben (Domain, E-Mail; Modus 600) → Secrets erzeugen (**nur
-wenn `secrets/` fehlt** — nie überschreiben) und Besitzer setzen → Image bauen → starten → auf App und HTTPS warten →
-systemd: `ichq.service` (Start beim Booten) und `ichq-backup.timer` (täglich 03:15) → optional ufw (22/80/443).
+**Was der Installer tut:** Eingaben streng prüfen (sie landen im Caddyfile/.env) → Docker installieren (nur
+Debian/Ubuntu, falls fehlend) → RAM, Ports 80/443, DNS gegen die eigenen Adressen → `deploy/.env` setzen (nur die
+übergebenen Werte; alles andere bleibt) → Secrets erzeugen (**nur wenn `secrets/` fehlt**) → SMTP-Passwort als
+Secret-Datei → Images bauen → starten, auf App und HTTPS warten → Sicherungsschlüssel → systemd: Autostart,
+Sicherung alle 6 h, Wiederherstellungstest sonntags, Betriebsprüfung alle 5 min → optional ufw (22/80/443).
+Erneut ausführen ist sicher (z. B. Domain oder SMTP ändern). Alle Optionen: `deploy/install.sh --help`.
 
-Erneut ausführen ist sicher, z. B. um die Domain zu ändern. Optionen: `deploy/install.sh --help`
-(`--skip-dns-check` hinter NAT, `--dockerhub-mirror mirror.gcr.io` oder `--no-build` bei Docker-Hub-Limit „429",
-`--backup-dir`, `--no-systemd`, `--ca-file`).
+SMTP-Varianten: Standard STARTTLS (Port 587); `--smtp-ssl` für Port 465; `--smtp-plain` nur für ein lokales Relay
+ohne Anmeldung. Anmeldung ohne TLS lehnt die Konfiguration ab.
 
-**Slug der Firma:** Kleinbuchstaben, Ziffern, Bindestrich. Einige Kürzel sind reserviert (u. a. `ic-ware`, `admin`,
-`api`, `app`) — z. B. `ic-ware-gbr` verwenden.
-
-## Bedienung: `deploy/hq`
+## 3. Bedienung: `deploy/hq`
 
 | Befehl | Wirkung |
 | --- | --- |
-| `sudo deploy/hq status` | Dienste, App-Bereitschaft, HTTPS von außen |
-| `sudo deploy/hq logs [dienst]` | Logs folgen, z. B. `logs app`, `logs caddy`, `logs scanner` |
-| `sudo deploy/hq start` / `stop` / `restart` | Stack starten/stoppen (Migration läuft vor jedem App-Start) |
-| `sudo deploy/hq update` | **Sicherung** → `git pull --ff-only` → Image bauen → Neustart |
-| `sudo deploy/hq backup [ordner]` | Sicherung (Standard `/var/backups/ichq`, die neuesten 14 bleiben; `HQ_BACKUP_KEEP`) |
-| `sudo deploy/hq restore <datei> --yes` | vollständige Wiederherstellung — überschreibt Datenbank, Dateien, Secrets |
-| `sudo deploy/hq setup-admin` | Firma + Company Admin anlegen |
-| `sudo deploy/hq ichq <befehl>` | beliebiger CLI-Befehl im App-Container, z. B. `ichq tenant-show ic-ware-gbr` |
+| `status` | Dienste, App-Bereitschaft, HTTPS |
+| `check [--alert]` | Betriebsprüfung, Exitcode 1 bei FEHLER; `--alert` mailt (läuft per Timer alle 5 min) |
+| `logs [dienst]` | Logs folgen (`app`, `worker`, `scanner`, `caddy`, …) |
+| `start` / `stop` / `restart` | Stack (Migration läuft vor jedem App-Start) |
+| `update` | **Sicherung** → `git pull --ff-only` → Fremd-Images aktualisieren → bauen → Neustart |
+| `backup` / `backup-verify` / `backup-status` | Sicherung / Wiederherstellungstest / Übersicht |
+| `restore [snapshot] --yes` | vollständige Wiederherstellung (Standard: neueste) |
+| `backup-init` | Sicherungsschlüssel anlegen (einmal; macht der Installer) |
+| `setup-admin` | Firma + Company Admin anlegen |
+| `ichq <befehl>` | CLI im App-Container, z. B. `ichq mail-status`, `ichq mail-retry`, `ichq tenant-show <slug>` |
 
-## Aufbau
+## 4. Aufbau
 
-| Dienst | Aufgabe | Neustart |
+| Dienst | Aufgabe | Healthcheck |
 | --- | --- | --- |
-| `caddy` | TLS (Let's Encrypt, automatisch erneuert), HTTP→HTTPS, HSTS, 25-MB-Grenze, geschwärzte Logs | immer |
-| `app` | API + Oberfläche `/app` (uvicorn, 2 Prozesse, UID 10001) | immer |
-| `worker` | Outbox-Worker | immer |
-| `jobs` | stündlich `notifications-scan` und `auth-cleanup` (idempotent, Advisory-Lock) | immer |
-| `scanner` | Virenprüfung der Uploads (`documents-scan --loop 10`) | immer |
-| `clamav` | ClamAV-Daemon, aktualisiert Signaturen selbst | immer |
-| `postgres` | PostgreSQL 16 | immer |
-| `db-init`, `migrate` | einmalig je Start: Rollen/Passwörter angleichen, Migration | nein |
+| `caddy` | TLS (Let's Encrypt, automatisch erneuert), HTTP→HTTPS, HSTS, 25-MB-Grenze, geschwärzte Logs | — (HTTPS-Prüfung in `check`) |
+| `app` | API + Oberfläche `/app` (uvicorn, 2 Prozesse, UID 10001) | `/readiness` |
+| `worker` | Outbox + **E-Mail-Versand** | Lebenszeichen ≤ 2 min |
+| `jobs` | stündlich Benachrichtigungsregeln + Aufräumen | Lebenszeichen nur bei Erfolg, ≤ 2 h |
+| `scanner` | Virenprüfung der Uploads | Lebenszeichen ≤ 2 min |
+| `clamav` | ClamAV, aktualisiert Signaturen selbst | eigener |
+| `postgres` | PostgreSQL 16 | `pg_isready` |
 
-Nur Caddy veröffentlicht Ports (80, 443). Datenbank, App und ClamAV sind nur im internen Docker-Netz erreichbar.
-Volumes: `pgdata`, `filedata` (Dokumente), `caddydata` (Zertifikate), `caddyconfig`, `clamdb` (Signaturen).
+Nur Caddy veröffentlicht Ports. Alle Dauerdienste: `restart: unless-stopped`; `ichq.service` startet den Stack beim
+Booten. Volumes: `pgdata`, `filedata`, `caddydata` (Zertifikate), `caddyconfig`, `clamdb`, `restic_cache`.
 
-Startreihenfolge: `postgres` → `db-init` → `migrate` → `app` (gesund) → `caddy`; `worker`, `jobs`, `scanner` nach
-`migrate`. Alle Dauerdienste haben `restart: unless-stopped`; `ichq.service` startet den Stack beim Booten auch dann,
-wenn er vorher mit `hq stop` angehalten wurde.
+## 5. Sicherung und Wiederherstellung (ADR-016)
 
-## Virenprüfung
+* **Was:** Datenbank (geprüft lesbar), alle Dokumente, `secrets/`, `.env`, Manifest mit Prüfsummen.
+* **Wie:** restic, authentifiziert verschlüsselt, an `HQ_BACKUP_REPOSITORY`; alle 6 h; behält 7 tägliche,
+  5 wöchentliche, 12 monatliche Stände (`HQ_BACKUP_KEEP_*`).
+* **Schlüssel:** `/etc/ichq/backup.key` — liegt nie in der Sicherung. Kopie außerhalb des Servers ist Pflicht.
+* **Prüfung:** sonntags `backup-verify` — Wegwerf-PostgreSQL ohne Netz, Prüfsummen, jede Dokument-Datei vorhanden.
+  Fehler ⇒ Alarm-Mail; `check` meldet überfällige oder gescheiterte Läufe.
 
-Jeder Upload ist zuerst `quarantined` („Virenprüfung läuft"), Download 409. Der Dienst `scanner` prüft mit ClamAV:
-`clean` → ladbar; `infected` → dauerhaft gesperrt (die Datenbank verbietet jeden anderen Übergang). Ist ClamAV nicht
-erreichbar oder antwortet unklar, bleibt das Dokument gesperrt und wird beim nächsten Lauf erneut geprüft — nie
-ungeprüft freigegeben. Beim allerersten Start lädt ClamAV einige Minuten Signaturen.
+**Neuer Server nach Totalverlust:**
+```bash
+sudo git clone … /opt/ic-ware-hq && cd /opt/ic-ware-hq
+sudo install -d -m 700 /etc/ichq
+sudo sh -c 'umask 077; cat > /etc/ichq/backup.key'          # Schlüssel aus dem Tresor einfügen, Strg-D
+sudo sh -c 'umask 077; cat > /etc/ichq/backup-s3.env'       # S3-Zugang
+sudo deploy/install.sh --domain … --email … --backup-repository s3:https://…/<bucket>/ichq   # gleiche Werte
+sudo deploy/hq restore latest --yes
+```
+Die Secrets der Sicherung ersetzen die neu erzeugten (alte liegen in `secrets.vor-restore-*`), die
+Datenbank-Passwörter werden angeglichen. Danach `deploy/hq check`.
 
-## Sicherung und Wiederherstellung
+## 6. Updates und Rollback
 
-Eine Sicherung ist **ein** Archiv `ichq-backup-<UTC-Zeit>.tar` (Modus 600) mit `db.dump` (pg_dump), `storage.tar.gz`
-(alle Dokumente), `secrets.tar`, `env` und `manifest` (Git-Stand, Migration).
+`sudo deploy/hq update` sichert zuerst, holt den Code (`--ff-only`: lokale Änderungen brechen ab), aktualisiert
+PostgreSQL-16-/Caddy-/ClamAV-Images, baut und startet; die Migration läuft vor der App.
+* Scheitert der **Bau**, läuft die bisherige Version unverändert weiter.
+* Scheitert der **Start** nach einer Migration: `git checkout <voriger-Tag>`, `deploy/hq build`,
+  `deploy/hq restore latest --yes` (die Sicherung vom Update-Beginn). Migrationen haben `downgrade()`, aber der
+  geprüfte Weg zurück ist die Wiederherstellung.
 
-* **Sie enthält die Secrets** — wer die Datei hat, hat alle Daten. Sicher verwahren.
-* **Sie liegt auf demselben Server.** Gegen Plattenausfall/Verlust des Servers hilft sie nur, wenn sie regelmäßig
-  woanders hin kopiert wird — verschlüsselt, z. B.
-  `gpg -c --cipher-algo AES256 ichq-backup-….tar` und dann `scp`/`rclone`. **Noch nicht automatisiert** (M22, vor Tor 2).
-* Wiederherstellung auf einem **neuen** Server: Repository holen, `install.sh` wie oben (erzeugt neue Secrets),
-  dann `sudo deploy/hq restore /pfad/ichq-backup-….tar --yes`. Die Secrets der Sicherung ersetzen die neuen
-  (die alten liegen danach in `secrets.vor-restore-*`), Datenbank-Passwörter werden angeglichen.
+## 7. Monitoring und Fehlerbehebung
 
-## Was geprüft ist — und was nicht
+`sudo deploy/hq check` zeigt je Zeile `OK | WARNUNG | FEHLER`. Typische Meldungen:
 
-Belege mit Zahlen: ADR-015, Abschnitt „Belege". Automatisch in CI (Job `betrieb`, frischer Ubuntu-24.04-Runner):
-`install.sh` + `deploy/smoke-test.sh --wegwerf --docker-neustart`.
-
-| Teil | Geprüft |
+| Meldung | Ursache / Abhilfe |
 | --- | --- |
-| Installer auf leerem Docker, zweiter Lauf idempotent | ja (Testumgebung + CI) |
-| HTTPS über Caddy, HTTP→HTTPS, HSTS, CSP, kein `Server`-Header | ja (mit `localhost` und Caddys interner CA) |
-| Anmeldung über HTTPS, Aufgabe, Upload, Virenprüfung mit echtem ClamAV (EICAR) | ja |
-| App als UID 10001, App aus → 503, Client-IP in `auth_events`, Logs ohne Passwort/Token/Query | ja |
-| Sicherung → Totalverlust (Volumes + Secrets gelöscht) → Neuinstallation → Wiederherstellung | ja |
-| Neustart des Docker-Dienstes | ja (Testumgebung von Hand; CI mit `systemctl restart docker`) |
-| `hq update`, Aufbewahrung der Sicherungen | ja (Testumgebung) |
-| Eingabeprüfung Installer, Secrets-Rechte, Compose-Regeln, Passwort-Angleich, shellcheck | ja (`tests/test_deploy.py`, Mutationen) |
-| **echtes Let's-Encrypt-Zertifikat mit echter Domain** | **nein** — Testumgebung ohne öffentliche Domain |
-| DNS-Prüfung gegen echte Domain, Docker-Installation per apt, ufw | **nein** |
-| systemd-Units im Betrieb, Neustart des ganzen Servers | **nein** — nur `systemd-analyze verify` |
-| Zwei Scanner gleichzeitig (`SKIP LOCKED`) | **nein** |
+| `https: kein gültiges Zertifikat` | DNS zeigt nicht auf den Server, Port 80/443 zu → `deploy/hq logs caddy` |
+| `dienst-X: Healthcheck schlägt fehl` | `deploy/hq logs X`; `deploy/hq restart` |
+| `mail: N Mails gescheitert` | SMTP-Daten prüfen (`install.sh --smtp-…`), dann `deploy/hq ichq mail-retry` |
+| `mail-smtp: kein SMTP` | `install.sh … --smtp-host … --smtp-from …` |
+| `clamav: antwortet nicht` | beim ersten Start normal (Signaturen laden, einige Minuten) |
+| `backup: überfällig / fehlgeschlagen` | `deploy/hq backup` von Hand, Meldung lesen; S3-Zugang, Schlüssel |
+| `Sicherungsschlüssel passt nicht zum Repository` | falscher Inhalt in `/etc/ichq/backup.key` — Tresor-Kopie einspielen |
+| `sicherungsziel: nicht extern` | `install.sh … --backup-repository s3:https://…` |
+| `platte: nur N % frei` | alte Docker-Images: `docker image prune`; Sicherungsziel nicht auf dieser Platte |
+| Docker-Hub „429" beim Bau | `install.sh … --dockerhub-mirror mirror.gcr.io` oder `docker login` |
 
-## Bekannte Lücken für den Betrieb
+Logs: `deploy/hq logs app` (JSON, ohne Passwörter, Tokens, Query-Strings — geprüft im Ende-zu-Ende-Test).
 
-- **Sicherung unverschlüsselt und am selben Ort**, täglich (bis zu 24 h Datenverlust), kein WAL-Archiv, kein
-  automatischer Restore-Test → Tor 2 (M0) nicht erfüllt.
-- **Kein Monitoring/Alarm.** `/readiness` (auch `HEAD`) eignet sich für einen externen Uptime-Dienst.
-- **Kein E-Mail-Versand konfiguriert** (`ICHQ_SMTP_*`): Passwort-Reset und Einladungen antworten mit 503.
-- **Betriebssystem-Updates** (unattended-upgrades) und SSH-Härtung sind Sache des Servers, nicht des Installers.
-- **pgBouncer:** mit Statement-Pooling funktioniert `SET LOCAL` **nicht** — nicht einsetzen ohne Prüfung.
-- **Client-IP:** Die App vertraut `X-Forwarded-For` von `ICHQ_TRUSTED_PROXIES` (`*` in Compose, weil nur Caddy die
-  App erreicht). Wird die App anders erreichbar gemacht, auf Caddys Adresse einschränken.
+## 8. Umgebungsvariablen in `deploy/.env`
 
-## Ohne Compose: systemd-Timer
+| Variable | Bedeutung |
+| --- | --- |
+| `ICHQ_DOMAIN`, `ICHQ_ACME_EMAIL` | Domain, Let's-Encrypt-Kontakt (Pflicht) |
+| `ICHQ_SMTP_HOST`, `_PORT`, `_USER`, `_FROM`, `_STARTTLS`, `_SSL` | E-Mail; Passwort in `secrets/smtp_password` |
+| `ICHQ_ALERT_EMAIL` | Betreiberwarnungen |
+| `HQ_BACKUP_REPOSITORY` | Sicherungsziel (`s3:https://…` oder absoluter Pfad) |
+| `HQ_BACKUP_KEY_FILE`, `HQ_BACKUP_S3_ENV` | Schlüssel, S3-Zugang (Standard `/etc/ichq/…`) |
+| `HQ_BACKUP_KEEP_DAILY` / `_WEEKLY` / `_MONTHLY` | Aufbewahrung (7 / 5 / 12) |
+| `HQ_BACKUP_MAX_AGE_HOURS` | ab wann „überfällig" (26) |
+| `HQ_HEARTBEAT_URL` | externer Totmannschalter |
+| `HQ_DOCKERHUB_MIRROR`, `HQ_BUILD_CA_FILE` | Bau: Spiegel gegen Docker-Hub-Limit, CA hinter TLS-Proxy |
 
-`deploy/systemd/ichq-{notifications-scan,auth-cleanup}.{service,timer}` sind die Alternative zum Dienst `jobs` für
-Installationen, die die Jobs auf dem Host planen. **Nicht zusätzlich zum Dienst `jobs` aktivieren** (doppelt wäre
-dank Advisory-Lock harmlos, aber unnötig). `WorkingDirectory` anpassen, prüfen mit `systemd-analyze verify`.
+Alle `ICHQ_*`-Variablen der Anwendung: `docs/configuration.md`.
+
+## 9. Prüfstand
+
+**Automatisch in CI** (Job `betrieb`, frischer Ubuntu-24.04-Runner, bei jedem PR): Installation mit S3-Ziel (Test-Server
+moto), `deploy/smoke-test.sh --wegwerf --docker-neustart`: HTTPS/Header, Anmeldung, echtes ClamAV (EICAR), UID,
+503 bei App-Ausfall, Client-IP, Logs ohne Geheimnisse, verschlüsselte Sicherung, Unlesbarkeit ohne Schlüssel,
+Wiederherstellungstest, Betriebsprüfung ohne FEHLER, Totalverlust → Neuinstallation → Wiederherstellung, Neustart
+des Docker-Dienstes.
+
+**Von Hand in der Testumgebung** (09.10.2026): S3-Inhalt ohne Klartext (Dateiinhalt, DB-Passwort, E-Mail, Tabellen-
+name, Dump-Kopf gesucht — nichts gefunden); negative Proben: fehlende Dokument-Datei, falscher Schlüssel,
+manipuliertes S3-Objekt — jeweils rot mit Alarm-Mail; Alarm und Entwarnung kommen per SMTP an.
+
+**Nicht geprüft:** echtes Let's-Encrypt-Zertifikat, echte Domain/DNS-Prüfung, echter S3-Anbieter, echter
+SMTP-Anbieter, Docker-Installation per apt, ufw, systemd-Timer im Betrieb (nur `systemd-analyze verify`), Neustart
+des ganzen Servers, zwei Scanner gleichzeitig.
+
+## 10. Bekannte Grenzen
+
+* Bis zu **6 h Datenverlust** (kein WAL/PITR, ADR-016).
+* Ein Server, keine Hochverfügbarkeit; Update = kurze Unterbrechung.
+* pgBouncer mit Statement-Pooling bricht `SET LOCAL` — nicht einsetzen.
+* Client-IP: `ICHQ_TRUSTED_PROXIES=*` ist nur sicher, weil Caddy `X-Forwarded-For` überschreibt. Einen CDN/Proxy davor
+  nur mit angepasster Konfiguration.
+* Betriebssystem-Updates (unattended-upgrades) und SSH-Härtung sind Sache des Servers.

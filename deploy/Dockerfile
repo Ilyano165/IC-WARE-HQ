@@ -1,5 +1,5 @@
 # IC WARE HQ — Produktions-Image. Bauen aus dem Projektordner:
-#   docker build -f deploy/Dockerfile -t ic-ware-hq:0.1.0 .
+#   docker build -f deploy/Dockerfile -t ic-ware-hq:local .   (Betrieb: deploy/hq build)
 FROM python:3.12-slim AS build
 WORKDIR /src
 COPY requirements.lock pyproject.toml ./

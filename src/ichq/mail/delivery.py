@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import smtplib
 import ssl
+import time
 import uuid
 from dataclasses import dataclass
 from email.message import EmailMessage
@@ -85,8 +86,24 @@ def _wartezeit(versuch: int) -> int:
     return int(min(60 * 4 ** max(versuch - 1, 0), 6 * 3600))
 
 
+AUFBEWAHRUNG_TAGE = 90
+_zuletzt_aufgeraeumt = [0.0]
+
+
+def purge_old(engines: Engines, tage: int = AUFBEWAHRUNG_TAGE) -> int:
+    """Abgeschlossene Mails (gesendet, abgelaufen, gescheitert, abgebrochen) nach ``tage`` löschen — Empfänger-
+    adressen nicht länger halten als nötig. Wartende Mails bleiben immer."""
+    with worker_transaction(engines.worker) as s:
+        return _anzahl(s.execute(text(
+            "DELETE FROM mail_outbox WHERE status IN ('sent','expired','failed','cancelled') "
+            "AND created_at < now() - make_interval(days => :d)"), {"d": tage}))
+
+
 def dispatch_once(engines: Engines, settings: Settings, provider: Provider, limit: int = 20) -> MailRun:
     lauf = MailRun()
+    if time.monotonic() - _zuletzt_aufgeraeumt[0] > 3600:   # höchstens stündlich
+        _zuletzt_aufgeraeumt[0] = time.monotonic()
+        purge_old(engines)
     with worker_transaction(engines.worker) as s:
         s.execute(text("UPDATE mail_outbox SET status='pending', locked_at=NULL WHERE status='sending' "
                        "AND locked_at < now() - make_interval(mins => :m)"), {"m": STALE_MINUTES})

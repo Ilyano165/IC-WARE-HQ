@@ -271,3 +271,16 @@ def test_alert_ueber_outbox_und_direkt_wenn_db_weg(engines: Engines, settings: S
         kaputte.dispose()
     assert direkt.sent[0][0] == "betrieb@firma.test" and "DB weg" in direkt.sent[0][1]
     assert betrieb.alert(settings, engines, "x", "y", None) == 2                      # ohne Adresse: klarer Fehler
+
+
+def test_alte_abgeschlossene_mails_werden_geloescht(engines: Engines, settings: Settings) -> None:
+    from ichq.mail.delivery import purge_old
+    for i in range(3):
+        _einreihen(engines, mail=_mail(i), to=f"a{i}@firma.test")
+    OutboxMailer(settings, engines, nur=None).zustellen()
+    _einreihen(engines, to="wartet@firma.test")                                     # noch nicht versendet
+    db(engines, "UPDATE mail_outbox SET created_at = now() - interval '100 days'")
+    db(engines, "UPDATE mail_outbox SET created_at = now() WHERE recipient = 'a2@firma.test'")
+    assert purge_old(engines) == 2
+    assert sorted(r[0] for r in db(engines, "SELECT recipient FROM mail_outbox")) == ["a2@firma.test",
+                                                                                     "wartet@firma.test"]

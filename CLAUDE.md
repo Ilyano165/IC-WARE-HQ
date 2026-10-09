@@ -8,7 +8,7 @@ Mandantenfähige B2B-Plattform („digitales Betriebssystem eines Unternehmens")
 Entwicklung in Meilensteinen M0–M26 (Roadmap: `docs/architecture.md`, M0-Bericht separat).
 
 **Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication ✅ · **C0 Core-Plattform** (vor M3/M4 gebaut, ADR-010) · **M3 Mandanten** umgesetzt
-(`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **U1 Oberfläche** im IC-Ware-Design (`docs/ui.md`, ADR-013); **D0 Dashboard** (`docs/d0-dashboard.md`, ADR-014); **Betrieb** mit Installer/Launcher, Virenprüfung, Sicherung (`docs/server-setup.md`, ADR-015); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
+(`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **U1 Oberfläche** im IC-Ware-Design (`docs/ui.md`, ADR-013); **D0 Dashboard** (`docs/d0-dashboard.md`, ADR-014); **Betrieb** mit Installer/Launcher, Virenprüfung (`docs/server-setup.md`, ADR-015); **Launch-Vorbereitung 1.0.0rc1**: E-Mail-Outbox, verschlüsselte externe Sicherung mit Wiederherstellungstest, Monitoring, Sicherheitsprüfung (ADR-016, `docs/security-review.md`); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
 Tor 1/M3 → C0 → U1 → D0 → S1… — **keine D0-/S-Arbeit vor Tor 1.** Produktvision v2 ist ein **unbestätigter
 Entwurf** (`docs/produktvision-v2.md`). Nichts davon ist produktionsreif.
 
@@ -72,6 +72,8 @@ src/ichq/
   comments/ tasks/ documents/   C0: Fachbausteine auf dem Objektmodell; documents/scan.py: ClamAV-Prüfung (ADR-015)
   members/     M3: Mitglieder, Einladungen (Annehmen über auth/platform/app-Rolle), Last-Admin-Schutz
   notifications/  C0: Engine (Rechte beim Zustellen), Outbox-Handler, Regeln (`ichq notifications-scan`)
+  mail/        ADR-016: Mail-Outbox (Token-Mails verschlüsselt), Versand durch den Worker, Vorlagen, Sicherheitshinweise
+  betrieb.py   CLI-Betriebsbefehle: mail-status, mail-retry, alert, ops-check
   search/      C0: Volltext über `objects`, gruppiert, nur Sichtbares
   dashboard/   D0: Widget-Registry (Rechte je Widget), Loader (Zahl = gefilterte Liste), Zusammenstellung
   health/      Prüfungen für /health und /readiness
@@ -80,7 +82,8 @@ src/ichq/
   models.py    registriert ALLE Tabellen — jeder Einstiegspunkt lädt es
   app.py, cli.py, asgi.py, migrations/
 tests/         echte PostgreSQL-Tests, Unterprozess-Tests, Mutationsliste in scripts/
-deploy/        install.sh, hq (Launcher), smoke-test.sh, Dockerfile, docker-compose.yml, Caddyfile, init-roles.sql, Secrets-Skripte, systemd/
+deploy/        install.sh, hq (Launcher), lib/ (sicherung.sh, pruefung.sh), backup/ (restic-Image), smoke-test.sh, Dockerfile,
+               docker-compose.yml, Caddyfile, init-roles.sql, Secrets-Skripte, systemd/
 docs/          Architektur, Setup, Konfiguration, Migrationen, Tests, ADRs
 ```
 
@@ -91,7 +94,7 @@ docs/          Architektur, Setup, Konfiguration, Migrationen, Tests, ADRs
 | `ichq_owner` | nur Migrationen |
 | `ichq_app` | Mandantendaten, nur mit `app.tenant_id`; sieht an `users` nur Stammdaten-Spalten |
 | `ichq_platform` | Firmen, Konten anlegen, Plattform-Audit — keine Mandantendaten, keine Passwort-Spalten |
-| `ichq_worker` | Outbox abholen; Virenprüfung: nur `documents.scan_status` der gesetzten Firma (0007) |
+| `ichq_worker` | Outbox abholen; Virenprüfung: nur `documents.scan_status` der gesetzten Firma (0007); Mail-Outbox versenden/aufräumen (0008) |
 | `ichq_auth` | Anmeldung: Passwort-Hashes, Sitzungen, Reset, 2FA; Mitgliedschaften nur des eigenen Kontos (`app.user_id`) |
 
 ## Fallstricke, die schon einmal passiert sind
@@ -198,4 +201,12 @@ Noch offen aus M2: echter SMTP-Versand. (Compose-Smoke-Test erledigt: `deploy/sm
 - **Installer-Eingaben streng prüfen** — Domain/E-Mail landen vor dem Parsen im Caddyfile.
 - **Skripte:** shellcheck-sauber; Betriebsregeln als `mutation_deploy` in `scripts/mutation-check.sh`.
 - **`deploy/smoke-test.sh` nur auf Wegwerf-Installationen** — es löscht absichtlich alle Daten (Totalverlust-Probe).
-- Tor 2 ist **nicht** erreicht: Sicherung unverschlüsselt, am selben Ort, kein WAL, kein automatischer Restore-Test.
+- **Mails nur über `ichq.mail.outbox.enqueue`** in der Transaktion des Anlasses; Mails mit Token immer mit
+  `secret_key` (verschlüsselt). Nie direkt aus dem Webprozess senden. Sicherheitshinweise entstehen in `auth.events.record`.
+- **Sicherung nur über restic** (`deploy/lib/sicherung.sh`); der Schlüssel (`/etc/ichq/backup.key`) gehört nie in die
+  Sicherung oder ins Repository. Repository nur bei nachgewiesenem Fehlen anlegen.
+- **Bash-Fehlerbehandlung:** `set -e` greift in Funktionen im `if`/`&&`-Zusammenhang NICHT — Kernschritte über `streng`
+  (eigener Prozess). Jede Prüfung braucht eine Gegenprobe, die rot wird.
+- **Neues Problem, das der Betrieb merken muss ⇒ Prüfung in `deploy/lib/pruefung.sh`** (meldet per Mail).
+- Tor 2: Sicherung verschlüsselt und extern möglich, wöchentlicher Wiederherstellungstest vorhanden; **kein WAL/PITR**
+  (bis zu 6 h Datenverlust, ADR-016).

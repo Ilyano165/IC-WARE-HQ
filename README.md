@@ -32,12 +32,15 @@ in [docs/architecture.md](docs/architecture.md#abweichungen-vom-m0-bericht).
 
 ```bash
 sudo git clone https://github.com/ilyano165/ic-ware-hq.git /opt/ic-ware-hq && cd /opt/ic-ware-hq
-sudo deploy/install.sh --domain hq.example.de --email admin@example.de   # Docker, TLS, Autostart, tägliche Sicherung
-sudo deploy/hq setup-admin                                               # erste Firma + Admin
-sudo deploy/hq status | update | backup | restore <datei> --yes | logs
+sudo HQ_SMTP_PASSWORD='…' deploy/install.sh --domain hq.example.de --email admin@example.de \
+  --smtp-host smtp.example.de --smtp-user hq@example.de --smtp-from hq@example.de \
+  --alert-email betrieb@example.de --backup-repository s3:https://<endpunkt>/<bucket>/ichq
+sudo deploy/hq setup-admin                                    # erste Firma + Admin
+sudo deploy/hq status | check | update | backup | backup-verify | restore --yes | logs
 ```
 
-Details, Grenzen und was getestet ist: [docs/server-setup.md](docs/server-setup.md), ADR-015.
+Den angezeigten Sicherungsschlüssel getrennt vom Server aufbewahren. Details, Grenzen, was geprüft ist:
+[docs/server-setup.md](docs/server-setup.md), ADR-015, ADR-016, [docs/security-review.md](docs/security-review.md).
 
 ## Schnellstart (Entwicklung)
 
@@ -82,6 +85,6 @@ ichq serve --port 8000
 | [docs/configuration.md](docs/configuration.md) | Alle Umgebungsvariablen |
 | [docs/migrations.md](docs/migrations.md) | Migrationen schreiben und ausführen |
 | [docs/testing.md](docs/testing.md) | Tests und Mutationstests |
-| [docs/adr/](docs/adr/) | Architekturentscheidungen 001–015 |
+| [docs/adr/](docs/adr/) | Architekturentscheidungen 001–016 |
 | [docs/reference/](docs/reference/) | M4-Prototyp aus IC·HQ 2.x (Konzepte, nicht Code) |
 | [docs/claude-code-prompts.md](docs/claude-code-prompts.md) | Prompts für die Weiterarbeit mit Claude Code |

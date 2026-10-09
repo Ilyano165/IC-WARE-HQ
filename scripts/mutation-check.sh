@@ -261,6 +261,7 @@ mutation "Mail: App-Rolle schreibt für fremde Firma" "migrations/versions/0008_
     CREATE POLICY p_mail_outbox_auth_insert" "$MAIL"
 mutation "Mail: kein Sicherheitshinweis" "auth/events.py" "    if event in templates.SICHERHEIT and user_id is not None:|||    if False:" "$MAIL"
 mutation "Mail: HTML unmaskiert" "mail/templates.py" "    teile = \"\".join(f'<p style=\"margin:0 0 14px\">{escape(a)}</p>' for a in absaetze)|||    teile = \"\".join(f'<p style=\"margin:0 0 14px\">{a}</p>' for a in absaetze)" "$MAIL"
+mutation "Mail: Aufräumen löscht wartende Mails" "mail/delivery.py" "\"DELETE FROM mail_outbox WHERE status IN ('sent','expired','failed','cancelled') \"|||\"DELETE FROM mail_outbox WHERE status IS NOT NULL \"" "$MAIL"
 mutation "Mail: Warnung ohne Direktversand bei DB-Ausfall" "betrieb.py" "    provider = provider or build_provider(settings)|||    return 1" "$MAIL"
 # Wie mutation, aber in einer Kopie von deploy/ (Tests lesen ICHQ_DEPLOY_DIR)
 mutation_deploy() {

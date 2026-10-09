@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ic-ware-hq"
-version = "0.1.0"
+version = "1.0.0rc1"
 description = "IC WARE HQ — mandantenfähige Unternehmensplattform (M1 Foundation)"
 requires-python = ">=3.12"
 dependencies = [
