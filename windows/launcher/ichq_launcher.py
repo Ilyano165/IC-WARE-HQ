@@ -251,9 +251,9 @@ def main(argv: list[str] | None = None) -> int:
               + (f" [{erg.detail}]" if erg.detail else ""))
         return 0 if erg.oeffnen else 1
     if args == ["--adresse"]:
-        url = adresse()
-        print(url or "keine Adresse gespeichert")
-        return 0 if url else 1
+        gespeichert = adresse()
+        print(gespeichert or "keine Adresse gespeichert")
+        return 0 if gespeichert else 1
     if args[:1] == ["--vergessen"]:
         vergiss()
         return 0
