@@ -1,4 +1,4 @@
-# IC WARE HQ SERVER — Windows-Installer bauen (ADR-018). Läuft auf windows-latest (CI) oder einem Windows-PC mit Git.
+﻿# IC WARE HQ SERVER — Windows-Installer bauen (ADR-018). Läuft auf windows-latest (CI) oder einem Windows-PC mit Git.
 #   powershell -ExecutionPolicy Bypass -File windows\build-server.ps1
 # Ergebnis: dist\IC-WARE-HQ-Server-Setup-<version>.exe + .sha256. Enthält den Quelltext des aktuellen Commits
 # (git archive) — der Server wird daraus in der WSL-Umgebung gebaut, genau wie auf einem Linux-Server.

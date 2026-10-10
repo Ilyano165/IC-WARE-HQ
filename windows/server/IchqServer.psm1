@@ -71,7 +71,7 @@ function ConvertTo-IchqWslPfad {
     return '/mnt/' + $Matches[1].ToLowerInvariant() + '/' + ($Matches[2] -replace '\\', '/')
 }
 
-function Set-IchqNurAdmins {
+function Set-IchqAdminZugriff {
     <# Datei/Ordner nur für SYSTEM und Administratoren (z. B. Token bis zur Übergabe an Linux). #>
     [CmdletBinding(SupportsShouldProcess)]
     param([Parameter(Mandatory)][string]$Pfad)
@@ -133,5 +133,5 @@ function Get-IchqDomain {
 }
 
 Export-ModuleMember -Function Get-IchqKonstante, Test-IchqDomain, Test-IchqEmail, Test-IchqToken, ConvertTo-IchqToken,
-    Assert-IchqPruefsumme, ConvertTo-IchqWslPfad, Set-IchqNurAdmins, Get-IchqWslListe, Test-IchqWslBereit,
+    Assert-IchqPruefsumme, ConvertTo-IchqWslPfad, Set-IchqAdminZugriff, Get-IchqWslListe, Test-IchqWslBereit,
     Invoke-IchqLinux, Get-IchqEnvWert, Get-IchqDomain

@@ -1,4 +1,4 @@
-# IC WARE HQ — Windows-Installer bauen (ADR-017). Läuft auf windows-latest (CI) oder einem Windows-PC mit Python 3.12.
+﻿# IC WARE HQ — Windows-Installer bauen (ADR-017). Läuft auf windows-latest (CI) oder einem Windows-PC mit Python 3.12.
 #   powershell -ExecutionPolicy Bypass -File windows\build.ps1
 # Ergebnis: dist\IC-WARE-HQ-Setup-<version>.exe + .sha256
 $ErrorActionPreference = 'Stop'

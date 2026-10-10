@@ -60,7 +60,7 @@ if ($NurPruefen) { Write-Host 'Prüfung bestanden (nichts geändert).'; exit 0 }
 
 if ($token) {   # bis zur Übergabe an Linux nur für Administratoren lesbar (überlebt ggf. den Neustart)
     Set-Content -LiteralPath $tokenAblage -Value $token -NoNewline -Encoding ascii
-    Set-IchqNurAdmins $tokenAblage
+    Set-IchqAdminZugriff $tokenAblage
 }
 
 # ---- 2. WSL2 ------------------------------------------------------------------------------------------------------

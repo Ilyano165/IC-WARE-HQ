@@ -1,4 +1,4 @@
-# IC WARE HQ — gebauten Installer ECHT prüfen (CI auf windows-latest): stille Installation mit Adresse, Dateien,
+﻿# IC WARE HQ — gebauten Installer ECHT prüfen (CI auf windows-latest): stille Installation mit Adresse, Dateien,
 # Verknüpfungen, Launcher-Kommandozeile, Deinstallation. Nutzt keinen IC-WARE-HQ-Server (der läuft im Linux-Job);
 # die Gegenprobe „fremde Webseite" geht gegen https://github.com.
 $ErrorActionPreference = 'Stop'
