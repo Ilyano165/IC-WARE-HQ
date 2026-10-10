@@ -61,11 +61,11 @@ def _pruefen(slug: str, name: str, timezone: str, language: str, currency: str) 
     try:
         ZoneInfo(timezone)
     except (ZoneInfoNotFoundError, ValueError):
-        raise ValidationFailed("timezone ist keine gültige IANA-Zeitzone") from None
+        raise ValidationFailed("Zeitzone unbekannt (z. B. Europe/Berlin)") from None
     if language not in SPRACHEN:
         raise ValidationFailed(f"language muss eine von {sorted(SPRACHEN)} sein")
     if not re.fullmatch(r"[A-Z]{3}", currency):
-        raise ValidationFailed("currency muss ein ISO-4217-Code sein")
+        raise ValidationFailed("Währung: dreistelliger ISO-Code in Großbuchstaben, z. B. EUR")
 
 
 def create_tenant(session: Session, *, name: str, slug: str, actor: str, legal_name: str | None = None,

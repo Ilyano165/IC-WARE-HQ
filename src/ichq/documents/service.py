@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import exists, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from ichq.activity.service import record as activity
@@ -23,6 +23,8 @@ from ichq.objects.service import create_object, resolve
 from ichq.storage import Storage, object_key
 
 MAX_BYTES = 20 * 1024 * 1024
+TENANT_QUOTA_BYTES = 20 * 1024 ** 3     # 20 GiB je Firma — schützt den gemeinsamen Speicher vor einem Mandanten
+UPLOADS_PER_MEMBER_HOUR = 200           # gegen Speicher-/Scanner-Flut durch ein Konto (Audit B2)
 CONTENT_TYPES = frozenset({"application/pdf", "image/png", "image/jpeg", "application/xml", "text/xml",
                            "text/plain", "text/csv"})
 SORTS = {"created_at": SortKey("created_at", ObjectRow.created_at, "ts"),
@@ -35,6 +37,14 @@ class UnsupportedMediaType(AppError):
 
 class PayloadTooLarge(AppError):
     status, code, title = 413, "payload_too_large", "Anfrage zu groß"
+
+
+class TooManyUploads(AppError):
+    status, code, title = 429, "too_many_uploads", "Zu viele Uploads"
+
+
+class QuotaExceeded(AppError):
+    status, code, title = 413, "storage_quota_exceeded", "Speicherkontingent erschöpft"
 
 
 class Quarantined(AppError):
@@ -60,6 +70,7 @@ def upload(session: Session, storage: Storage, principal: Principal, *, filename
     if not data:
         raise ValidationFailed("Leere Datei")
     name = clean_filename(filename)
+    _grenzen(session, principal, len(data))
     obj = create_object(session, type_="document", title=name, actor_membership_id=principal.membership_id)
     key = object_key(obj.tenant_id, obj.id, 1)
     doc = Document(id=obj.id, tenant_id=obj.tenant_id, filename=name, content_type=typ, size_bytes=len(data),
@@ -73,6 +84,18 @@ def upload(session: Session, storage: Storage, principal: Principal, *, filename
           target_id=obj.public_id, data={"size": len(data), "sha256": doc.sha256, "content_type": typ})
     emit_event(session, "document.uploaded", {"document_id": str(obj.id)})
     return doc, obj
+
+
+def _grenzen(session: Session, principal: Principal, neu: int) -> None:
+    """Kontingent der Firma und Upload-Rate je Mitglied (RLS begrenzt beide Zählungen auf die eigene Firma)."""
+    belegt = session.scalar(select(func.coalesce(func.sum(Document.size_bytes), 0))) or 0
+    if belegt + neu > TENANT_QUOTA_BYTES:
+        raise QuotaExceeded(f"Die Firma hat ihr Speicherkontingent ({TENANT_QUOTA_BYTES // 1024 ** 3} GiB) erreicht.")
+    zuletzt = session.scalar(select(func.count()).select_from(ObjectRow).where(
+        ObjectRow.type == "document", ObjectRow.created_by_membership_id == principal.membership_id,
+        ObjectRow.created_at > func.now() - text("interval '1 hour'"))) or 0
+    if zuletzt >= UPLOADS_PER_MEMBER_HOUR:
+        raise TooManyUploads(f"Höchstens {UPLOADS_PER_MEMBER_HOUR} Uploads pro Stunde — bitte später erneut.")
 
 
 def get(session: Session, principal: Principal, ref: str) -> tuple[Document, ObjectRow]:
@@ -89,13 +112,17 @@ def review(session: Session, principal: Principal, ref: str, decision: str) -> t
     doc, obj = get(session, principal, ref)
     if doc.review_status != "pending":
         raise Conflict("Dokument wurde bereits geprüft")
+    if decision == "approved" and doc.scan_status != "clean":   # Freigabe nur nach bestandener Virenprüfung
+        raise Conflict("Freigabe erst nach der Virenprüfung möglich" if doc.scan_status == "quarantined"
+                       else "Dokument ist wegen Schadsoftware gesperrt und kann nicht freigegeben werden")
+    selbst = obj.created_by_membership_id == principal.membership_id   # sichtbar statt verboten (Ein-Personen-Firma)
     jetzt = session.scalar(select(func.now()))      # vor der Änderung: Autoflush darf keinen Halbzustand schreiben
     doc.review_status, doc.reviewed_by_membership_id, doc.reviewed_at = decision, principal.membership_id, jetzt
     session.flush()
     activity(session, obj.id, "document.reviewed", actor_membership_id=principal.membership_id,
-             data={"decision": decision})
+             data={"decision": decision, "self_review": selbst})
     audit(session, "document.reviewed", actor_membership_id=principal.membership_id, target_type="document",
-          target_id=obj.public_id, data={"decision": decision})
+          target_id=obj.public_id, data={"decision": decision, "self_review": selbst})
     return doc, obj
 
 

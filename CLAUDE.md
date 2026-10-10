@@ -8,7 +8,9 @@ Mandantenfähige B2B-Plattform („digitales Betriebssystem eines Unternehmens")
 Entwicklung in Meilensteinen M0–M26 (Roadmap: `docs/architecture.md`, M0-Bericht separat).
 
 **Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication ✅ · **C0 Core-Plattform** (vor M3/M4 gebaut, ADR-010) · **M3 Mandanten** umgesetzt
-(`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **U1 Oberfläche** im IC-Ware-Design (`docs/ui.md`, ADR-013); **D0 Dashboard** (`docs/d0-dashboard.md`, ADR-014); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
+(`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **U1 Oberfläche** im IC-Ware-Design (`docs/ui.md`, ADR-013); **D0 Dashboard** (`docs/d0-dashboard.md`, ADR-014); **Betrieb** mit Installer/Launcher, Virenprüfung (`docs/server-setup.md`, ADR-015); **Launch-Vorbereitung 1.0.0rc1**: E-Mail-Outbox, verschlüsselte externe Sicherung mit Wiederherstellungstest, Monitoring, Sicherheitsprüfung (ADR-016, `docs/security-review.md`); **Zugang**: öffentliche Adresse mit Diagnose, Web-App-Manifest,
+Windows-Launcher + Installer (ADR-017, `docs/windows.md`); **Server auf Windows-PC** über WSL2 + Cloudflare Tunnel,
+Domain änderbar (ADR-018, `docs/windows-server.md`); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
 Tor 1/M3 → C0 → U1 → D0 → S1… — **keine D0-/S-Arbeit vor Tor 1.** Produktvision v2 ist ein **unbestätigter
 Entwurf** (`docs/produktvision-v2.md`). Nichts davon ist produktionsreif.
 
@@ -69,9 +71,11 @@ src/ichq/
   objects/     C0: Typ-Registry, `objects` (Supertyp), Verknüpfungen/Freigaben (Tabellen), Sichtbarkeit (EINE Stelle)
   activity/    C0: Benutzerverlauf (≠ Audit)
   relations/   C0: Verknüpfen, Freigeben (Services)
-  comments/ tasks/ documents/   C0: Fachbausteine auf dem Objektmodell
+  comments/ tasks/ documents/   C0: Fachbausteine auf dem Objektmodell; documents/scan.py: ClamAV-Prüfung (ADR-015)
   members/     M3: Mitglieder, Einladungen (Annehmen über auth/platform/app-Rolle), Last-Admin-Schutz
   notifications/  C0: Engine (Rechte beim Zustellen), Outbox-Handler, Regeln (`ichq notifications-scan`)
+  mail/        ADR-016: Mail-Outbox (Token-Mails verschlüsselt), Versand durch den Worker, Vorlagen, Sicherheitshinweise
+  betrieb.py   CLI-Betriebsbefehle: mail-status, mail-retry, alert, ops-check
   search/      C0: Volltext über `objects`, gruppiert, nur Sichtbares
   dashboard/   D0: Widget-Registry (Rechte je Widget), Loader (Zahl = gefilterte Liste), Zusammenstellung
   health/      Prüfungen für /health und /readiness
@@ -80,7 +84,11 @@ src/ichq/
   models.py    registriert ALLE Tabellen — jeder Einstiegspunkt lädt es
   app.py, cli.py, asgi.py, migrations/
 tests/         echte PostgreSQL-Tests, Unterprozess-Tests, Mutationsliste in scripts/
-deploy/        Dockerfile, docker-compose.yml, Caddyfile, init-roles.sql, generate-secrets.sh
+windows/       ADR-017: Launcher (launcher/, nur Standardbibliothek), Inno-Setup-Skript, build.ps1, test-installer.ps1
+               ADR-018: server/ (Windows-Server-Installer: WSL2-Einrichtung, Steuerung, Pester-Tests), build-server.ps1
+deploy/        install.sh, hq (Launcher), lib/ (sicherung.sh, pruefung.sh, diagnose.sh, tunnel.sh), backup/ (restic-Image),
+               smoke-test.sh, tunnel-proxy-test.sh, Caddyfile(.tunnel), Dockerfile,
+               docker-compose.yml, Caddyfile, init-roles.sql, Secrets-Skripte, systemd/
 docs/          Architektur, Setup, Konfiguration, Migrationen, Tests, ADRs
 ```
 
@@ -91,7 +99,7 @@ docs/          Architektur, Setup, Konfiguration, Migrationen, Tests, ADRs
 | `ichq_owner` | nur Migrationen |
 | `ichq_app` | Mandantendaten, nur mit `app.tenant_id`; sieht an `users` nur Stammdaten-Spalten |
 | `ichq_platform` | Firmen, Konten anlegen, Plattform-Audit — keine Mandantendaten, keine Passwort-Spalten |
-| `ichq_worker` | Outbox abholen |
+| `ichq_worker` | Outbox abholen; Virenprüfung: nur `documents.scan_status` der gesetzten Firma (0007); Mail-Outbox versenden/aufräumen (0008) |
 | `ichq_auth` | Anmeldung: Passwort-Hashes, Sitzungen, Reset, 2FA; Mitgliedschaften nur des eigenen Kontos (`app.user_id`) |
 
 ## Fallstricke, die schon einmal passiert sind
@@ -158,7 +166,7 @@ Keine Steuerfunktion geht vor **Tor S** an Kunden (Vision Abschnitt 5).
 
 Statusbericht `docs/m2-statusbericht.md`. Dabei gefunden: Daten-Pflege in Migrationen sah wegen FORCE RLS keine Zeile —
 **Daten-Änderungen in Migrationen immer in `with ohne_force(...)`** (`ichq.migrations.datenpflege`).
-Noch offen aus M2: Compose-Smoke-Test (Prompt-Abschnitt 2), echter SMTP-Versand.
+Noch offen aus M2: echter SMTP-Versand. (Compose-Smoke-Test erledigt: `deploy/smoke-test.sh`, CI-Job `betrieb`.)
 
 ## Regeln für Rechte (M4)
 
@@ -187,3 +195,44 @@ Noch offen aus M2: Compose-Smoke-Test (Prompt-Abschnitt 2), echter SMTP-Versand.
   neue Kennzahl ⇒ Eintrag im Gleichheitstest (`tests/test_d0_dashboard.py`).
 - **Keine Werte ohne Datenquelle:** fehlende Module nur als `PLANNED` (Titel + Modul), nie mit Zahlen.
 - „Heute" immer in der Zeitzone der Firma (`dashboard.service.context`).
+
+## Regeln für den Betrieb (ADR-015)
+
+- **Upload nie ungeprüft freigeben:** nur `stream: OK` ist sauber; alles andere lässt das Dokument in Quarantäne.
+  Den Übergang erzwingt die DB (`tr_documents_scan_status`); schreiben darf ihn nur `ichq_worker` (Scanner), nie `ichq_app`.
+- **Secret-Dateien sind die einzige Quelle** der DB-Passwörter (`init-roles.sql` gleicht bei jedem Start an).
+  Neue App-Secrets: in Compose (`x-app-secrets`), `generate-secrets.sh` und `fix-secret-permissions.sh` (`APP=`).
+- **Nur Caddy veröffentlicht Ports**; jeder Dauerdienst `restart: unless-stopped` (`tests/test_deploy.py`).
+- **Installer-Eingaben streng prüfen** — Domain/E-Mail landen vor dem Parsen im Caddyfile.
+- **Skripte:** shellcheck-sauber; Betriebsregeln als `mutation_deploy` in `scripts/mutation-check.sh`.
+- **`deploy/smoke-test.sh` nur auf Wegwerf-Installationen** — es löscht absichtlich alle Daten (Totalverlust-Probe).
+- **Mails nur über `ichq.mail.outbox.enqueue`** in der Transaktion des Anlasses; Mails mit Token immer mit
+  `secret_key` (verschlüsselt). Nie direkt aus dem Webprozess senden. Sicherheitshinweise entstehen in `auth.events.record`.
+- **Sicherung nur über restic** (`deploy/lib/sicherung.sh`); der Schlüssel (`/etc/ichq/backup.key`) gehört nie in die
+  Sicherung oder ins Repository. Repository nur bei nachgewiesenem Fehlen anlegen.
+- **Bash-Fehlerbehandlung:** `set -e` greift in Funktionen im `if`/`&&`-Zusammenhang NICHT — Kernschritte über `streng`
+  (eigener Prozess). Jede Prüfung braucht eine Gegenprobe, die rot wird.
+- **Neues Problem, das der Betrieb merken muss ⇒ Prüfung in `deploy/lib/pruefung.sh`** (meldet per Mail).
+- **Erreichbarkeit:** jeder A/AAAA-Eintrag muss auf den Server zeigen (`dns_vergleich`); neue Ursache, warum die
+  Adresse nicht erreichbar ist ⇒ in `deploy/lib/diagnose.sh` mit verständlichem Satz + Test.
+- Tor 2: Sicherung verschlüsselt und extern möglich, wöchentlicher Wiederherstellungstest vorhanden; **kein WAL/PITR**
+  (bis zu 6 h Datenverlust, ADR-016).
+
+## Regeln für den Windows-Zugang (ADR-017)
+
+- **Nie ein zweiter Server oder eine lokale Datenbank** auf Arbeitsplätzen — der Launcher speichert nur die Adresse.
+- Ungültiges Zertifikat ⇒ harter Fehler, kein „trotzdem öffnen"; `http://` nur für localhost; keinen Weiterleitungen folgen.
+- Version des Launchers = `ichq.__version__` (Test + `build.ps1`); Release nur per Tag `v<version>` (`release.yml`).
+- Neue Sicherheitsregel im Launcher ⇒ `mutation_windows` in `scripts/mutation-check.sh`.
+
+## Regeln für den Tunnelbetrieb / Server auf Windows (ADR-018)
+
+- **Besucher-IP nur von cloudflared:** `trusted_proxies` in `Caddyfile.tunnel` ist genau die feste Adresse von
+  `cloudflared` (172.31.250.10/32), nie ein Bereich; an die App geht genau `{client_ip}`. Prüfung: `deploy/tunnel-proxy-test.sh`.
+- `cloudflared` nur im Netz `tunnel` (sieht nur Caddy), Token nur als Secret-Datei (`--token-file`), Image-Version fest.
+- Im Tunnelbetrieb veröffentlicht Caddy nur auf 127.0.0.1 (`ICHQ_BIND`). Modus nur über `modus_setzen`.
+- **Domain/Token-Eingaben** (`domain_gueltig`, `token_gueltig`) gelten gleich in Bash und PowerShell
+  (`test_windows_server_prueft_wie_linux`). Eingaben landen im Caddyfile bzw. in Skripten — nie lockern.
+- Windows-Skripte: was an Linux geht, **über STDIN** (`Invoke-IchqLinux`), nie Geheimnisse in Kommandozeilen;
+  Dateien mit UTF-8-BOM (Windows PowerShell 5.1); ein Windows-Server ist kein zweiter Stack — immer `deploy/install.sh`.
+- Deinstallation löscht Daten nur auf ausdrückliche Wahl (Standard Nein, still nie).

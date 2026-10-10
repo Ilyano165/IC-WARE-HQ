@@ -25,8 +25,30 @@ in [docs/architecture.md](docs/architecture.md#abweichungen-vom-m0-bericht).
   Kommentare mit Erwähnungen, Dokumente (Quarantäne), Aktivitätsverlauf getrennt vom Audit, Benachrichtigungen
   mit Rechteprüfung beim Zustellen, globale Suche, Audit-Export — siehe `docs/core-*.md`
 - M3 Mandanten: Firmenprofil, Mitglieder, Einladungen, Last-Admin-Schutz, zentraler Schreibschutz bei Pause
-- 378 Tests gegen echtes PostgreSQL (inkl. IDOR-Generator über alle Routen und E2E mit echtem Server), 90 Mutationstests,
+- 487 Tests gegen echtes PostgreSQL (inkl. IDOR-Generator über alle Routen und E2E mit echtem Server), 159 Mutationstests,
   Docker/Compose/Caddy, CI
+
+## Auf einem Server betreiben (feste Domain)
+
+```bash
+sudo git clone https://github.com/ilyano165/ic-ware-hq.git /opt/ic-ware-hq && cd /opt/ic-ware-hq
+sudo HQ_SMTP_PASSWORD='…' deploy/install.sh --domain hq.example.de --email admin@example.de \
+  --smtp-host smtp.example.de --smtp-user hq@example.de --smtp-from hq@example.de \
+  --alert-email betrieb@example.de --backup-repository s3:https://<endpunkt>/<bucket>/ichq
+sudo deploy/hq setup-admin                                    # erste Firma + Admin
+sudo deploy/hq status | check | diagnose | update | backup | backup-verify | restore --yes | logs
+```
+
+Den angezeigten Sicherungsschlüssel getrennt vom Server aufbewahren. Details, Grenzen, was geprüft ist:
+[docs/server-setup.md](docs/server-setup.md), ADR-015, ADR-016, [docs/security-review.md](docs/security-review.md).
+
+**Zugriff:** alle Nutzer über `https://<domain>` (Browser, als App installierbar auf PC/Handy/Tablet) oder unter
+Windows mit dem Installer `IC-WARE-HQ-Setup-<version>.exe` (Artefakt des CI-Jobs `windows` bzw. GitHub-Release) —
+ein Zugang zur zentralen Instanz, kein zweiter Server: [docs/windows.md](docs/windows.md), ADR-017.
+
+**Server auf dem eigenen Windows-PC:** `IC-WARE-HQ-Server-Setup-<version>.exe` — WSL2 + derselbe Linux-Stack,
+öffentlich über Cloudflare Tunnel (kein offener Port), Domain änderbar: [docs/windows-server.md](docs/windows-server.md), ADR-018.
+Linux-Server im Tunnelbetrieb: `deploy/install.sh … --tunnel`.
 
 ## Schnellstart (Entwicklung)
 
@@ -67,10 +89,12 @@ ichq serve --port 8000
 | [docs/m0-zielarchitektur.md](docs/m0-zielarchitektur.md) | Verbindliche Zielarchitektur, Roadmap, Tore |
 | [docs/architecture.md](docs/architecture.md) | Schichten, Datenbankrollen, Mandantenisolation, Abweichungen von M0 |
 | [docs/development.md](docs/development.md) | Lokale Einrichtung |
-| [docs/server-setup.md](docs/server-setup.md) | Betrieb mit Docker Compose und Caddy |
+| [docs/server-setup.md](docs/server-setup.md) | Server mit fester Domain: DNS, Installer, `deploy/hq`, Sicherung, Virenprüfung |
+| [docs/windows.md](docs/windows.md) | Windows-Installer und Desktop-Launcher (Zugang zur zentralen Instanz) |
+| [docs/windows-server.md](docs/windows-server.md) | Server auf dem eigenen Windows-PC mit Cloudflare Tunnel, Domain ändern |
 | [docs/configuration.md](docs/configuration.md) | Alle Umgebungsvariablen |
 | [docs/migrations.md](docs/migrations.md) | Migrationen schreiben und ausführen |
 | [docs/testing.md](docs/testing.md) | Tests und Mutationstests |
-| [docs/adr/](docs/adr/) | Architekturentscheidungen 001–005 |
+| [docs/adr/](docs/adr/) | Architekturentscheidungen 001–016 |
 | [docs/reference/](docs/reference/) | M4-Prototyp aus IC·HQ 2.x (Konzepte, nicht Code) |
 | [docs/claude-code-prompts.md](docs/claude-code-prompts.md) | Prompts für die Weiterarbeit mit Claude Code |

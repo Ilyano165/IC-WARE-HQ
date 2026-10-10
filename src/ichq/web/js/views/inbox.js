@@ -4,6 +4,9 @@ import { get, meldung, post, query } from "../api.js";
 
 const ZIEL = { task: "aufgaben", document: "dokumente" };
 const link = (o) => (o && ZIEL[o.type] ? `#/${ZIEL[o.type]}/${o.id}` : null);
+const ART = { task: "Aufgabe", document: "Dokument", member: "Mitglied", person: "Person", company: "Firma",
+  project: "Projekt", receipt: "Beleg", invoice: "Rechnung", comment: "Kommentar" };
+const art = (t) => ART[t] || "Eintrag";
 const GRUPPEN = { tasks: "Aufgaben", documents: "Dokumente", persons: "Personen", companies: "Firmen", projects: "Projekte",
   receipts: "Belege", invoices: "Rechnungen" };
 
@@ -20,7 +23,7 @@ export async function benachrichtigungen(el, _p, q) {
       nurNeu ? "Auch gelesene zeigen" : "Nur ungelesene"), daten.unread_count ? alle : null)),
   daten.items.length ? h("div", { class: "list" }, daten.items.map((n) => h("div", { class: "item" },
     h("span", {}, link(n.object) ? h("a", { href: link(n.object) }, n.title) : n.title,
-      h("div", { class: "meta" }, zeit(n.created_at), n.object ? ` · ${n.object.title}` : "")),
+      h("div", { class: "meta" }, zeit(n.created_at), n.object ? ` · ${art(n.object.type)}` : "")),
     n.read ? h("span", { class: "tag tag--muted" }, "gelesen")
       : h("button", { class: "btn btn--ghost btn--sm", type: "button", on: { click: async () => {
         try { await post(`/notifications/${n.id}/read`); neu(); } catch (e) { toast(meldung(e), "error"); }
@@ -35,7 +38,7 @@ export async function suche(el, _p, q) {
   const gruppen = Object.entries(daten.groups).filter(([, g]) => g.items.length);
   ersetze(el, kopf, gruppen.length ? gruppen.map(([name, g]) => h("section", { class: "card" }, h("h2", {}, GRUPPEN[name] || name),
     h("div", { class: "list" }, g.items.map((t) => h("div", { class: "item" },
-      link(t) ? h("a", { href: link(t) }, t.title) : h("span", {}, t.title), h("span", { class: "tag tag--muted" }, t.type)))),
+      link(t) ? h("a", { href: link(t) }, t.title) : h("span", {}, t.title), h("span", { class: "tag tag--muted" }, art(t.type))))),
     g.has_more ? h("p", { class: "muted small" }, "Weitere Treffer — Suche verfeinern.") : null))
     : h("p", { class: "empty" }, "Keine Treffer."));
 }

@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+# IC WARE HQ — Bedienung einer Einzelserver-Installation (ADR-015). Einrichtung: deploy/install.sh.
+#
+#   deploy/hq status                 Dienste, Gesundheit, HTTPS von außen
+#   deploy/hq check [--alert]        Betriebsprüfung (Dienste, Zertifikat, Jobs, Mail, Platte, Sicherung); Alarm-Mail
+#   deploy/hq diagnose               Warum ist die Domain nicht erreichbar? DNS (A/AAAA), Ports, Firewall, Zertifikat, Tunnel
+#   deploy/hq domain <neue-domain>   Domain ändern (App, Mail-Links, Zertifikat; im Tunnelbetrieb mit Cloudflare-Anleitung)
+#   deploy/hq tunnel-token           Cloudflare-Tunnel-Token ersetzen (Tunnelbetrieb, ADR-018)
+#   deploy/hq start | stop | restart
+#   deploy/hq logs [dienst]          z. B. logs app, logs caddy (folgt der Ausgabe)
+#   deploy/hq build                  Image bauen (ic-ware-hq:local)
+#   deploy/hq update                 Sicherung → git pull --ff-only → Images aktualisieren → bauen → starten
+#   deploy/hq backup                 verschlüsselte Sicherung (restic) nach HQ_BACKUP_REPOSITORY (ADR-016)
+#   deploy/hq backup-init            Sicherungsschlüssel anlegen (einmal; getrennt vom Server aufbewahren!)
+#   deploy/hq backup-verify          Wiederherstellungstest in Wegwerf-Umgebung (Prüfsummen, Daten, Dateien)
+#   deploy/hq backup-status          letzte Sicherung/Prüfung, Snapshots
+#   deploy/hq restore [snap] --yes   Sicherung vollständig wiederherstellen (überschreibt alles!)
+#   deploy/hq setup-admin            erste Firma + Company Admin anlegen (fragt alles ab)
+#   deploy/hq ichq <befehl> …        beliebiger ichq-Befehl im App-Container, z. B. ichq tenant-show <slug>
+set -euo pipefail
+
+HQ_SELF="$(readlink -f "$0")"
+ROOT="$(cd "$(dirname "$HQ_SELF")/.." && pwd)"
+DEPLOY="$ROOT/deploy"
+ENVFILE="$DEPLOY/.env"
+IMAGE="ic-ware-hq:local"
+
+fehler() { echo "Fehler: $*" >&2; exit 1; }
+info() { echo "==> $*"; }
+compose() {   # im Tunnelbetrieb (ADR-018) gehört cloudflared dazu
+  local p=(); [ "$(env_wert HQ_ZUGANG)" = tunnel ] && p=(--profile tunnel)
+  docker compose -f "$DEPLOY/docker-compose.yml" --env-file "$ENVFILE" "${p[@]}" "$@"
+}
+env_wert() { sed -n "s/^$1=//p" "$ENVFILE" | tail -1; }
+
+voraussetzungen() {
+  command -v docker >/dev/null || fehler "Docker fehlt — deploy/install.sh ausführen."
+  docker compose version >/dev/null 2>&1 || fehler "Docker-Compose-Plugin fehlt (docker compose)."
+  [ -f "$ENVFILE" ] || fehler "$ENVFILE fehlt — deploy/install.sh --domain … --email … ausführen."
+  [ -d "$ROOT/secrets" ] || fehler "secrets/ fehlt — deploy/install.sh ausführen."
+  # Ältere Installationen nach „hq update": neue (leere) Secret-Dateien anlegen, sonst lehnt Compose den Start ab
+  [ -e "$ROOT/secrets/cloudflare_tunnel_token" ] || "$DEPLOY/fix-secret-permissions.sh" >/dev/null
+}
+
+bauen() {
+  local args=(-f "$DEPLOY/Dockerfile" -t "$IMAGE")
+  [ "${1:-}" = "--pull" ] && args+=(--pull)                       # neueste Basis (Sicherheitsupdates)
+  local ca="${HQ_BUILD_CA_FILE:-$(env_wert HQ_BUILD_CA_FILE)}"   # nur für Server hinter TLS-Proxy
+  [ -n "$ca" ] && args+=(--secret "id=extra_ca,src=$ca")
+  # Docker-Hub-Limit (429): Basis-Image über einen Spiegel, z. B. HQ_DOCKERHUB_MIRROR=mirror.gcr.io in deploy/.env
+  local spiegel="${HQ_DOCKERHUB_MIRROR:-$(env_wert HQ_DOCKERHUB_MIRROR)}" basis
+  basis="$(sed -n 's/^FROM \([^ ]*\) AS build$/\1/p' "$DEPLOY/Dockerfile")"
+  [ -n "$spiegel" ] && [ -n "$basis" ] && args+=(--build-context "$basis=docker-image://$spiegel/library/$basis")
+  [ -n "${HTTPS_PROXY:-}" ] && args+=(--build-arg "HTTPS_PROXY=$HTTPS_PROXY" --network host)
+  info "Image bauen ($IMAGE)"
+  DOCKER_BUILDKIT=1 docker build "${args[@]}" "$ROOT"
+  local b=(-f "$DEPLOY/backup/Dockerfile" -t "$BACKUP_IMAGE")
+  [ "${1:-}" = "--pull" ] && b+=(--pull)
+  [ -n "$spiegel" ] && b+=(--build-arg "RESTIC_IMAGE=$spiegel/restic/restic:0.18.1"
+                         --build-context "postgres:16-alpine=docker-image://$spiegel/library/postgres:16-alpine")
+  info "Sicherungs-Image bauen ($BACKUP_IMAGE)"
+  DOCKER_BUILDKIT=1 docker build "${b[@]}" "$DEPLOY/backup"
+}
+
+app_bereit() {
+  compose exec -T app python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(
+'http://127.0.0.1:8000/readiness', timeout=4).status == 200 else 1)" >/dev/null 2>&1
+}
+
+https_pruefen() {   # von außen über Caddy; bei localhost mit Caddys interner CA; im Tunnelbetrieb über Cloudflare
+  local domain ca=()
+  domain="$(env_wert ICHQ_DOMAIN)"
+  if [ "$(env_wert HQ_ZUGANG)" = tunnel ]; then
+    curl -fsS -o /dev/null --max-time 15 "https://$domain/readiness"; return
+  fi
+  if [ "$domain" = localhost ]; then
+    compose exec -T caddy cat /data/caddy/pki/authorities/local/root.crt > "$TMP/ca.crt" 2>/dev/null || return 1
+    ca=(--cacert "$TMP/ca.crt")
+  fi
+  curl -fsS -o /dev/null --max-time 10 "${ca[@]}" --resolve "$domain:443:127.0.0.1" "https://$domain/readiness"
+}
+
+warten() {
+  info "Warte auf die App (Migration läuft vorher) …"
+  for _ in $(seq 1 90); do app_bereit && break; sleep 2; done
+  app_bereit || { compose ps; compose logs --tail 40 migrate app; fehler "App wird nicht bereit — siehe Logs oben."; }
+  info "App bereit. Prüfe HTTPS über $(env_wert ICHQ_DOMAIN) …"
+  for _ in $(seq 1 30); do https_pruefen && { info "HTTPS ok: https://$(env_wert ICHQ_DOMAIN)"; return 0; }; sleep 4; done
+  echo "WARNUNG: HTTPS noch nicht erreichbar — Diagnose:" >&2
+  diagnose >&2 || true
+}
+
+starten() {
+  if ! docker image inspect "$IMAGE" >/dev/null 2>&1 || ! docker image inspect "$BACKUP_IMAGE" >/dev/null 2>&1; then
+    bauen
+  fi
+  info "Dienste starten"
+  compose up -d --remove-orphans
+  warten
+}
+
+status() {
+  compose ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
+  if app_bereit; then echo "App: bereit"; else echo "App: NICHT bereit"; fi
+  if https_pruefen; then echo "HTTPS: ok (https://$(env_wert ICHQ_DOMAIN))"; else echo "HTTPS: NICHT erreichbar"; fi
+  echo "Betriebsprüfung mit Warnungen: deploy/hq check · Sicherungen: deploy/hq backup-status"
+}
+
+eingabe() {   # eingabe <variable> <frage> [geheim]
+  local wert=""   # „|| true": letzte Zeile ohne Zeilenumbruch (Eingabe per Pipe) ist trotzdem gelesen — sonst
+                  # bräche set -e still ab (in der Windows-Simulation gefunden)
+  if [ "${3:-}" = geheim ]; then read -rsp "$2: " wert || true; echo >&2; else read -rp "$2: " wert || true; fi
+  [ -n "$wert" ] || fehler "$2 darf nicht leer sein."
+  printf -v "$1" '%s' "$wert"
+}
+
+setup_admin() {
+  local firma slug mail name pw pw2 tid
+  echo "Erste Firma und ihr Company Admin. Kürzel: Kleinbuchstaben/Ziffern/Bindestrich (z. B. ic-ware-gbr)."
+  eingabe firma "Firmenname"; eingabe slug "Kürzel (Slug)"; eingabe mail "E-Mail des Admins"
+  eingabe name "Name des Admins"; eingabe pw "Passwort (min. 12 Zeichen)" geheim
+  if [ -t 0 ]; then eingabe pw2 "Passwort wiederholen" geheim; [ "$pw" = "$pw2" ] || fehler "Passwörter verschieden."; fi
+  tid="$(compose exec -T app ichq tenant-create --name "$firma" --slug "$slug" | awk '{print $1}')"
+  [ -n "$tid" ] || fehler "Firma nicht angelegt (siehe Meldung oben)."
+  compose exec -T app ichq tenant-status "$tid" active --reason "Einrichtung (deploy/hq setup-admin)"
+  compose exec -T app ichq user-create --email "$mail" --name "$name"
+  printf '%s\n' "$pw" | compose exec -T app ichq user-set-password --email "$mail" --password-stdin
+  compose exec -T app ichq user-status --email "$mail" active --reason "Einrichtung (deploy/hq setup-admin)"
+  compose exec -T app ichq membership-add --email "$mail" --tenant "$slug"
+  compose exec -T app ichq tenant-admin --email "$mail" --tenant "$slug"
+  info "Fertig. Anmelden: https://$(env_wert ICHQ_DOMAIN)/app/ mit $mail"
+}
+
+# shellcheck source=deploy/lib/sicherung.sh
+. "$DEPLOY/lib/sicherung.sh"
+# shellcheck source=deploy/lib/pruefung.sh
+. "$DEPLOY/lib/pruefung.sh"
+# shellcheck source=deploy/lib/diagnose.sh
+. "$DEPLOY/lib/diagnose.sh"
+# shellcheck source=deploy/lib/tunnel.sh
+. "$DEPLOY/lib/tunnel.sh"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+befehl="${1:-status}"; shift || true
+case "$befehl" in
+  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+voraussetzungen
+case "$befehl" in
+  status) status ;;
+  check) check "$@" ;;
+  diagnose) diagnose ;;
+  domain) domain_aendern "$@" ;;
+  tunnel-token) tunnel_token_aendern ;;
+  start) starten ;;
+  stop) compose stop ;;
+  restart) compose stop && starten ;;
+  logs) compose logs -f --tail 100 "$@" ;;
+  build) bauen ;;
+  update)
+    backup
+    info "Code aktualisieren (git pull --ff-only)"
+    git -C "$ROOT" pull --ff-only
+    info "Fremd-Images aktualisieren (PostgreSQL 16.x, Caddy 2, ClamAV) — Sicherheitsupdates"
+    compose pull --ignore-pull-failures postgres caddy clamav || echo "WARNUNG: Pull fehlgeschlagen, alte Images bleiben" >&2
+    bauen --pull || fehler "Bau fehlgeschlagen (z. B. Docker-Hub-Limit 429 → docker login). Die bisherige Version läuft
+       unverändert weiter; später erneut: deploy/hq update"
+    starten || fehler "Update gescheitert. Zurück: git checkout <alter Stand> && deploy/hq build && deploy/hq restore --yes"
+    ;;
+  __backup_kern) backup_kern ;;     # intern (streng): eigener Prozess, set -e greift
+  __verify_kern) verify_kern ;;
+  backup) backup ;;
+  backup-init) backup_init ;;
+  backup-verify) backup_verify ;;
+  backup-status) backup_status ;;
+  restore) restore "$@" ;;
+  setup-admin) setup_admin ;;
+  ichq) if [ -t 0 ]; then compose exec app ichq "$@"; else compose exec -T app ichq "$@"; fi ;;
+  *) fehler "unbekannter Befehl: $befehl (deploy/hq help)" ;;
+esac

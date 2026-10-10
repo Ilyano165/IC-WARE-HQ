@@ -70,16 +70,23 @@ function shell() {
   const glocke = h("a", { class: "btn btn--ghost btn--sm bell", href: "#/benachrichtigungen", "aria-label": "Benachrichtigungen" },
     "Mitteilungen", h("span", { class: "badge", id: "ungelesen", hidden: true }, "0"));
   const name = state.sitzung.user.display_name;
+  const schliessen = () => { huelle.classList.remove("nav-open"); menue.setAttribute("aria-expanded", "false"); };
+  const menue = h("button", { class: "btn btn--ghost btn--sm menu-btn", type: "button", "aria-controls": "seite",
+    "aria-expanded": "false", on: { click: () => {
+      const offen = huelle.classList.toggle("nav-open"); menue.setAttribute("aria-expanded", String(offen)); } } }, "Menü");
   const huelle = h("div", { class: "shell" },
-    h("aside", { class: "side", id: "seite" }, marke("HQ"), navigation(),
+    h("div", { class: "nav-backdrop", on: { click: () => schliessen() } }),
+    h("aside", { class: "side", id: "seite" },
+      h("button", { class: "btn btn--ghost btn--sm menu-close", type: "button", "aria-label": "Menü schließen",
+        on: { click: () => schliessen() } }, "Schließen"),
+      marke("HQ"), navigation(),
       h("div", { class: "tenant" }, h("div", { class: "muted small" }, "Firma"), h("div", {}, state.firma || "—"),
         state.sitzung.memberships.length > 1
           ? h("button", { class: "btn btn--ghost btn--sm", type: "button", on: { click: () => anmeldung.firmenwahl(app, state.sitzung, start, true) } }, "Firma wechseln")
           : null)),
     h("div", { class: "main" },
       h("header", { class: "top" },
-        h("button", { class: "btn btn--ghost btn--sm menu-btn", type: "button", "aria-controls": "seite",
-          on: { click: () => huelle.classList.toggle("nav-open") } }, "Menü"),
+        menue,
         state.sitzung.memberships.length > 1
           ? h("button", { class: "btn btn--ghost btn--sm firma", type: "button", title: "Firma wechseln",
             on: { click: () => anmeldung.firmenwahl(app, state.sitzung, start, true) } }, state.firma || "Firma")
@@ -89,7 +96,8 @@ function shell() {
         h("a", { class: "who-name small", href: "#/konto", title: "Konto & Sicherheit" }, name),
         h("button", { class: "btn btn--ghost btn--sm", type: "button", on: { click: abmelden } }, "Abmelden")),
       h("div", { class: "content", id: "inhalt" })));
-  huelle.addEventListener("click", (e) => { if (e.target.closest(".nav a")) huelle.classList.remove("nav-open"); });
+  huelle.addEventListener("click", (e) => { if (e.target.closest(".nav a")) schliessen(); });
+  huelle.addEventListener("keydown", (e) => { if (e.key === "Escape" && huelle.classList.contains("nav-open")) { schliessen(); menue.focus(); } });
   ersetze(app, huelle);
 }
 
@@ -115,7 +123,8 @@ async function zeige() {
   const r = finde(pfad);
   if (!r) { ersetze(inhalt, h("div", { class: "view" }, h("h1", {}, "Nicht gefunden"), h("p", { class: "muted" }, "Diese Seite gibt es nicht."))); return; }
   if (r.recht && !darf(r.recht)) {
-    ersetze(inhalt, h("div", { class: "view" }, h("h1", {}, "Keine Berechtigung"), h("p", { class: "muted" }, `Dafür fehlt das Recht ${r.recht}.`)));
+    ersetze(inhalt, h("div", { class: "view" }, h("h1", {}, "Keine Berechtigung"),
+      h("p", { class: "muted" }, "Für diese Seite fehlt die Berechtigung. Wende dich an den Administrator deiner Firma.")));
     return;
   }
   // Jeder Seitenwechsel rendert in einen EIGENEN Container. Kommt eine langsame, ältere Ansicht erst nach einem
@@ -130,7 +139,15 @@ async function zeige() {
   if (ziel.isConnected) ungelesen();
 }
 
+let startLaeuft = false;   // Ereignisse aus start() selbst lösen keinen zweiten Start aus
+
 export async function start() {
+  if (startLaeuft) return;
+  startLaeuft = true;
+  try { await starte(); } finally { startLaeuft = false; }
+}
+
+async function starte() {
   const art = new URLSearchParams(location.search).get("v");
   const token = (/token=([A-Za-z0-9_-]+)/.exec(location.hash) || [])[1];
   if ((art === "einladung" || art === "passwort-neu") && token) {
@@ -159,5 +176,6 @@ export async function start() {
 
 window.addEventListener("hashchange", zeige);
 window.addEventListener("ichq:ungelesen", ungelesen);
+window.addEventListener("ichq:firma-weg", () => { if ($("#inhalt")) { toast("Kein Zugang mehr zu dieser Firma.", "error"); start(); } });
 window.addEventListener("ichq:abgemeldet", () => { if ($("#inhalt")) { toast("Sitzung beendet — bitte neu anmelden.", "error"); start(); } });
 start().catch((e) => ersetze(app, h("div", { class: "gate" }, alertBox(meldung(e)))));

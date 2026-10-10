@@ -46,12 +46,12 @@ def resolve(pfad: str) -> Path:
     return datei
 
 
-@router.get("/")
+@router.api_route("/", methods=["GET", "HEAD"])
 def root(_: None = Depends(public("Weiterleitung zur Oberfläche"))) -> Response:
     return RedirectResponse("/app/", status_code=307)
 
 
-@router.get("/app")
+@router.api_route("/app", methods=["GET", "HEAD"])
 def app_ohne_slash(_: None = Depends(public("Weiterleitung zur Oberfläche"))) -> Response:
     return RedirectResponse("/app/", status_code=307)
 
@@ -68,7 +68,7 @@ def reset(_: None = Depends(public("Passwort-Link → Oberfläche"))) -> Respons
     return RedirectResponse("/app/?v=passwort-neu", status_code=307)
 
 
-@router.get("/app/{pfad:path}")
+@router.api_route("/app/{pfad:path}", methods=["GET", "HEAD"])   # HEAD: Uptime-Monitore
 def static(pfad: str, _: None = Depends(public("Oberfläche: statische Dateien, keine Daten"))) -> Response:
     datei = resolve(pfad)
     resp = FileResponse(datei, media_type=TYPES[datei.suffix])

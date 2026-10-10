@@ -153,13 +153,16 @@ def test_erwaehnung_fremder_oder_inaktiver_mitglieder_scheitert(cw: CoreWorld, e
 
 
 # ---------- Dokumente ----------
-def test_dokument_upload_quarantaene_pruefung(cw: CoreWorld) -> None:
+def test_dokument_upload_quarantaene_pruefung(cw: CoreWorld, engines: Engines) -> None:
     c = cw.client(cw.mitarbeiter)
     d = _pdf(c, "../../etc/Rechnung\x00 Okt.pdf")
     assert d["filename"] == "Rechnung Okt.pdf" and d["scan_status"] == "quarantined"
     assert d["sha256"] == hashlib.sha256(b"%PDF-1.4 test").hexdigest() and d["review_status"] == "pending"
     r = c.get(f"/api/v1/documents/{d['id']}/content")
     assert r.status_code == 409 and r.json()["code"] == "document_quarantined"
+    r = c.post(f"/api/v1/documents/{d['id']}/review", json={"decision": "approved"})
+    assert r.status_code == 409 and "Virenprüfung" in r.json()["detail"]     # Freigabe erst nach dem Scan
+    db(engines, "UPDATE documents SET scan_status = 'clean'")                # Scanner (tests/test_documents_scan.py)
     g = ok(c.post(f"/api/v1/documents/{d['id']}/review", json={"decision": "approved"}))
     assert g["review_status"] == "approved" and g["reviewed_by"]["display_name"] == "Max Mitarbeiter"
     assert c.post(f"/api/v1/documents/{d['id']}/review", json={"decision": "rejected"}).status_code == 409
@@ -171,7 +174,7 @@ def test_dokument_upload_quarantaene_pruefung(cw: CoreWorld) -> None:
 def test_dokument_download_nach_freigabe(cw: CoreWorld, engines: Engines) -> None:
     c = cw.client(cw.mitarbeiter)
     d = _pdf(c)
-    db(engines, "UPDATE documents SET scan_status = 'clean'")      # simuliert den (noch fehlenden) Scanner
+    db(engines, "UPDATE documents SET scan_status = 'clean'")      # Scanner: tests/test_documents_scan.py
     r = c.get(f"/api/v1/documents/{d['id']}/content")
     assert r.status_code == 200 and r.content == b"%PDF-1.4 test"
     assert r.headers["content-disposition"] == "attachment"

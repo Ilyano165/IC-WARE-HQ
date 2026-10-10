@@ -41,7 +41,7 @@ einem frischen Prozess.
 | `ichq_owner` | nur Migrationen | Tabellen besitzen und ändern |
 | `ichq_app` | API, Worker-Handler | Mandantendaten — nur mit gesetztem Mandantenkontext |
 | `ichq_platform` | Control Plane, CLI | Firmen, Konten, Plattform-Audit — **keine** Mandantendaten |
-| `ichq_worker` | Worker | Outbox abholen und markieren — sonst nichts |
+| `ichq_worker` | Worker, Scanner | Outbox abholen und markieren; Virenprüfung: Dokumente der gesetzten Firma lesen, nur `scan_status` ändern, Audit anhängen (ADR-015) |
 
 Keine Rolle ist Superuser oder hat `BYPASSRLS`; die Migration bricht ab, wenn doch. Zur Laufzeit
 existiert keine Verbindung mit Besitzerrechten.

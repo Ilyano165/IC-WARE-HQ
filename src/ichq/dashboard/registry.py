@@ -28,6 +28,7 @@ class Metric:
     value: int
     filter: dict[str, Any] = field(default_factory=dict)   # Filter der verlinkten Liste → dieselbe Zahl
     tone: str = "neutral"                                  # neutral | warn | danger
+    linked: bool = True    # False: es gibt keine Liste mit genau diesem Filter ⇒ Zahl ohne Link (Regel „Zahl = Liste")
 
 
 @dataclass(frozen=True)

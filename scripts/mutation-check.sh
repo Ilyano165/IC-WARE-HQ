@@ -39,7 +39,7 @@ mutation "Schwaches Secret erlaubt" "core/config.py" "        if len(roh) < MIN_
 mutation "Leere _FILE-Variable als gesetzt" "core/config.py" " or not pfad.strip():|||:" "tests/test_config.py"
 mutation "Readiness ignoriert Speicher" "api/health.py" "    bereit = all(c.ok for c in checks)|||    bereit = checks[0].ok" "tests/test_api_health.py"
 mutation "Modellregistrierung fehlt in der CLI" "cli.py" "from ichq.models import assert_complete|||assert_complete = lambda: 0" "tests/test_entrypoints.py"
-mutation "Worker meldet Fehlschlag als Erfolg" "cli.py" "                return 0 if r.ok else 1|||                return 0" "tests/test_entrypoints.py"
+mutation "Worker meldet Fehlschlag als Erfolg" "cli.py" "                return 0 if r.ok and (mail is None or mail.failed == 0) else 1|||                return 0" "tests/test_entrypoints.py"
 mutation "Modellprüfung prüft nichts" "models.py" "        if fk.target_fullname.split(\".\")[0] not in Base.metadata.tables|||        if False" "tests/test_entrypoints.py"
 
 # ---------- M2 Authentication ----------
@@ -113,7 +113,7 @@ mutation "M3 Archivierte Rolle zählt als Admin" "authz/effective.py" " AND r.ar
 mutation "M3 Einladung mehrfach einlösbar" "members/accept.py" "WHERE id = :i AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()|||WHERE id = :i" "tests/test_m3_tenancy.py"
 mutation "M3 Vorprüfung ignoriert Gültigkeit" "members/accept.py" "    if r is None or not r.gueltig:|||    if r is None:" "tests/test_m3_tenancy.py"
 mutation "M3 Fremdes Konto nimmt Einladung an" "members/accept.py" "    if email != inv.email:|||    if False:" "tests/test_m3_tenancy.py"
-mutation "M3 Bestehendes Konto ohne Zustimmung" "members/accept.py" "        if s.execute(text(\"SELECT 1 FROM users WHERE lower(email) = :e\"), {\"e\": inv.email}).scalar():|||        if False:" "tests/test_m3_tenancy.py"
+mutation "M3 Bestehendes Konto ohne Zustimmung" "members/accept.py" "        if vorhanden is not None and not _verwaist(engines, vorhanden):|||        if False:" "tests/test_m3_tenancy.py"
 mutation "M3 Firmenprofil ohne Validierung" "tenancy/service.py" "    _pruefen(t.slug, name, str(neu[\"timezone\"]), str(neu[\"language\"]), str(neu[\"currency\"]))|||    pass" "tests/test_m3_tenancy.py"
 mutation "M3 Route mandantenblind (RLS) → IDOR-Generator" "migrations/versions/0003_core.py" "                           USING (tenant_id = ichq_current_tenant())
                            WITH CHECK|||                           USING (true)
@@ -205,5 +205,141 @@ mutation "D0 Überfällig schließt heute ein" "tasks/service.py" "        teile
 mutation "D0 Ohne-Zuständige-Filter wirkungslos" "tasks/service.py" "    if f.unassigned:|||    if False:" "$D0A"
 mutation "D0 Dokumentfilter nicht zugeordnet wirkungslos" "documents/service.py" "    if f.unlinked:|||    if False:" "$D0A"
 mutation "D0 Kennzahl-Link ohne Filter" "web/js/views/dashboard.js" "  return \`#\${basis}\${query(filter || {})}\`;|||  return \`#\${basis}\`;" "$D0B"
+# ---------- Betrieb: Virenprüfung + Installer/Launcher (ADR-015) ----------
+SCAN="tests/test_documents_scan.py"
+mutation "Scan: Fund gilt als sauber" "documents/scan.py" "        if antwort == \"stream: OK\":|||        if antwort == \"stream: OK\" or antwort.endswith(\" FOUND\"):" "$SCAN"
+mutation "Scan: unklare Antwort gilt als sauber" "documents/scan.py" "        raise ScannerUnavailable(f\"unerwartete clamd-Antwort|||        return Verdict(True)
+        raise ScannerUnavailable(f\"unerwartete clamd-Antwort" "$SCAN"
+mutation "Scan: Ausfall verwirft schon Geprüftes" "documents/scan.py" "                ausfall, lauf.pending = e, lauf.pending + len(zeilen) - i
+                break|||                raise" "$SCAN"
+mutation "Scan: DB erlaubt jeden Übergang" "migrations/versions/0007_documents_scan.py" "         AND NOT (OLD.scan_status = 'quarantined' AND NEW.scan_status IN ('clean', 'infected')) THEN|||         AND false THEN" "$SCAN"
+mutation "Scan: Worker darf alle Dokumentspalten ändern" "migrations/versions/0007_documents_scan.py" "    GRANT UPDATE (scan_status) ON documents TO ichq_worker;|||    GRANT UPDATE ON documents TO ichq_worker;" "$SCAN"
+mutation "Scan: Web-App schreibt Prüfergebnis" "migrations/versions/0007_documents_scan.py" "    GRANT SELECT ON documents TO ichq_worker;|||    GRANT SELECT ON documents TO ichq_worker; GRANT UPDATE (scan_status) ON documents TO ichq_app;" "$SCAN tests/test_core_objects.py"
+mutation "Scan: Worker sieht fremde Firmen" "migrations/versions/0007_documents_scan.py" "    CREATE POLICY p_documents_scan_worker ON documents FOR SELECT TO ichq_worker
+      USING (tenant_id = ichq_current_tenant());|||    CREATE POLICY p_documents_scan_worker ON documents FOR SELECT TO ichq_worker
+      USING (true);" "$SCAN"
+# ---------- UI-Prüfung vor dem Launch ----------
+UIL="tests/test_launch_browser.py"
+mutation "UI: falsches Passwort meldet ab" "web/js/api.js" "    if (fehler.code === \"authentication_required\") window.dispatchEvent|||    if (r.status === 401) window.dispatchEvent" "$UIL"
+mutation "UI: Doppelklick löst doppelt aus" "web/js/views/kommentare.js" "form.addEventListener(\"submit\", einmal(async () => {|||form.addEventListener(\"submit\", (async (e) => { e.preventDefault();" "$UIL"
+mutation "UI: Bearbeiten an fremden Kommentaren" "web/js/views/kommentare.js" "  if (!k.deleted && k.own) {   // bearbeiten nur eigene|||  if (!k.deleted) {   // bearbeiten nur eigene" "$UIL"
+mutation "UI: Menü schließt nicht mit Escape" "web/js/app.js" "if (e.key === \"Escape\" && huelle.classList.contains(\"nav-open\"))|||if (false)" "$UIL"
+mutation "UI: Benachrichtigung zeigt undefined" "web/js/views/inbox.js" "n.object ? \` · \${art(n.object.type)}\` : \"\"|||n.object ? \` · \${n.object.title}\` : \"\"" "$UIL"
+mutation "UI: Anhänge-Knopf fehlt" "web/js/views/aufgaben.js" "  const knopf = darf(\"tasks.update\") ? h(|||  const knopf = false ? h(" "$UIL"
+mutation "D0: Zahl ohne passende Liste verlinkt" "dashboard/loaders.py" "int(z.einladungen), {}, linked=False)]|||int(z.einladungen), {})]" "tests/test_d0_dashboard.py"
+# ---------- Launch-Sicherheitsprüfung (docs/security-review.md) ----------
+SEC="tests/test_security_launch.py"
+mutation "MFA-Fehlversuche je Konto ungezählt" "auth/login.py" "    if throttle.is_throttled(s, settings, \"mfa\", subjekt, ip):|||    if False:" "$SEC"
+mutation "MFA-Zähler aus veralteter Sitzung" "auth/login.py" "        versuche = s.execute(text(\"UPDATE auth_sessions SET mfa_attempts = mfa_attempts + 1 WHERE id = :id \"
+                                  \"RETURNING mfa_attempts\"), {\"id\": challenge.id}).scalar_one()|||        versuche = challenge.mfa_attempts + 1
+        s.execute(text(\"UPDATE auth_sessions SET mfa_attempts = :n WHERE id = :id\"), {\"n\": versuche, \"id\": challenge.id})" "$SEC"
+mutation "MFA widerrufene Challenge nicht neu geprüft" "auth/login.py" "    if not noch_gueltig:
+        return Outcome(False, \"mfa_invalid\")|||    if False:
+        return Outcome(False, \"mfa_invalid\")" "$SEC"
+mutation "Reset hebt Betreiber-Sperre auf" "auth/account.py" "    return status in (\"pending\", \"active\") or (status == \"locked\" and locked_until is not None)|||    return status in (\"pending\", \"active\", \"locked\")" "$SEC"
+mutation "Passwort setzen entsperrt jede Sperre" "auth/account.py" "status = CASE WHEN status = 'pending' OR (status = 'locked' AND locked_until IS NOT NULL)|||status = CASE WHEN status IN ('pending', 'locked')" "$SEC"
+mutation "Passwort-Orakel hinter Sitzung ungedrosselt" "auth/account.py" "    if throttle.is_throttled(s, settings, \"login\", subjekt, ip):
+        sessions.revoke(s, current.id, \"reauth_throttled\")|||    if False:
+        sessions.revoke(s, current.id, \"reauth_throttled\")" "$SEC"
+mutation "2FA aus lässt andere Sitzungen offen" "auth/account.py" "    n = sessions.revoke_all(s, current.user_id, \"totp_disabled\", except_id=current.id)   # Audit F8|||    n = 0" "$SEC"
+mutation "Wiedereintritt mit alten Rollen" "members/accept.py" "\"DELETE FROM membership_roles WHERE membership_id = :m\",|||" "$SEC"
+mutation "Verwaistes Konto bleibt aktiv" "members/accept.py" "            s.execute(text(\"UPDATE users SET password_hash = NULL, status = 'pending' WHERE id = :u\"), {\"u\": uid})|||            pass" "$SEC"
+mutation "Einladungspasswort gekürzt" "api/v1/members.py" "    password: Annotated[str, StringConstraints(strip_whitespace=False)] = Field(min_length=1, max_length=512)|||    password: str = Field(min_length=1, max_length=512)" "$SEC"
+mutation "Freigabe ohne Virenprüfung" "documents/service.py" "    if decision == \"approved\" and doc.scan_status != \"clean\":|||    if False:" "tests/test_core_api.py"
+mutation "Selbstprüfung unsichtbar" "documents/service.py" "    selbst = obj.created_by_membership_id == principal.membership_id|||    selbst = False" "$SEC"
+mutation "Upload ohne Ratenlimit" "documents/service.py" "    if zuletzt >= UPLOADS_PER_MEMBER_HOUR:|||    if False:" "$SEC"
+mutation "Upload ohne Kontingent" "documents/service.py" "    if belegt + neu > TENANT_QUOTA_BYTES:|||    if False:" "$SEC"
+mutation "Cursor unverschlüsselt" "db/paging.py" "    if _SCHLUESSEL:
+        nonce = os.urandom(12)|||    if False:
+        nonce = os.urandom(12)" "$SEC"
+# ---------- E-Mail (ADR-016) ----------
+MAIL="tests/test_mail.py"
+mutation "Mail: Token im Klartext gespeichert" "mail/outbox.py" "    if secret_key is not None:
+        werte[\"be\"] = seal(secret_key, mid, mail)|||    if False:
+        werte[\"be\"] = seal(secret_key, mid, mail)" "$MAIL"
+mutation "Mail: Inhalt nach Versand behalten" "mail/delivery.py" "        s.execute(text(\"UPDATE mail_outbox SET status='sent', sent_at=now(), locked_at=NULL, last_error=NULL, \"
+                       \"body_enc=NULL, body_text=NULL, body_html=NULL WHERE id=:id\"), {\"id\": mid})|||        s.execute(text(\"UPDATE mail_outbox SET status='sent', sent_at=now(), locked_at=NULL WHERE id=:id\"), {\"id\": mid})" "$MAIL"
+mutation "Mail: abgelaufene Mail wird gesendet" "mail/delivery.py" "WHERE status IN ('pending','failed') AND expires_at IS NOT NULL AND expires_at < now()|||WHERE false" "$MAIL"
+mutation "Mail: kein Ratenlimit" "mail/delivery.py" "        if schon >= settings.mail_per_recipient_hour:|||        if False:" "$MAIL"
+mutation "Mail: Fehler sofort endgültig" "mail/delivery.py" "        endgueltig = z.attempts >= z.max_attempts  # type: ignore[attr-defined]|||        endgueltig = True" "$MAIL"
+mutation "Mail: keine Wartezeit vor Wiederholung" "mail/delivery.py" "    return int(min(60 * 4 ** max(versuch - 1, 0), 6 * 3600))|||    return 0" "$MAIL"
+mutation "Mail: App-Rolle liest Outbox" "migrations/versions/0008_mail_outbox.py" "    GRANT INSERT ON mail_outbox TO ichq_app, ichq_auth;|||    GRANT SELECT, INSERT ON mail_outbox TO ichq_app, ichq_auth;
+    CREATE POLICY p_mail_lesen ON mail_outbox FOR SELECT TO ichq_app, ichq_auth USING (true);" "$MAIL"
+mutation "Mail: App-Rolle schreibt für fremde Firma" "migrations/versions/0008_mail_outbox.py" "      WITH CHECK (tenant_id = ichq_current_tenant());
+    CREATE POLICY p_mail_outbox_auth_insert|||      WITH CHECK (true);
+    CREATE POLICY p_mail_outbox_auth_insert" "$MAIL"
+mutation "Mail: kein Sicherheitshinweis" "auth/events.py" "    if event in templates.SICHERHEIT and user_id is not None:|||    if False:" "$MAIL"
+mutation "Mail: HTML unmaskiert" "mail/templates.py" "    teile = \"\".join(f'<p style=\"margin:0 0 14px\">{escape(a)}</p>' for a in absaetze)|||    teile = \"\".join(f'<p style=\"margin:0 0 14px\">{a}</p>' for a in absaetze)" "$MAIL"
+mutation "Mail: Aufräumen löscht wartende Mails" "mail/delivery.py" "\"DELETE FROM mail_outbox WHERE status IN ('sent','expired','failed','cancelled') \"|||\"DELETE FROM mail_outbox WHERE status IS NOT NULL \"" "$MAIL"
+mutation "Mail: Warnung ohne Direktversand bei DB-Ausfall" "betrieb.py" "    provider = provider or build_provider(settings)|||    return 1" "$MAIL"
+# Wie mutation, aber in einer Kopie von deploy/ (Tests lesen ICHQ_DEPLOY_DIR)
+mutation_kopie() {   # mutation_kopie <ordner> <umgebungsvariable> <name> <datei> <ersatz> <tests> — Kopie statt src/
+  local ordner="$1" var="$2" name="$3" datei="$4" ersatz="$5" tests="$6"
+  local tmp; tmp=$(mktemp -d)
+  cp -a "$ordner" "$tmp/$ordner"
+  if ! python3 - "$tmp/$ordner/$datei" "$ersatz" <<'PY'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); alt, neu = sys.argv[2].split("|||")
+t = p.read_text()
+if alt not in t:
+    sys.exit(3)
+p.write_text(t.replace(alt, neu, 1))
+PY
+  then echo "UNGÜLTIG  | $name (Muster nicht gefunden — Mutation nicht angewendet)"; UNGUELTIG=$((UNGUELTIG+1)); rm -rf "$tmp"; return; fi
+  local ergebnis; ergebnis=$(env "$var=$tmp/$ordner" timeout 300 python3 -m pytest -q -p no:cacheprovider $tests 2>&1 | tail -1)
+  if echo "$ergebnis" | grep -q "failed"; then echo "ERKANNT   | $name"; ERKANNT=$((ERKANNT+1))
+  else echo "UNBEMERKT | $name | $ergebnis"; UNBEMERKT=$((UNBEMERKT+1)); fi
+  rm -rf "$tmp"
+}
+mutation_deploy() { mutation_kopie deploy ICHQ_DEPLOY_DIR "$@"; }
+mutation_windows() { mutation_kopie windows ICHQ_WINDOWS_DIR "$@"; }
+DEP="tests/test_deploy.py"
+mutation_deploy "Betrieb: Datenbank-Port nach außen" "docker-compose.yml" "    image: postgres:16-alpine
+    environment:|||    image: postgres:16-alpine
+    ports: [\"5432:5432\"]
+    environment:" "$DEP"
+mutation_deploy "Betrieb: Scanner ohne Neustart" "docker-compose.yml" "      start_period: 60s
+    restart: unless-stopped
+
+  caddy:|||      start_period: 60s
+
+  caddy:" "$DEP"
+mutation_deploy "Betrieb: App-Secret nicht für UID 10001" "fix-secret-permissions.sh" " session_secret smtp_password\"||| smtp_password\"" "$DEP"
+mutation_deploy "Betrieb: Secrets werden überschrieben" "generate-secrets.sh" "[ -e secrets ] && { echo \"secrets/ existiert bereits — Abbruch, nichts überschrieben.\"; exit 1; }|||" "$DEP"
+mutation_deploy "Betrieb: Rollen-Passwort nicht angeglichen" "postgres/init-roles.sql" "SELECT format('ALTER ROLE ichq_app PASSWORD %L', :'app_pw') \\gexec|||" "$DEP"
+mutation_deploy "Betrieb: E-Mail ungeprüft (Caddyfile-Injektion)" "install.sh" "[[ \"\$EMAIL\" =~ ^[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\\.)+[A-Za-z]{2,63}\$ ]]|||[[ \"\$EMAIL\" =~ ^.+\$ ]]" "$DEP"
+mutation_deploy "Betrieb: Domain ungeprüft" "install.sh" "|| fehler \"ungültige Domain|||| true \"ungültige Domain" "$DEP"
+mutation_deploy "Betrieb: Restore ohne Bestätigung" "lib/sicherung.sh" "  [ \"\$ja\" = \"--yes\" ] || fehler|||  true || fehler" "$DEP"
+mutation_deploy "Sicherung: Fehler zählt als Erfolg (set -e im if)" "lib/sicherung.sh" "  AUSGABE=\"\$(\"\$HQ_SELF\" \"__\$1\" 2>&1)\" || rc=\$?|||  AUSGABE=\"\$(\"\$HQ_SELF\" \"__\$1\" 2>&1)\" || true" "$DEP"
+mutation_deploy "Sicherung: secrets.tar mit fremden Pfaden" "lib/sicherung.sh" "      [[ \"\${pfad#secrets/}\" =~ ^[a-z_]+\$ ]] || fehler|||      true || fehler" "$DEP"
+mutation_deploy "Sicherung: secrets.tar mit Links" "lib/sicherung.sh" "      *) fehler \"unerwarteter Eintrag in secrets.tar: \$typ \$pfad\" ;; esac|||      *) ;; esac" "$DEP"
+mutation_deploy "Sicherung: Init bei falschem Schlüssel" "lib/sicherung.sh" "    *\"wrong password\"*) fehler|||    *\"wrong password\"*) restic_lauf -- init; fehler" "$DEP"
+mutation_deploy "Sicherung: Timer seltener als 6 h" "systemd/ichq-backup.timer.in" "OnCalendar=*-*-* 00/6:15:00|||OnCalendar=daily" "$DEP"
+mutation_deploy "Installer: Sicherungsziel ungeprüft" "install.sh" "|| fehler \"ungültiges --backup-repository|||| true \"ungültiges --backup-repository" "$DEP"
+DIAG="tests/test_deploy_diagnose.py"
+mutation_deploy "Diagnose: fremder AAAA-Eintrag nur Hinweis" "lib/diagnose.sh" "      fremd=1; echo \"FEHLER|dns|AAAA-Eintrag|||      echo \"FEHLER|dns|AAAA-Eintrag" "$DIAG"
+mutation_deploy "Diagnose: ein passender Eintrag genügt" "lib/diagnose.sh" "  [ \"\$passend\" -eq 1 ] && [ \"\$fremd\" -eq 0 ]|||  [ \"\$passend\" -eq 1 ]" "$DIAG"
+mutation_deploy "Diagnose: ACME-Verbindungsfehler übersehen" "lib/diagnose.sh" "  _hat 'acme:error:connection' &&|||  _hat 'acme:error:connectionX' &&" "$DIAG"
+
+TUN="tests/test_deploy_tunnel.py"
+mutation_deploy "Tunnel: Caddy vertraut jedem privaten Netz" "Caddyfile.tunnel" "trusted_proxies static 172.31.250.10/32|||trusted_proxies static private_ranges" "$TUN"
+mutation_deploy "Tunnel: Besucher-IP nicht gesetzt (gefälschtes XFF)" "Caddyfile.tunnel" "		header_up X-Forwarded-For {client_ip}
+|||" "$TUN"
+mutation_deploy "Tunnel: cloudflared sieht App und Datenbank" "docker-compose.yml" "    networks:
+      tunnel: {ipv4_address: 172.31.250.10}|||    networks:
+      default: {}
+      tunnel: {ipv4_address: 172.31.250.10}" "$TUN"
+mutation_deploy "Tunnel: Caddy-Ports im Tunnelbetrieb offen" "lib/tunnel.sh" "env_aendern ICHQ_BIND 127.0.0.1|||env_aendern ICHQ_BIND 0.0.0.0" "$TUN"
+mutation_deploy "Domainwechsel ungeprüft (Caddyfile-Injektion)" "lib/tunnel.sh" "  [[ \"\$1\" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\$ || \"\$1\" == localhost ]]|||  [[ -n \"\$1\" ]]" "$TUN"
+mutation_deploy "setup-admin bricht bei letzter Zeile ohne Umbruch still ab" "hq" "read -rsp \"\$2: \" wert || true|||read -rsp \"\$2: \" wert" "$DEP"
+mutation_deploy "Tunnel-Token ungeprüft" "lib/tunnel.sh" "  [[ \"\$1\" =~ ^[A-Za-z0-9+/_=-]{80,4096}\$ ]]|||  [[ -n \"\$1\" ]]" "$TUN"
+
+# ---------- Windows-Launcher (ADR-017) ----------
+WIN="tests/test_windows_launcher.py"
+mutation_windows "Launcher: http:// zu fremdem Host" "launcher/ichq_launcher.py" "    if teile.scheme == \"http\" and host not in _LOKAL:|||    if False:" "$WIN"
+mutation_windows "Launcher: Zertifikat nicht geprüft" "launcher/ichq_launcher.py" "    ctx = ctx or ssl.create_default_context()|||    ctx = ssl._create_unverified_context()" "$WIN"
+mutation_windows "Launcher: folgt Weiterleitung auf fremden Host" "launcher/ichq_launcher.py" "        return None                                        # /health|||        return super().redirect_request(*args, **kw)  # /health" "$WIN"
+mutation_windows "Launcher: jede JSON-Antwort ist HQ" "launcher/ichq_launcher.py" "or \"application\" not in daten:|||or False:" "$WIN"
+mutation_windows "Launcher: Zugangsdaten in der Adresse" "launcher/ichq_launcher.py" "    if teile.username or teile.password:|||    if False:" "$WIN"
 echo "---"; echo "erkannt $ERKANNT · unbemerkt $UNBEMERKT · ungültig $UNGUELTIG"
 [ "$UNBEMERKT" -eq 0 ] && [ "$UNGUELTIG" -eq 0 ]

@@ -18,6 +18,7 @@ url ichq_auth pg_auth_password auth_database_url
 url ichq_owner pg_owner_password migration_database_url
 zufall 48 > secrets/secret_key
 zufall 48 > secrets/session_secret
-printf 'ichq-%s' "$(zufall 9)" > secrets/s3_access_key
-zufall 40 > secrets/s3_secret_key
-echo "Geheimnisse erzeugt in ./secrets (Rechte 600). Sichern, aber nie einchecken."
+# Die App-Container laufen als UID 10001 (deploy/Dockerfile) und lesen ihre Secrets als Bind-Mount — die Dateien
+# müssen deshalb dieser UID gehören (Compose ohne Swarm kann Besitzer/Modus von Secrets nicht setzen).
+deploy/fix-secret-permissions.sh
+echo "Geheimnisse erzeugt in ./secrets. Sichern (deploy/hq backup), aber nie einchecken."
