@@ -149,11 +149,12 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   TokenDatei, Parameter, T: String;
+  Roh: AnsiString;
 begin
   if CurStep <> ssPostInstall then Exit;
   T := LetztesWort(SeiteToken.Values[0]);
   if (T = '') and (ExpandConstant('{param:TOKENFILE|}') <> '') then
-    if LoadStringFromFile(ExpandConstant('{param:TOKENFILE|}'), T) then T := LetztesWort(T);
+    if LoadStringFromFile(ExpandConstant('{param:TOKENFILE|}'), Roh) then T := LetztesWort(String(Roh));
   Parameter := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\einrichten.ps1') + '"' +
     ' -Domain "' + SeiteDomain.Values[0] + '" -Email "' + Trim(SeiteDomain.Values[1]) + '"' +
     ' -Quelle "' + ExpandConstant('{app}\quelle.tar') + '"';
