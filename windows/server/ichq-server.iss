@@ -185,8 +185,8 @@ var
 begin
   if CurUninstallStep <> usUninstall then Exit;
   Parameter := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\deinstallieren.ps1') + '"';
-  if (not UninstallSilent()) and (MsgBox('Sollen auch ALLE DATEN gelöscht werden (Datenbank, Dokumente, Einstellungen)?' +
-      #13#10#13#10 + 'Nein (empfohlen): Daten bleiben erhalten, eine Neuinstallation übernimmt sie.' + #13#10 +
+  if (not UninstallSilent()) and (MsgBox('Sollen auch ALLE DATEN gelöscht werden (Datenbank, Dokumente, Einstellungen)?' + #13#10#13#10 +
+      'Nein (empfohlen): Daten bleiben erhalten, eine Neuinstallation übernimmt sie.' + #13#10 +
       'Ja: endgültig gelöscht — nur mit einer Sicherung wiederherstellbar.',
       mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES) then
     Parameter := Parameter + ' -DatenLoeschen';
