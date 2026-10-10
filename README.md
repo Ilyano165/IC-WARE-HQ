@@ -46,6 +46,10 @@ Den angezeigten Sicherungsschlüssel getrennt vom Server aufbewahren. Details, G
 Windows mit dem Installer `IC-WARE-HQ-Setup-<version>.exe` (Artefakt des CI-Jobs `windows` bzw. GitHub-Release) —
 ein Zugang zur zentralen Instanz, kein zweiter Server: [docs/windows.md](docs/windows.md), ADR-017.
 
+**Server auf dem eigenen Windows-PC:** `IC-WARE-HQ-Server-Setup-<version>.exe` — WSL2 + derselbe Linux-Stack,
+öffentlich über Cloudflare Tunnel (kein offener Port), Domain änderbar: [docs/windows-server.md](docs/windows-server.md), ADR-018.
+Linux-Server im Tunnelbetrieb: `deploy/install.sh … --tunnel`.
+
 ## Schnellstart (Entwicklung)
 
 ```bash
@@ -87,6 +91,7 @@ ichq serve --port 8000
 | [docs/development.md](docs/development.md) | Lokale Einrichtung |
 | [docs/server-setup.md](docs/server-setup.md) | Server mit fester Domain: DNS, Installer, `deploy/hq`, Sicherung, Virenprüfung |
 | [docs/windows.md](docs/windows.md) | Windows-Installer und Desktop-Launcher (Zugang zur zentralen Instanz) |
+| [docs/windows-server.md](docs/windows-server.md) | Server auf dem eigenen Windows-PC mit Cloudflare Tunnel, Domain ändern |
 | [docs/configuration.md](docs/configuration.md) | Alle Umgebungsvariablen |
 | [docs/migrations.md](docs/migrations.md) | Migrationen schreiben und ausführen |
 | [docs/testing.md](docs/testing.md) | Tests und Mutationstests |

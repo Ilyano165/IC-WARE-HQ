@@ -321,6 +321,18 @@ mutation_deploy "Diagnose: fremder AAAA-Eintrag nur Hinweis" "lib/diagnose.sh" "
 mutation_deploy "Diagnose: ein passender Eintrag genügt" "lib/diagnose.sh" "  [ \"\$passend\" -eq 1 ] && [ \"\$fremd\" -eq 0 ]|||  [ \"\$passend\" -eq 1 ]" "$DIAG"
 mutation_deploy "Diagnose: ACME-Verbindungsfehler übersehen" "lib/diagnose.sh" "  _hat 'acme:error:connection' &&|||  _hat 'acme:error:connectionX' &&" "$DIAG"
 
+TUN="tests/test_deploy_tunnel.py"
+mutation_deploy "Tunnel: Caddy vertraut jedem privaten Netz" "Caddyfile.tunnel" "trusted_proxies static 172.31.250.10/32|||trusted_proxies static private_ranges" "$TUN"
+mutation_deploy "Tunnel: Besucher-IP nicht gesetzt (gefälschtes XFF)" "Caddyfile.tunnel" "		header_up X-Forwarded-For {client_ip}
+|||" "$TUN"
+mutation_deploy "Tunnel: cloudflared sieht App und Datenbank" "docker-compose.yml" "    networks:
+      tunnel: {ipv4_address: 172.31.250.10}|||    networks:
+      default: {}
+      tunnel: {ipv4_address: 172.31.250.10}" "$TUN"
+mutation_deploy "Tunnel: Caddy-Ports im Tunnelbetrieb offen" "lib/tunnel.sh" "env_aendern ICHQ_BIND 127.0.0.1|||env_aendern ICHQ_BIND 0.0.0.0" "$TUN"
+mutation_deploy "Domainwechsel ungeprüft (Caddyfile-Injektion)" "lib/tunnel.sh" "  [[ \"\$1\" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\$ || \"\$1\" == localhost ]]|||  [[ -n \"\$1\" ]]" "$TUN"
+mutation_deploy "Tunnel-Token ungeprüft" "lib/tunnel.sh" "  [[ \"\$1\" =~ ^[A-Za-z0-9+/_=-]{80,4096}\$ ]]|||  [[ -n \"\$1\" ]]" "$TUN"
+
 # ---------- Windows-Launcher (ADR-017) ----------
 WIN="tests/test_windows_launcher.py"
 mutation_windows "Launcher: http:// zu fremdem Host" "launcher/ichq_launcher.py" "    if teile.scheme == \"http\" and host not in _LOKAL:|||    if False:" "$WIN"

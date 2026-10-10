@@ -3,7 +3,9 @@
 #
 #   deploy/hq status                 Dienste, Gesundheit, HTTPS von außen
 #   deploy/hq check [--alert]        Betriebsprüfung (Dienste, Zertifikat, Jobs, Mail, Platte, Sicherung); Alarm-Mail
-#   deploy/hq diagnose               Warum ist die Domain nicht erreichbar? DNS (A/AAAA), Ports, Firewall, Zertifikat
+#   deploy/hq diagnose               Warum ist die Domain nicht erreichbar? DNS (A/AAAA), Ports, Firewall, Zertifikat, Tunnel
+#   deploy/hq domain <neue-domain>   Domain ändern (App, Mail-Links, Zertifikat; im Tunnelbetrieb mit Cloudflare-Anleitung)
+#   deploy/hq tunnel-token           Cloudflare-Tunnel-Token ersetzen (Tunnelbetrieb, ADR-018)
 #   deploy/hq start | stop | restart
 #   deploy/hq logs [dienst]          z. B. logs app, logs caddy (folgt der Ausgabe)
 #   deploy/hq build                  Image bauen (ic-ware-hq:local)
@@ -25,7 +27,10 @@ IMAGE="ic-ware-hq:local"
 
 fehler() { echo "Fehler: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
-compose() { docker compose -f "$DEPLOY/docker-compose.yml" --env-file "$ENVFILE" "$@"; }
+compose() {   # im Tunnelbetrieb (ADR-018) gehört cloudflared dazu
+  local p=(); [ "$(env_wert HQ_ZUGANG)" = tunnel ] && p=(--profile tunnel)
+  docker compose -f "$DEPLOY/docker-compose.yml" --env-file "$ENVFILE" "${p[@]}" "$@"
+}
 env_wert() { sed -n "s/^$1=//p" "$ENVFILE" | tail -1; }
 
 voraussetzungen() {
@@ -33,6 +38,8 @@ voraussetzungen() {
   docker compose version >/dev/null 2>&1 || fehler "Docker-Compose-Plugin fehlt (docker compose)."
   [ -f "$ENVFILE" ] || fehler "$ENVFILE fehlt — deploy/install.sh --domain … --email … ausführen."
   [ -d "$ROOT/secrets" ] || fehler "secrets/ fehlt — deploy/install.sh ausführen."
+  # Ältere Installationen nach „hq update": neue (leere) Secret-Dateien anlegen, sonst lehnt Compose den Start ab
+  [ -e "$ROOT/secrets/cloudflare_tunnel_token" ] || "$DEPLOY/fix-secret-permissions.sh" >/dev/null
 }
 
 bauen() {
@@ -60,9 +67,12 @@ app_bereit() {
 'http://127.0.0.1:8000/readiness', timeout=4).status == 200 else 1)" >/dev/null 2>&1
 }
 
-https_pruefen() {   # von außen über Caddy; bei localhost mit Caddys interner CA
+https_pruefen() {   # von außen über Caddy; bei localhost mit Caddys interner CA; im Tunnelbetrieb über Cloudflare
   local domain ca=()
   domain="$(env_wert ICHQ_DOMAIN)"
+  if [ "$(env_wert HQ_ZUGANG)" = tunnel ]; then
+    curl -fsS -o /dev/null --max-time 15 "https://$domain/readiness"; return
+  fi
   if [ "$domain" = localhost ]; then
     compose exec -T caddy cat /data/caddy/pki/authorities/local/root.crt > "$TMP/ca.crt" 2>/dev/null || return 1
     ca=(--cacert "$TMP/ca.crt")
@@ -126,18 +136,22 @@ setup_admin() {
 . "$DEPLOY/lib/pruefung.sh"
 # shellcheck source=deploy/lib/diagnose.sh
 . "$DEPLOY/lib/diagnose.sh"
+# shellcheck source=deploy/lib/tunnel.sh
+. "$DEPLOY/lib/tunnel.sh"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 befehl="${1:-status}"; shift || true
 case "$befehl" in
-  -h|--help|help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 voraussetzungen
 case "$befehl" in
   status) status ;;
   check) check "$@" ;;
   diagnose) diagnose ;;
+  domain) domain_aendern "$@" ;;
+  tunnel-token) tunnel_token_aendern ;;
   start) starten ;;
   stop) compose stop ;;
   restart) compose stop && starten ;;

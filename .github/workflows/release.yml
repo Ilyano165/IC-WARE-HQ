@@ -21,6 +21,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: {name: IC-WARE-HQ-Windows-Installer, path: dist}
+      - uses: actions/download-artifact@v4
+        with: {name: IC-WARE-HQ-Server-Installer, path: dist}
       - name: GitHub-Release anlegen
         env:
           GH_TOKEN: ${{ github.token }}
@@ -33,4 +35,5 @@ jobs:
           vorab=(); case "$version" in *rc*|*a*|*b*) vorab=(--prerelease) ;; esac
           (cd dist && sha256sum -c ./*.sha256)
           gh release create "$TAG" dist/IC-WARE-HQ-Setup-*.exe dist/IC-WARE-HQ-Setup-*.exe.sha256 \
+            dist/IC-WARE-HQ-Server-Setup-*.exe dist/IC-WARE-HQ-Server-Setup-*.exe.sha256 \
             --title "IC WARE HQ $version" --notes-file "$notes" --verify-tag "${vorab[@]}"

@@ -20,8 +20,8 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[1]
 DEPLOY = Path(os.environ.get("ICHQ_DEPLOY_DIR", REPO / "deploy"))
-SKRIPTE = ["install.sh", "hq", "smoke-test.sh", "generate-secrets.sh", "fix-secret-permissions.sh"]
-BIBLIOTHEKEN = ["lib/sicherung.sh", "lib/pruefung.sh", "lib/diagnose.sh"]
+SKRIPTE = ["install.sh", "hq", "smoke-test.sh", "generate-secrets.sh", "fix-secret-permissions.sh", "tunnel-proxy-test.sh"]
+BIBLIOTHEKEN = ["lib/sicherung.sh", "lib/pruefung.sh", "lib/diagnose.sh", "lib/tunnel.sh"]
 LANGLAUFEND = {"postgres", "app", "worker", "jobs", "clamav", "scanner", "caddy"}
 
 
@@ -101,7 +101,8 @@ def test_generate_secrets_ueberschreibt_nie(tmp_path: Path) -> None:
     for f in sec.iterdir():
         assert f.stat().st_mode & 0o077 == 0, f.name                            # nie für Gruppe/andere lesbar
         if os.geteuid() == 0:   # App-Secrets (APP= im Rechte-Skript) gehören UID 10001, PostgreSQL-Passwörter root
-            assert f.stat().st_uid == (10001 if f.name in _app_secrets() else 0), f.name
+            erwartet = 65532 if f.name == "cloudflare_tunnel_token" else 10001 if f.name in _app_secrets() else 0
+            assert f.stat().st_uid == erwartet, f.name                   # 65532: Benutzer im cloudflared-Image
     url = (sec / "database_url").read_text()
     assert url.startswith("postgresql://ichq_app:") and (sec / "pg_app_password").read_text().strip() in url
     vorher = {f.name: f.read_bytes() for f in sec.iterdir()}

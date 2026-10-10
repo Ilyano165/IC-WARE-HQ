@@ -136,16 +136,43 @@ services:
   caddy:
     image: caddy:2-alpine
     depends_on: {app: {condition: service_healthy}}   # sonst 503, bis der erste Health-Check läuft
-    ports: ["80:80", "443:443", "443:443/udp"]
+    # Direktbetrieb: 80/443 für alle (Let's Encrypt). Tunnelbetrieb (ADR-018): ICHQ_BIND=127.0.0.1 — nur dieser Rechner.
+    ports: ["${ICHQ_BIND:-0.0.0.0}:80:80", "${ICHQ_BIND:-0.0.0.0}:443:443", "${ICHQ_BIND:-0.0.0.0}:443:443/udp"]
     environment:
       ICHQ_DOMAIN: ${ICHQ_DOMAIN}
       ICHQ_ACME_EMAIL: ${ICHQ_ACME_EMAIL:?ICHQ_ACME_EMAIL fehlt — Let's-Encrypt-Kontakt in deploy/.env}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./${ICHQ_CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddydata:/data
       - caddyconfig:/config
+    networks: [default, tunnel]
     logging: {driver: json-file, options: {max-size: "10m", max-file: "5"}}
     restart: unless-stopped
+
+  cloudflared:
+    # Nur im Tunnelbetrieb (deploy/install.sh --tunnel): ausgehende Verbindung zu Cloudflare, kein offener Port.
+    # Sieht nur Caddy (Netz „tunnel"), nie App oder Datenbank. Feste Adresse = einzige vertrauenswürdige Quelle der
+    # Besucher-IP in Caddyfile.tunnel.
+    image: cloudflare/cloudflared:2026.9.3
+    profiles: [tunnel]
+    command: ["tunnel", "--no-autoupdate", "--metrics", "127.0.0.1:20241", "run",
+              "--token-file", "/run/secrets/cloudflare_tunnel_token"]
+    secrets: [cloudflare_tunnel_token]
+    depends_on: {caddy: {condition: service_started}}
+    networks:
+      tunnel: {ipv4_address: 172.31.250.10}
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "--metrics", "127.0.0.1:20241", "ready"]
+      interval: 30s
+      start_period: 30s
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "5"}}
+    restart: unless-stopped
+
+networks:
+  default: {}
+  tunnel:
+    ipam:
+      config: [{subnet: 172.31.250.0/28}]
 
 secrets:
   pg_admin_password: {file: ../secrets/pg_admin_password}
@@ -162,6 +189,7 @@ secrets:
   secret_key: {file: ../secrets/secret_key}
   session_secret: {file: ../secrets/session_secret}
   smtp_password: {file: ../secrets/smtp_password}      # leer = kein SMTP-Login
+  cloudflare_tunnel_token: {file: ../secrets/cloudflare_tunnel_token}   # leer = kein Tunnel (ADR-018)
 
 volumes:
   pgdata:

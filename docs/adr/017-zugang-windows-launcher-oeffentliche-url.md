@@ -22,7 +22,8 @@ Windows über Installer und Desktop-Verknüpfung. Alle Nutzer müssen dieselben 
    HTTP→HTTPS, Zertifikatsaussteller und deutet ACME-Fehlertypen (RFC 8555) aus dem Caddy-Log. Der Installer verlangt
    jetzt, dass **jeder** DNS-Eintrag auf den Server zeigt (vorher genügte einer — ein veralteter AAAA-Eintrag ließ
    Let's Encrypt scheitern).
-5. **Keine Tunnel als Produktionslösung** (ngrok, Cloudflare Tunnel o. Ä.): zusätzliche Partei mit TLS-Endpunkt,
+5. *(Für den Betrieb auf einem privaten PC durch ADR-018 geändert: Cloudflare Tunnel mit fälschungssicherer
+   Client-IP.)* **Keine Tunnel als Produktionslösung** (ngrok, Cloudflare Tunnel o. Ä.): zusätzliche Partei mit TLS-Endpunkt,
    Client-IP-Kette nicht mehr geprüft (Drosselung!). Ein CDN/Proxy davor braucht eine eigene Entscheidung.
 6. **Releases:** Tag `v<version>` (= `ichq.__version__` = Launcher-Version) → CI inkl. Windows-Job → GitHub-Release
    mit Installer und SHA-256; `rc`-Versionen als Vorabversion.

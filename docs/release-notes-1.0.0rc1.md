@@ -23,6 +23,14 @@ verifiziert ist noch nichts (es gibt noch keinen Produktionsserver). Was vor dem
   Datenbank. Stille Verteilung mit `/URL=`. Noch **nicht signiert** (SmartScreen-Hinweis).
 * Geprüft: gefälschtes `X-Forwarded-For` hinter Caddy ist wirkungslos.
 
+**Server auf dem eigenen Windows-PC (ADR-018)**
+* `IC-WARE-HQ-Server-Setup-1.0.0rc1.exe`: eigene WSL2-Umgebung (Ubuntu 24.04.5, Prüfsumme fest) mit demselben
+  Linux-Stack; öffentlich über **Cloudflare Tunnel** (kein offener Port am Router); Startmenü für Domain ändern,
+  Token, Sicherung (auch extern S3), E-Mail, Diagnose. Daten bleiben bei Deinstallation, außer ausdrücklich gewählt.
+* Linux: `deploy/install.sh --tunnel`, `deploy/hq domain <neu>`, `deploy/hq tunnel-token`; Besucher-IP im
+  Tunnelbetrieb fälschungssicher (live geprüft).
+* **Nicht auf einem echten Windows-PC installiert** (WSL2 läuft in CI nicht); Cloudflare sieht den Verkehr im Klartext.
+
 **E-Mail (ADR-016)**
 * Einladungen, Passwort-Reset, Sicherheitshinweise (Passwort/2FA geändert, Sperre), Betreiberwarnungen — über eine
   Outbox mit Wiederholung, Ablauf, Dedup und Ratenlimit; Token-Mails nur verschlüsselt gespeichert.

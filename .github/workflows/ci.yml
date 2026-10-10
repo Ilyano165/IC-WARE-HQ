@@ -95,6 +95,8 @@ jobs:
         run: >
           sudo deploy/install.sh --domain localhost --email ci@example.org --skip-dns-check --no-systemd
           --backup-repository s3:http://127.0.0.1:9000/ichq-ci/hq
+      - name: Tunnelbetrieb — Client-IP-Kette echt prüfen (Caddy + Gegenstellen, ADR-018)
+        run: sudo deploy/tunnel-proxy-test.sh
       - name: Ende-zu-Ende-Test
         run: sudo deploy/smoke-test.sh --wegwerf --docker-neustart
       - name: Logs bei Fehler

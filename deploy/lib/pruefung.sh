@@ -20,8 +20,9 @@ melde() {   # melde <OK|WARNUNG|FEHLER> <name> <text>
 alter_s() { echo $(( $(date +%s) - $1 )); }
 
 pruefe_dienste() {
-  local d zustand st gesund neustarts
-  for d in $DAUERDIENSTE; do
+  local d zustand st gesund neustarts dienste="$DAUERDIENSTE"
+  tunnel_modus && dienste="$dienste cloudflared"
+  for d in $dienste; do
     zustand="$(docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}} {{.RestartCount}}' \
       "$(compose ps -q "$d" 2>/dev/null | head -1)" 2>/dev/null || echo "fehlt - 0")"
     read -r st gesund neustarts <<< "$zustand"
@@ -33,21 +34,23 @@ pruefe_dienste() {
 }
 
 pruefe_https() {
-  local domain tage ca=""
+  local domain tage ca="" ziel
   domain="$(env_wert ICHQ_DOMAIN)"
   if app_bereit; then melde OK app "bereit"; else melde FEHLER app "/readiness nicht 200"; fi
   [ "$domain" = localhost ] && compose exec -T caddy cat /data/caddy/pki/authorities/local/root.crt > "$TMP/ca.crt" \
     2>/dev/null && ca="$TMP/ca.crt"
-  tage="$(python3 - "$domain" "$ca" <<'PY' 2>/dev/null
+  ziel=127.0.0.1; tunnel_modus && ziel="$domain"   # Tunnel: Zertifikat liefert Cloudflare (öffentlich prüfen)
+  tage="$(python3 - "$domain" "$ca" "$ziel" <<'PY' 2>/dev/null
 import socket, ssl, sys, time
-domain, ca = sys.argv[1], sys.argv[2]
+domain, ca, ziel = sys.argv[1], sys.argv[2], sys.argv[3]
 ctx = ssl.create_default_context(cafile=ca or None)
-with socket.create_connection(("127.0.0.1", 443), timeout=10) as roh, ctx.wrap_socket(roh, server_hostname=domain) as s:
+with socket.create_connection((ziel, 443), timeout=10) as roh, ctx.wrap_socket(roh, server_hostname=domain) as s:
     print(int((ssl.cert_time_to_seconds(s.getpeercert()["notAfter"]) - time.time()) // 3600))
 PY
 )"
   if [ -z "$tage" ]; then melde FEHLER https "kein gültiges Zertifikat für $domain (deploy/hq logs caddy)"
   elif [ "$domain" = localhost ]; then melde OK https "interne CA, noch $tage h gültig (erneuert Caddy laufend)"
+  elif tunnel_modus && [ $(( tage / 24 )) -ge 7 ]; then melde OK https "Cloudflare-Zertifikat noch $(( tage / 24 )) Tage gültig"
   elif tage=$(( tage / 24 )) && [ "$tage" -lt 7 ]; then melde FEHLER https "Zertifikat läuft in $tage Tagen ab — Erneuerung scheitert?"
   elif [ "$tage" -lt 20 ]; then melde WARNUNG https "Zertifikat läuft in $tage Tagen ab"
   else melde OK https "Zertifikat noch $tage Tage gültig"; fi

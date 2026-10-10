@@ -5,7 +5,8 @@
 # Beantwortet die Frage „Warum ist https://<domain> nicht erreichbar?" in verständlichen Sätzen: DNS (A und AAAA —
 # ein veralteter AAAA-Eintrag lässt Let's Encrypt scheitern, obwohl der A-Eintrag stimmt), Ports, Firewall,
 # Weiterleitung HTTP→HTTPS, Zertifikat (Aussteller, Laufzeit), ACME-Fehler aus dem Caddy-Log, versehentlich
-# veröffentlichte interne Dienste. Von außen prüfen kann ein Server sich nicht selbst — dafür nennt sie den Befehl.
+# veröffentlichte interne Dienste; im Tunnelbetrieb cloudflared, Token, öffentliche Antwort (deploy/lib/tunnel.sh).
+# Von außen prüfen kann ein Server sich nicht selbst — dafür nennt sie den Befehl.
 
 dns_aufloesen() {   # dns_aufloesen <domain> → je Zeile eine Adresse (A und AAAA, ohne IPv4-gemappte)
   getent ahosts "$1" 2>/dev/null | awk '{print $1}' | grep -vi '^::ffff:' | sort -u || true
@@ -59,7 +60,7 @@ acme_deuten() {     # Caddy-Log (stdin) → verständliche Ursache je bekanntem 
 }
 
 diagnose() {
-  local domain origin code ort aus zert
+  local domain origin
   domain="$(env_wert ICHQ_DOMAIN)"
   echo "Diagnose für https://$domain"
   melde OK konfiguration "Domain $domain, Anmeldungen nur über https://$domain (Cookies Secure, Origin-Prüfung)"
@@ -68,6 +69,17 @@ diagnose() {
   elif [ "$origin" = "https://$domain" ]; then melde OK origin "App erwartet https://$domain"
   else melde FEHLER origin "App erwartet $origin statt https://$domain — deploy/hq restart"; fi
 
+  if tunnel_modus; then tunnel_diagnose; else direkt_diagnose "$domain"; fi
+  if https_pruefen; then melde OK https "https://$domain/readiness antwortet"
+  else melde FEHLER https "https://$domain antwortet nicht"; fi
+  echo
+  echo "Von einem ANDEREN Netz prüfen (z. B. Handy ohne WLAN, oder: curl -sI https://$domain/health)."
+  echo "Erst das beweist, dass die Adresse für alle Nutzer erreichbar ist."
+  return "$PRUEF_FEHLER"
+}
+
+direkt_diagnose() {   # Direktbetrieb: DNS zeigt auf diesen Server, Ports 80/443, Let's Encrypt über Caddy
+  local domain="$1" code ort aus zert
   if [ "$domain" = localhost ]; then melde OK dns "localhost — keine öffentliche Domain (Testbetrieb)"
   else
     while IFS='|' read -r stufe name text; do melde "$stufe" "$name" "$text"; done \
@@ -109,11 +121,4 @@ diagnose() {
   ort="$(compose logs --no-color --tail 400 caddy 2>/dev/null | acme_deuten)"
   if [ -n "$ort" ]; then while IFS= read -r z; do melde FEHLER acme "$z"; done <<< "$ort"
   else melde OK acme "keine Zertifikatsfehler im Caddy-Log (letzte 400 Zeilen)"; fi
-
-  if https_pruefen; then melde OK https "https://$domain/readiness antwortet (lokal geprüft)"
-  else melde FEHLER https "https://$domain antwortet nicht"; fi
-  echo
-  echo "Von einem ANDEREN Netz prüfen (z. B. Handy ohne WLAN, oder: curl -sI https://$domain/health)."
-  echo "Erst das beweist, dass die Adresse für alle Nutzer erreichbar ist."
-  return "$PRUEF_FEHLER"
 }
