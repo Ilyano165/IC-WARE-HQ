@@ -331,6 +331,7 @@ mutation_deploy "Tunnel: cloudflared sieht App und Datenbank" "docker-compose.ym
       tunnel: {ipv4_address: 172.31.250.10}" "$TUN"
 mutation_deploy "Tunnel: Caddy-Ports im Tunnelbetrieb offen" "lib/tunnel.sh" "env_aendern ICHQ_BIND 127.0.0.1|||env_aendern ICHQ_BIND 0.0.0.0" "$TUN"
 mutation_deploy "Domainwechsel ungeprüft (Caddyfile-Injektion)" "lib/tunnel.sh" "  [[ \"\$1\" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\$ || \"\$1\" == localhost ]]|||  [[ -n \"\$1\" ]]" "$TUN"
+mutation_deploy "setup-admin bricht bei letzter Zeile ohne Umbruch still ab" "hq" "read -rsp \"\$2: \" wert || true|||read -rsp \"\$2: \" wert" "$DEP"
 mutation_deploy "Tunnel-Token ungeprüft" "lib/tunnel.sh" "  [[ \"\$1\" =~ ^[A-Za-z0-9+/_=-]{80,4096}\$ ]]|||  [[ -n \"\$1\" ]]" "$TUN"
 
 # ---------- Windows-Launcher (ADR-017) ----------

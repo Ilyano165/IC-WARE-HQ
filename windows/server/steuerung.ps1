@@ -84,7 +84,7 @@ Die Domain muss in Cloudflare verwaltet sein.
         foreach ($w in @($firma, $slug, $mail, $name, $klar)) {
             if ([string]::IsNullOrWhiteSpace($w) -or $w -match "[`r`n]") { Write-Host 'Leere oder mehrzeilige Eingabe.'; Ende 2 }
         }
-        $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($firma, $slug, $mail, $name, $klar) -join "`n"))
+        $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((($firma, $slug, $mail, $name, $klar) -join "`n") + "`n"))
         $klar = $null
         # Eingaben per Base64 über STDIN-Skript an setup-admin — Passwort nie in einer Kommandozeile
         Ende (Invoke-IchqLinux "printf '%s\n' '$b64' | base64 -d | deploy/hq setup-admin")

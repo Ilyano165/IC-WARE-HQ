@@ -261,3 +261,17 @@ def test_init_roles_gleicht_passwoerter_an(tmp_path: Path) -> None:
             assert not _scram_passt(verifier(r), f"erstes-{r}"), r
     finally:
         aufraeumen()
+
+
+def test_setup_admin_liest_letzte_eingabe_ohne_zeilenumbruch(tmp_path: Path) -> None:
+    """Startmenü „Erste Firma anlegen" (Windows) gibt die Eingaben per Pipe; fehlt der letzte Zeilenumbruch, darf das
+    Passwort trotzdem ankommen — vorher brach setup-admin still ab (Windows-Simulation, 10.10.2026)."""
+    hq = (DEPLOY / "hq").read_text()
+    eingabe = hq[hq.index("eingabe() {"):hq.index("\n}\n", hq.index("eingabe() {")) + 3]
+    skript = f'fehler() {{ echo "FEHLER $*"; exit 1; }}\n{eingabe}\neingabe a A; eingabe b B geheim; echo "[$a|$b]"'
+    r = subprocess.run(["bash", "-c", "set -euo pipefail\n" + skript], input="eins\nzwei-ohne-umbruch",
+                       capture_output=True, text=True, timeout=30)
+    assert "[eins|zwei-ohne-umbruch]" in r.stdout, (r.stdout, r.stderr)
+    r = subprocess.run(["bash", "-c", "set -euo pipefail\n" + skript], input="eins\n", capture_output=True, text=True,
+                       timeout=30)
+    assert "darf nicht leer sein" in r.stdout                                  # leer bleibt ein Fehler

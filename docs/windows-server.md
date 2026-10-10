@@ -80,5 +80,10 @@ in `C:\ProgramData\IC-WARE-HQ\wsl`, eine Neuinstallation übernimmt sie. **Ja:**
   ungültiges Token korrekt erkannt), Caddy nur auf 127.0.0.1, `hq domain` (App-Origin und Proxy umgestellt),
   Rückwechsel `--no-tunnel`; Ubuntu-Datei vollständig geladen, SHA-256 stimmt, Prüfsummenliste mit Ubuntu-Schlüssel
   verifiziert, enthält alle benötigten Werkzeuge.
+* **Simulation des Linux-Teils (10.10.2026):** genau das Ubuntu-Abbild des Installers (24.04.5, Prüfsumme geprüft) als
+  Container mit systemd; dieselben Befehle wie `einrichten.ps1`, mit Windows-Zeilenenden über STDIN: Docker per apt aus
+  download.docker.com installiert, Image gebaut, alle 7 Dienste gesund, Caddy nur auf 127.0.0.1, systemd-Zeitpläne
+  aktiv, „Erste Firma anlegen“ → Anmeldung 200, „Domain ändern“ → Anmeldung unter neuer Domain 200, Sicherung ok.
+  Dabei gefunden und behoben: „Erste Firma anlegen“ brach still ab, wenn die letzte Eingabe keinen Zeilenumbruch hatte.
 * **Nicht geprüft:** Installation auf einem echten Windows-PC (WSL2-Einrichtung, Neustart-Fortsetzung, Autostart
   ohne Anmeldung per S4U, Energieeinstellungen, Deinstallation), echter Cloudflare-Tunnel mit echter Domain.

@@ -107,8 +107,9 @@ status() {
 }
 
 eingabe() {   # eingabe <variable> <frage> [geheim]
-  local wert
-  if [ "${3:-}" = geheim ]; then read -rsp "$2: " wert; echo >&2; else read -rp "$2: " wert; fi
+  local wert=""   # „|| true": letzte Zeile ohne Zeilenumbruch (Eingabe per Pipe) ist trotzdem gelesen — sonst
+                  # bräche set -e still ab (in der Windows-Simulation gefunden)
+  if [ "${3:-}" = geheim ]; then read -rsp "$2: " wert || true; echo >&2; else read -rp "$2: " wert || true; fi
   [ -n "$wert" ] || fehler "$2 darf nicht leer sein."
   printf -v "$1" '%s' "$wert"
 }
