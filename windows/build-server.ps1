@@ -11,8 +11,20 @@ if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$Version") { 
 Write-Host "==> Version $Version"
 $null = New-Item -ItemType Directory -Force -Path dist
 Write-Host '==> Quelltext des Commits (git archive, ohne .git und ohne lokale Geheimnisse)'
-git archive --format=tar -o dist\quelle.tar HEAD
+# Linux-Dateien mit LF, egal wie Git auf diesem Rechner eingestellt ist (sonst „bash\r“ in der WSL; .gitattributes zusätzlich).
+git -c core.autocrlf=false -c core.eol=lf archive --format=tar -o dist\quelle.tar HEAD
 if ($LASTEXITCODE) { throw 'git archive fehlgeschlagen' }
+Write-Host '==> Prüfen: keine Windows-Zeilenenden in Linux-Dateien'
+$Probe = Join-Path ([IO.Path]::GetTempPath()) "ichq-quelle-$([guid]::NewGuid())"
+$null = New-Item -ItemType Directory -Path $Probe
+tar -xf dist\quelle.tar -C $Probe
+if ($LASTEXITCODE) { throw 'quelle.tar nicht lesbar' }
+$Crlf = @(Get-ChildItem $Probe -Recurse -File | Where-Object {
+    $rel = $_.FullName.Substring($Probe.Length + 1) -replace '\\', '/'
+    $rel -notlike 'windows/*' -and ($rel -like 'deploy/*' -or $_.Extension -in '.sh', '.py', '.sql', '.yml', '.yaml', '.toml', '.in')
+  } | Where-Object { [IO.File]::ReadAllText($_.FullName).Contains("`r`n") } | ForEach-Object { $_.FullName.Substring($Probe.Length + 1) })
+Remove-Item -Recurse -Force $Probe
+if ($Crlf.Count) { throw "Windows-Zeilenenden in Linux-Dateien (würden in der WSL scheitern): $($Crlf -join ', ')" }
 $Iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
 if (-not $Iscc) { $Iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
 if (-not (Test-Path $Iscc)) {
