@@ -31,6 +31,11 @@ verifiziert ist noch nichts (es gibt noch keinen Produktionsserver). Was vor dem
   Tunnelbetrieb fälschungssicher (live geprüft).
 * **Nicht auf einem echten Windows-PC installiert** (WSL2 läuft in CI nicht); Cloudflare sieht den Verkehr im Klartext.
 
+**Schnellstart ohne Cloudflare-Konto (ADR-019)**
+* Installer-Option und `deploy/install.sh --schnell`: zufällige Adresse `…trycloudflare.com`, wird bei jedem
+  Tunnel-Neustart automatisch nachgeführt (App, Mail-Links, Proxy) und per Mail gemeldet. Nur zum Ausprobieren:
+  keine Verfügbarkeitsgarantie, max. 200 gleichzeitige Anfragen. Umstieg auf eigene Domain ohne Datenverlust.
+
 **E-Mail (ADR-016)**
 * Einladungen, Passwort-Reset, Sicherheitshinweise (Passwort/2FA geändert, Sperre), Betreiberwarnungen — über eine
   Outbox mit Wiederholung, Ablauf, Dedup und Ratenlimit; Token-Mails nur verschlüsselt gespeichert.

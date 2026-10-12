@@ -13,11 +13,23 @@ hinter CGNAT/DS-Lite.
 | --- | --- |
 | Windows 10 (2004+) oder 11, 64 Bit, **8 GB RAM** (besser 16), 30 GB frei, Virtualisierung im BIOS/UEFI an | Linux-Umgebung (WSL2), Datenbank, Virenscanner |
 | Ein **Administratorkonto** auf dem PC (das Konto, mit dem Sie sich normalerweise anmelden) | Installation; die Server-Umgebung gehört diesem Konto |
-| **Cloudflare-Konto** (kostenlos) und eine **Domain**, deren Nameserver bei Cloudflare liegen | öffentliche Adresse + Tunnel |
+| **Cloudflare-Konto** (kostenlos) und eine **Domain**, deren Nameserver bei Cloudflare liegen — **entfällt im Schnellstart** | feste öffentliche Adresse + Tunnel |
 | optional: S3-Speicher (z. B. Hetzner Object Storage) | externe Sicherung |
 | optional: SMTP-Zugang Ihres Mail-Anbieters | Einladungen, „Passwort vergessen“, Warnungen |
 
-## Einrichtung
+## Schnellstart ohne Cloudflare-Konto (zufällige Adresse, ADR-019)
+
+Setup starten → **„Schnellstart OHNE Cloudflare-Konto“** wählen → E-Mail eingeben → Installieren. Fertig: Die Adresse
+(z. B. `https://beispiel-wort-wort-wort.trycloudflare.com`) steht am Ende im Konsolenfenster und jederzeit unter
+Startmenü → **„Adresse anzeigen (für Nutzer kopieren)“**. Danach weiter mit Schritt 5 unten.
+
+> **Nur zum Ausprobieren.** Die Adresse **ändert sich bei jedem Neustart** des PCs (bzw. des Tunnels). IC WARE HQ
+> übernimmt die neue Adresse automatisch (innerhalb einer Minute) und mailt sie Ihnen — aber alle Nutzer brauchen
+> dann die neue Adresse und melden sich neu an. Cloudflare gibt dafür **keine Verfügbarkeitsgarantie** und erlaubt
+> höchstens 200 gleichzeitige Anfragen. Für den Dauerbetrieb: Startmenü → **„Domain ändern“** → auf eigene Domain mit
+> kostenlosem Cloudflare-Konto umstellen (Daten bleiben).
+
+## Einrichtung mit eigener Domain (empfohlen für den Dauerbetrieb)
 
 1. **Domain zu Cloudflare:** dash.cloudflare.com → „Add a domain“ → Nameserver beim Domain-Anbieter auf die
    angezeigten Cloudflare-Nameserver umstellen (dauert Minuten bis Stunden).
@@ -40,9 +52,10 @@ hinter CGNAT/DS-Lite.
 
 | Eintrag | Wirkung |
 | --- | --- |
-| IC WARE HQ öffnen | Browser mit Ihrer Domain |
+| IC WARE HQ öffnen | Browser mit Ihrer Domain (im Schnellstart: aktuelle Zufallsadresse) |
+| Adresse anzeigen (für Nutzer kopieren) | aktuelle Adresse anzeigen und in die Zwischenablage kopieren |
 | Status / Betriebsprüfung / Diagnose | Dienste · Prüfung mit Warnungen · Warum nicht erreichbar? (Tunnel, Token, Hostname) |
-| **Domain ändern** | neue Domain: erst in Cloudflare den Public Hostname ändern, dann hier bestätigen — App, Mail-Links und Proxy ziehen mit |
+| **Domain ändern** | im Schnellstart: Umstieg auf eigene Domain mit Cloudflare-Konto; sonst neue Domain: erst in Cloudflare den Public Hostname ändern, dann hier bestätigen — App, Mail-Links und Proxy ziehen mit |
 | Cloudflare-Token ändern | nach „Refresh token“ in Cloudflare |
 | Sicherung jetzt + Wiederherstellungstest | sofortige Sicherung, danach Probe-Wiederherstellung |
 | Server starten / stoppen, Logs | |

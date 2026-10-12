@@ -114,6 +114,14 @@ Describe 'einrichten.ps1 -NurPruefen (ändert nichts)' {
         Lauf @('-Domain', 'hq.firma.de', '-Email', 'a@b.de', '-TokenDatei', $script:TokenDatei) | Should -Be 1
     }
     It 'Ersteinrichtung ohne Token → Abbruch' { Lauf @('-Domain', 'hq.firma.de', '-Email', 'a@b.de') | Should -Be 1 }
+    It 'Schnellstart: ungültige E-Mail → Abbruch' { Lauf @('-Schnell', '-Email', 'kaputt') | Should -Be 1 }
+    It 'ohne Schnellstart ist die Domain Pflicht' { Lauf @('-Email', 'a@b.de') | Should -Be 1 }
+    It 'Schnellstart: weder Domain noch Token nötig (ADR-019)' -Skip:(-not $IsWindows) {
+        Lauf @('-Schnell', '-Email', 'a@b.de') | Should -Be 0
+    }
+    It 'Schnellstart ignoriert eine eingeschleuste Domain' -Skip:(-not $IsWindows) {
+        Lauf @('-Schnell', '-Email', 'a@b.de', '-Domain', "x.de'; rm -rf /") | Should -Be 0
+    }
     It 'gültige Eingaben → Prüfung bestanden, Token-Datei bleibt (nichts geändert)' -Skip:(-not $IsWindows) {
         Set-Content $script:TokenDatei "cloudflared.exe service install $($script:Echt)"
         Lauf @('-Domain', 'hq.firma.de', '-Email', 'a@b.de', '-TokenDatei', $script:TokenDatei) | Should -Be 0

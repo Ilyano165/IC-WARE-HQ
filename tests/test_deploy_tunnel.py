@@ -150,3 +150,89 @@ def test_windows_server_prueft_wie_linux() -> None:
         assert m_bash and m_ps, name_bash
         assert m_bash.group(1) == m_ps.group(1), (name_bash, m_bash.group(1), m_ps.group(1))
     assert "UbuntuSha256 = 'bb415d824822c4b878125729af451a5d18fb13d1cf5cbed9a7393ad64ac6039e'" in ps
+
+
+# ---- Schnellstart ohne Cloudflare-Konto (ADR-019) --------------------------------------------------------------------
+def test_schnellstart_dienst_ohne_token_mit_gleicher_fester_adresse() -> None:
+    d = _compose()["services"]["cloudflared-schnell"]
+    konto = _compose()["services"]["cloudflared"]
+    assert d["profiles"] == ["schnell"] and d["image"] == konto["image"]
+    assert d["command"][-2:] == ["--url", "http://caddy:80"] and "--no-autoupdate" in d["command"]
+    assert "secrets" not in d and "environment" not in d                      # kein Konto, kein Token
+    assert d["networks"] == konto["networks"]                                   # dieselbe vertrauenswürdige Adresse
+    assert "ports" not in d and d["restart"] == "unless-stopped" and "healthcheck" in d
+
+
+KASTEN = "INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |\n"
+
+
+@pytest.mark.parametrize("log,erwartet", [
+    (KASTEN + "INF |  https://able-river-tiger-moon.trycloudflare.com                    |",
+     "able-river-tiger-moon.trycloudflare.com"),
+    (KASTEN + "INF |  https://alt-eins.trycloudflare.com  |\n" + KASTEN + "INF |  https://neu-zwei.trycloudflare.com  |",
+     "neu-zwei.trycloudflare.com"),
+    # im Live-Test gefunden: die Fehlermeldung nennt die API-Adresse — das ist KEINE Tunnel-Adresse
+    ('failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel": dial tcp: no such host', ""),
+    ("INF |  https://api.trycloudflare.com  |", ""),
+    ("INF |  https://evil.trycloudflare.com.angreifer.de  |", ""),
+    ("INF |  https://x}{$Y-z.trycloudflare.com  |", ""),                       # nie Sonderzeichen ins Caddyfile
+    ("INF |  https://UPPER-case.trycloudflare.com  |", ""), ("keine adresse", ""),
+    ("https://frei-stehend.trycloudflare.com", ""),                            # nur aus dem Kasten
+])
+def test_schnellstart_adresse_aus_dem_log(log: str, erwartet: str) -> None:
+    r = subprocess.run(["bash", "-c", f'. "{DEPLOY}/lib/tunnel.sh"; schnell_url_aus_log'], input=log + "\n",
+                       capture_output=True, text=True, timeout=30)
+    assert r.stdout.strip() == erwartet, r.stdout
+
+
+def _schnell(tmp_path: Path, env: str, log: str) -> tuple[subprocess.CompletedProcess[str], str]:
+    datei = tmp_path / ".env"
+    datei.write_text(env)
+    r = _lib('ENVFILE="$1"; env_wert() { sed -n "s/^$1=//p" "$ENVFILE" | tail -1; }; '
+             'compose() { if [ "$1" = logs ]; then printf "%s\\n" "$LOG"; else echo "COMPOSE $*"; fi; }; '
+             'if adresse_aktualisieren; then echo rc=0; else echo rc=1; fi', str(datei), LOG=log)
+    return r, datei.read_text()
+
+
+def test_schnellstart_neue_adresse_wird_uebernommen_ohne_tunnel_neustart(tmp_path: Path) -> None:
+    r, env = _schnell(tmp_path, "HQ_ZUGANG=schnell\nICHQ_DOMAIN=alt-eins.trycloudflare.com\n",
+                      KASTEN + "INF |  https://neu-zwei.trycloudflare.com  |")
+    assert "rc=0" in r.stdout and "ICHQ_DOMAIN=neu-zwei.trycloudflare.com" in env, (r.stdout, r.stderr)
+    aufrufe = [z for z in r.stdout.splitlines() if z.startswith("COMPOSE")]
+    assert aufrufe and all("--no-deps" in z and "cloudflared" not in z for z in aufrufe), aufrufe
+    assert "app" in aufrufe[0] and "caddy" in aufrufe[0]                    # Origin/Mail-Links + Proxy-Hostname
+
+
+def test_schnellstart_ohne_adresse_aendert_nichts(tmp_path: Path) -> None:
+    r, env = _schnell(tmp_path, "HQ_ZUGANG=schnell\nICHQ_DOMAIN=localhost\n", "INF Requesting new quick Tunnel")
+    assert "rc=1" in r.stdout and "COMPOSE" not in r.stdout and "ICHQ_DOMAIN=localhost" in env
+
+
+def test_ausserhalb_des_schnellstarts_wirkungslos(tmp_path: Path) -> None:
+    r, env = _schnell(tmp_path, "HQ_ZUGANG=tunnel\nICHQ_DOMAIN=hq.firma.de\n", KASTEN + "INF |  https://x-y.trycloudflare.com |")
+    assert "rc=0" in r.stdout and "COMPOSE" not in r.stdout and "ICHQ_DOMAIN=hq.firma.de" in env
+
+
+def test_schnellstart_domain_nicht_waehlbar(tmp_path: Path) -> None:
+    env = tmp_path / ".env"
+    env.write_text("HQ_ZUGANG=schnell\nICHQ_DOMAIN=a-b.trycloudflare.com\n")
+    r = _lib('ENVFILE="$1"; env_wert() { sed -n "s/^$1=//p" "$ENVFILE" | tail -1; }; compose() { echo COMPOSE; }; '
+             'domain_aendern hq.firma.de', str(env))
+    assert r.returncode != 0 and "zufällig" in r.stderr and "--tunnel" in r.stderr and "COMPOSE" not in r.stdout
+
+
+def test_modus_schnell_wie_tunnel_nur_lokal(tmp_path: Path) -> None:
+    env = tmp_path / ".env"
+    env.write_text("")
+    assert _lib('ENVFILE="$1"; modus_setzen schnell', str(env)).returncode == 0
+    t = env.read_text()
+    assert "HQ_ZUGANG=schnell" in t and "ICHQ_CADDYFILE=Caddyfile.tunnel" in t and "ICHQ_BIND=127.0.0.1" in t
+
+
+def test_installer_schnellstart_braucht_keine_domain() -> None:
+    hilfe = subprocess.run(["bash", str(DEPLOY / "install.sh"), "--help"], capture_output=True, text=True, timeout=30)
+    assert "--schnell" in hilfe.stdout
+    r = subprocess.run(["bash", str(DEPLOY / "install.sh"), "--email", "a@firma.de", "--schnell", "--firewall"],
+                       capture_output=True, text=True, timeout=60, env={**os.environ, "HOME": "/nonexistent"})
+    assert "--firewall ist im Tunnelbetrieb unnötig" in r.stderr or "als root" in r.stderr, r.stderr
+    assert "Optionen:" not in r.stdout                                          # keine Hilfe ⇒ Domain nicht verlangt

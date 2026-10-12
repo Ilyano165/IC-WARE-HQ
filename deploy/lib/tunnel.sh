@@ -4,6 +4,8 @@
 # Tunnelbetrieb: cloudflared baut eine AUSGEHENDE Verbindung zu Cloudflare auf; Besucher erreichen https://<domain>
 # über Cloudflare. Kein offener Port am Router, funktioniert auch hinter CGNAT/DS-Lite (privater PC, Heimnetz).
 # Preis: Cloudflare beendet TLS und sieht den Verkehr im Klartext (ADR-018).
+# Zwei Arten (HQ_ZUGANG): „tunnel" = eigenes Cloudflare-Konto + eigene Domain (Token); „schnell" = Quick Tunnel ohne
+# Konto, zufällige Adresse <…>.trycloudflare.com, die sich bei jedem Neustart von cloudflared ändert (ADR-019).
 
 domain_gueltig() {   # nur Hostname: landet über .env im Caddyfile ({$…} wird VOR dem Parsen ersetzt)
   [[ "$1" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$ || "$1" == localhost ]]
@@ -13,7 +15,10 @@ token_gueltig() {    # Cloudflare-Tunnel-Token: Base64 (JSON mit Konto, Tunnel, 
   [[ "$1" =~ ^[A-Za-z0-9+/_=-]{80,4096}$ ]]
 }
 
-tunnel_modus() { [ "$(env_wert HQ_ZUGANG 2>/dev/null || true)" = tunnel ]; }
+zugang() { env_wert HQ_ZUGANG 2>/dev/null || true; }
+tunnel_modus() { case "$(zugang)" in tunnel|schnell) return 0 ;; *) return 1 ;; esac; }   # über Cloudflare
+schnell_modus() { [ "$(zugang)" = schnell ]; }
+tunnel_dienst() { if schnell_modus; then echo cloudflared-schnell; else echo cloudflared; fi; }
 
 env_aendern() {      # env_aendern KEY WERT — setzt einen Eintrag in deploy/.env, alle anderen bleiben
   (umask 077; touch "$ENVFILE")
@@ -40,12 +45,21 @@ token_abfragen() {   # Token aus HQ_TUNNEL_TOKEN oder verdeckter Eingabe (nie al
   printf '%s' "$t"
 }
 
-modus_setzen() {     # modus_setzen tunnel|direkt
-  if [ "$1" = tunnel ]; then
-    env_aendern HQ_ZUGANG tunnel; env_aendern ICHQ_CADDYFILE Caddyfile.tunnel; env_aendern ICHQ_BIND 127.0.0.1
+modus_setzen() {     # modus_setzen tunnel|schnell|direkt
+  if [ "$1" = tunnel ] || [ "$1" = schnell ]; then
+    env_aendern HQ_ZUGANG "$1"; env_aendern ICHQ_CADDYFILE Caddyfile.tunnel; env_aendern ICHQ_BIND 127.0.0.1
   else
     env_aendern HQ_ZUGANG direkt; env_aendern ICHQ_CADDYFILE Caddyfile; env_aendern ICHQ_BIND 0.0.0.0
   fi
+}
+
+andere_tunnel_entfernen() {   # andere_tunnel_entfernen <zugang> — beide nutzen dieselbe feste Adresse, nie zugleich
+  local d
+  for d in cloudflared cloudflared-schnell; do
+    [ "$1:$d" = tunnel:cloudflared ] || [ "$1:$d" = schnell:cloudflared-schnell ] && continue
+    docker rm -f "$(docker ps -aq --filter label=com.docker.compose.project=ichq \
+      --filter "label=com.docker.compose.service=$d")" >/dev/null 2>&1 || true
+  done
 }
 
 cloudflare_anleitung() {   # cloudflare_anleitung <domain>
@@ -64,6 +78,9 @@ domain_aendern() {   # deploy/hq domain <neue-domain> [--skip-dns-check]
   neu="${neu,,}"
   [ -n "$neu" ] || fehler "Aufruf: deploy/hq domain <neue-domain>   (z. B. hq.meine-firma.de)"
   domain_gueltig "$neu" || fehler "ungültige Domain: $neu (nur Hostname, ohne https:// und ohne Pfad)"
+  schnell_modus && fehler "Im Schnellstart vergibt Cloudflare die Adresse zufällig — sie lässt sich nicht wählen.
+  Für eine feste, eigene Domain auf ein (kostenloses) Cloudflare-Konto umstellen:
+    deploy/install.sh --domain $neu --email <e-mail> --tunnel   (Windows: Startmenü → 'Domain ändern')"
   alt="$(env_wert ICHQ_DOMAIN)"
   [ "$neu" != "$alt" ] || { info "Domain ist bereits $neu."; return 0; }
   if tunnel_modus; then
@@ -91,7 +108,7 @@ EOF
 }
 
 tunnel_token_aendern() {   # deploy/hq tunnel-token — neues Token (z. B. nach „Refresh token" in Cloudflare)
-  tunnel_modus || fehler "Kein Tunnelbetrieb (einrichten: deploy/install.sh … --tunnel)."
+  [ "$(zugang)" = tunnel ] || fehler "Kein Tunnelbetrieb mit Cloudflare-Konto (einrichten: deploy/install.sh … --tunnel)."
   token_speichern "$(token_abfragen)"
   compose up -d --force-recreate cloudflared
   info "Token ersetzt, cloudflared neu gestartet. Prüfen: deploy/hq diagnose"
@@ -126,21 +143,58 @@ tunnel_diagnose() {
   local domain code zustand
   domain="$(env_wert ICHQ_DOMAIN)"
   zustand="$(docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' \
-    "$(compose ps -q cloudflared 2>/dev/null | head -1)" 2>/dev/null || echo fehlt)"
+    "$(compose ps -q "$(tunnel_dienst)" 2>/dev/null | head -1)" 2>/dev/null || echo fehlt)"
   case "$zustand" in
     "running healthy") melde OK cloudflared "läuft, mit Cloudflare verbunden" ;;
     running*) melde FEHLER cloudflared "läuft, aber nicht verbunden ($zustand)" ;;
     *) melde FEHLER cloudflared "läuft nicht ($zustand) — deploy/hq start" ;;
   esac
-  if [ -s "$ROOT/secrets/cloudflare_tunnel_token" ]; then melde OK token "vorhanden"
+  if schnell_modus; then melde WARNUNG schnellstart "zufällige Adresse ohne Konto — ändert sich bei jedem Neustart, keine Verfügbarkeitsgarantie (nur zum Ausprobieren)"
+  elif [ -s "$ROOT/secrets/cloudflare_tunnel_token" ]; then melde OK token "vorhanden"
   else melde FEHLER token "fehlt — deploy/hq tunnel-token"; fi
   while IFS= read -r z; do
     case "$z" in OK:*) melde OK tunnel-log "${z#OK: }" ;; *) melde FEHLER tunnel-log "$z" ;; esac
-  done < <(compose logs --no-color --tail 300 cloudflared 2>/dev/null | cloudflared_deuten)
+  done < <(compose logs --no-color --tail 300 "$(tunnel_dienst)" 2>/dev/null | cloudflared_deuten)
   code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://$domain/readiness" || true)"
   IFS='|' read -r stufe text <<< "$(tunnel_antwort_deuten "${code:-000}" "$domain")"
   melde "$stufe" oeffentlich "$text"
   if docker ps --filter label=com.docker.compose.project=ichq --format '{{.Ports}}' | grep -qE '0\.0\.0\.0:|\[::\]:'; then
     melde FEHLER intern "ein Dienst ist im Tunnelbetrieb aus dem Netz erreichbar (ICHQ_BIND=127.0.0.1 erwartet)"
   else melde OK intern "keine offenen Ports nach außen (nur Tunnel)"; fi
+}
+
+# ---- Schnellstart ohne Cloudflare-Konto (Quick Tunnel, ADR-019) ---------------------------------------------------
+schnell_url_aus_log() {   # cloudflared-Log (stdin) → zuletzt vergebener Hostname <…>.trycloudflare.com (sonst leer)
+  # Nur die Zeile im Kasten „Your quick Tunnel has been created" zählt: „|  https://wort-wort-….trycloudflare.com  |".
+  # Andere Erwähnungen (z. B. Fehler „Post https://api.trycloudflare.com/tunnel") sind KEINE Adresse (Live-Test).
+  local h
+  h="$(grep -oE '\|[[:space:]]+https://[a-z0-9]+(-[a-z0-9]+)+\.trycloudflare\.com[[:space:]]+\|' \
+       | tail -1 | grep -oE '[a-z0-9]+(-[a-z0-9]+)+\.trycloudflare\.com' || true)"
+  if [ -n "$h" ] && domain_gueltig "$h"; then echo "$h"; fi
+}
+
+adresse_aktualisieren() {   # Schnellstart: neue Zufallsadresse übernehmen (App-Origin, Mail-Links, Caddy). 0 = aktuell
+  schnell_modus || return 0
+  local neu alt
+  neu="$(compose logs --no-color "$(tunnel_dienst)" 2>/dev/null | schnell_url_aus_log)"
+  [ -n "$neu" ] || return 1                                  # Tunnel hat noch keine Adresse (startet noch)
+  alt="$(env_wert ICHQ_DOMAIN)"
+  [ "$neu" != "$alt" ] || return 0
+  info "Neue Schnellstart-Adresse: https://$neu (vorher $alt)"
+  env_aendern ICHQ_DOMAIN "$neu"
+  # Nur die Dienste mit der Domain neu erzeugen — cloudflared NIE (neuer Start = wieder neue Adresse)
+  compose up -d --no-deps app worker jobs scanner caddy
+  if declare -F warnen >/dev/null && [ "$alt" != localhost ]; then
+    warnen "Neue Adresse von IC WARE HQ" "IC WARE HQ ist jetzt unter https://$neu/app/ erreichbar (Schnellstart: \
+die Adresse ändert sich bei jedem Neustart). Bitte an alle Nutzer weitergeben." "adresse-$neu" || true
+  fi
+  return 0
+}
+
+adresse_zeigen() {   # deploy/hq adresse [--still] — aktuelle Adresse; im Schnellstart vorher nachführen
+  local _i
+  if schnell_modus; then
+    for _i in $(seq 1 30); do adresse_aktualisieren && break; [ "${1:-}" = --still ] && break; sleep 2; done
+  fi
+  [ "${1:-}" = --still ] || echo "https://$(env_wert ICHQ_DOMAIN)/app/"
 }

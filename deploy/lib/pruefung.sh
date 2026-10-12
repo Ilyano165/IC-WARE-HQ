@@ -21,7 +21,7 @@ alter_s() { echo $(( $(date +%s) - $1 )); }
 
 pruefe_dienste() {
   local d zustand st gesund neustarts dienste="$DAUERDIENSTE"
-  tunnel_modus && dienste="$dienste cloudflared"
+  tunnel_modus && dienste="$dienste $(tunnel_dienst)"
   for d in $dienste; do
     zustand="$(docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}} {{.RestartCount}}' \
       "$(compose ps -q "$d" 2>/dev/null | head -1)" 2>/dev/null || echo "fehlt - 0")"
@@ -104,6 +104,7 @@ pruefe_sicherung() {   # pruefe_sicherung <art> <höchstalter in Stunden>
 check() {
   local alarm="${1:-}" vorher="$STATUS_DIR/check.state" jetzt="$TMP/probleme" url
   : > "$jetzt"
+  if schnell_modus; then adresse_aktualisieren >/dev/null 2>&1 || true; fi   # Schnellstart: erst aktuelle Adresse
   pruefe_dienste
   pruefe_https
   pruefe_hintergrund

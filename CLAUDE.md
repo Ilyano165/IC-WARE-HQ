@@ -10,7 +10,7 @@ Entwicklung in Meilensteinen M0–M26 (Roadmap: `docs/architecture.md`, M0-Beric
 **Stand:** M0 Architektur ✅ · M1 Foundation ✅ · M2 Authentication ✅ · **C0 Core-Plattform** (vor M3/M4 gebaut, ADR-010) · **M3 Mandanten** umgesetzt
 (`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **U1 Oberfläche** im IC-Ware-Design (`docs/ui.md`, ADR-013); **D0 Dashboard** (`docs/d0-dashboard.md`, ADR-014); **Betrieb** mit Installer/Launcher, Virenprüfung (`docs/server-setup.md`, ADR-015); **Launch-Vorbereitung 1.0.0rc1**: E-Mail-Outbox, verschlüsselte externe Sicherung mit Wiederherstellungstest, Monitoring, Sicherheitsprüfung (ADR-016, `docs/security-review.md`); **Zugang**: öffentliche Adresse mit Diagnose, Web-App-Manifest,
 Windows-Launcher + Installer (ADR-017, `docs/windows.md`); **Server auf Windows-PC** über WSL2 + Cloudflare Tunnel,
-Domain änderbar (ADR-018, `docs/windows-server.md`); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
+Domain änderbar (ADR-018, `docs/windows-server.md`), Schnellstart ohne Konto mit Zufallsadresse (ADR-019); **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
 Tor 1/M3 → C0 → U1 → D0 → S1… — **keine D0-/S-Arbeit vor Tor 1.** Produktvision v2 ist ein **unbestätigter
 Entwurf** (`docs/produktvision-v2.md`). Nichts davon ist produktionsreif.
 
@@ -236,3 +236,5 @@ Noch offen aus M2: echter SMTP-Versand. (Compose-Smoke-Test erledigt: `deploy/sm
 - Windows-Skripte: was an Linux geht, **über STDIN** (`Invoke-IchqLinux`), nie Geheimnisse in Kommandozeilen;
   Dateien mit UTF-8-BOM (Windows PowerShell 5.1); ein Windows-Server ist kein zweiter Stack — immer `deploy/install.sh`.
 - Deinstallation löscht Daten nur auf ausdrückliche Wahl (Standard Nein, still nie).
+- **Schnellstart (ADR-019):** Adresse nur aus Cloudflares Erfolgsmeldung (`schnell_url_aus_log`), beim Nachführen nie
+  `cloudflared-schnell` neu erzeugen (neue Adresse!); `hq domain` lehnt im Schnellstart ab.

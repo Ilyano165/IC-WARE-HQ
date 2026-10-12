@@ -13,6 +13,7 @@ param(
     [string]$TokenDatei,          # Datei mit dem Cloudflare-Tunnel-Token (wird nach dem Lesen gelöscht)
     [string]$Quelle,              # quelle.tar (Inhalt des Repositorys, vom Installer mitgeliefert)
     [switch]$EnergieAus,
+    [switch]$Schnell,             # Schnellstart OHNE Cloudflare-Konto: zufällige Adresse <…>.trycloudflare.com (ADR-019)
     [switch]$Fortsetzen,          # nach Neustart (WSL-Installation) — Werte aus fortsetzen.json
     [switch]$NurPruefen           # nur Eingaben und Voraussetzungen prüfen, nichts ändern (Test/CI)
 )
@@ -31,13 +32,15 @@ if ($Fortsetzen) {
     if (-not (Test-Path $fortsetzenDatei)) { Abbruch 'Keine unterbrochene Einrichtung gefunden.' }
     $w = Get-Content $fortsetzenDatei -Raw | ConvertFrom-Json
     $Domain = $w.Domain; $Email = $w.Email; $Quelle = $w.Quelle; $EnergieAus = [bool]$w.EnergieAus
+    $Schnell = [bool]$w.Schnell
 }
 if (-not $NurPruefen) { Start-Transcript -Path (Join-Path $K.Basis 'einrichten.log') -Append | Out-Null }
 
 # ---- 1. Eingaben und Voraussetzungen ------------------------------------------------------------------------------
 Schritt 'Eingaben und Voraussetzungen prüfen'
 $Domain = "$Domain".Trim().ToLowerInvariant()
-if (-not (Test-IchqDomain $Domain)) { Abbruch "Ungültige Domain „$Domain“ (nur Hostname, z. B. hq.meine-firma.de)." }
+if ($Schnell) { $Domain = '' }       # Cloudflare vergibt die Adresse selbst
+elseif (-not (Test-IchqDomain $Domain)) { Abbruch "Ungültige Domain „$Domain“ (nur Hostname, z. B. hq.meine-firma.de)." }
 if (-not (Test-IchqEmail $Email)) { Abbruch "Ungültige E-Mail-Adresse „$Email“." }
 $token = ''
 if ($TokenDatei) {
@@ -50,7 +53,9 @@ if ($token -and -not (Test-IchqToken $token)) {
     Abbruch 'Das ist kein Cloudflare-Tunnel-Token (Zero Trust → Networks → Tunnels → Ihr Tunnel → Token kopieren).'
 }
 $distroDa = (Get-IchqWslListe) -contains $K.Distro
-if (-not $token -and -not $distroDa) { Abbruch 'Für die Ersteinrichtung wird das Cloudflare-Tunnel-Token benötigt.' }
+if (-not $Schnell -and -not $token -and -not $distroDa) {
+    Abbruch 'Für die Ersteinrichtung mit eigener Domain wird das Cloudflare-Tunnel-Token benötigt (oder Schnellstart wählen).'
+}
 if ([Environment]::OSVersion.Version.Build -lt 19041) { Abbruch 'Windows 10 Version 2004 (Build 19041) oder neuer nötig.' }
 if (-not [Environment]::Is64BitOperatingSystem) { Abbruch '64-Bit-Windows nötig.' }
 $ramGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
@@ -69,7 +74,7 @@ if (-not (Test-IchqWslBereit)) {
     Write-Host 'WSL wird installiert (Windows-Funktion + aktuelle WSL). Danach ist ein NEUSTART nötig.'
     & wsl.exe --install --no-distribution
     if ($LASTEXITCODE -ne 0) { Abbruch "wsl --install scheiterte ($LASTEXITCODE). Virtualisierung im BIOS/UEFI aktiv?" }
-    @{ Domain = $Domain; Email = $Email; Quelle = $Quelle; EnergieAus = [bool]$EnergieAus } | ConvertTo-Json |
+    @{ Domain = $Domain; Email = $Email; Quelle = $Quelle; EnergieAus = [bool]$EnergieAus; Schnell = [bool]$Schnell } | ConvertTo-Json |
         Set-Content -LiteralPath $fortsetzenDatei -Encoding utf8
     $befehl = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Fortsetzen"
     Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'IC-WARE-HQ-Einrichtung' -Value $befehl
@@ -114,8 +119,9 @@ if ((Invoke-IchqLinux 'apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-g
 }
 Schritt 'IC WARE HQ einrichten: Docker, Datenbank, Virenscanner, Tunnel, Sicherung (dauert 10–20 Minuten)'
 # Token nur über STDIN (Invoke-IchqLinux) — geprüft: nur [A-Za-z0-9+/_=-], also sicher in einfachen Anführungszeichen
-$installieren = "deploy/install.sh --domain '$Domain' --email '$Email' --tunnel"
-if ($token) { $installieren = "export HQ_TUNNEL_TOKEN='$token'`n$installieren" }
+if ($Schnell) { $installieren = "deploy/install.sh --email '$Email' --schnell" }
+else { $installieren = "deploy/install.sh --domain '$Domain' --email '$Email' --tunnel" }
+if ($token -and -not $Schnell) { $installieren = "export HQ_TUNNEL_TOKEN='$token'`n$installieren" }
 $rc = Invoke-IchqLinux $installieren
 Remove-Item -LiteralPath $tokenAblage -Force -ErrorAction SilentlyContinue   # liegt jetzt nur noch als Secret in Linux
 if ($rc -ne 0) { Abbruch "deploy/install.sh scheiterte ($rc) — Meldung oben; danach Startmenü → Einrichtung wiederholen." }
@@ -136,9 +142,16 @@ if ($EnergieAus) {
 Remove-Item -LiteralPath $fortsetzenDatei -Force -ErrorAction SilentlyContinue
 New-Item -Path 'HKLM:\SOFTWARE\IC WARE HQ Server' -Force | Out-Null
 Set-ItemProperty 'HKLM:\SOFTWARE\IC WARE HQ Server' -Name Eingerichtet -Value 1
+Set-ItemProperty 'HKLM:\SOFTWARE\IC WARE HQ Server' -Name Zugang -Value $(if ($Schnell) { 'schnell' } else { 'tunnel' })
 
 Schritt 'Fertig'
+$Domain = Get-IchqDomain
 Write-Host "IC WARE HQ: https://$Domain/app/"
+if ($Schnell) {
+    Write-Host 'SCHNELLSTART: Die Adresse ist zufällig und ändert sich bei jedem Neustart des PCs bzw. des Tunnels.' -ForegroundColor Yellow
+    Write-Host 'Aktuelle Adresse jederzeit: Startmenü → „Adresse anzeigen“. Nur zum Ausprobieren — für den Dauerbetrieb'
+    Write-Host 'Startmenü → „Domain ändern“ (eigene Domain mit kostenlosem Cloudflare-Konto).'
+}
 Write-Host 'Nächste Schritte (Startmenü „IC WARE HQ Server"): „Erste Firma anlegen", dann „Diagnose".'
 Write-Host 'WICHTIG: Den angezeigten SICHERUNGSSCHLÜSSEL getrennt von diesem PC aufbewahren (Passwortmanager).'
 exit 0

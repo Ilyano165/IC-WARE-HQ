@@ -4,6 +4,7 @@
 ;
 ; Bauen: windows\build-server.ps1   Stille Installation (z. B. Test):
 ;   IC-WARE-HQ-Server-Setup-<v>.exe /VERYSILENT /DOMAIN=hq.firma.de /EMAIL=it@firma.de /TOKENFILE=C:\pfad\token.txt
+;   Schnellstart ohne Cloudflare-Konto (ADR-019):  … /VERYSILENT /SCHNELL=1 /EMAIL=it@firma.de
 
 #ifndef AppVersion
   #define AppVersion "0.0.0-dev"
@@ -46,6 +47,7 @@ Source: "..\..\dist\quelle.tar"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\IC WARE HQ öffnen"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\steuerung.ps1"" -Aktion Oeffnen"; IconFilename: "{app}\ichq.ico"
+Name: "{group}\Adresse anzeigen (für Nutzer kopieren)"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\steuerung.ps1"" -Aktion Adresse"; IconFilename: "{app}\ichq.ico"
 Name: "{group}\Status"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\steuerung.ps1"" -Aktion Status"; IconFilename: "{app}\ichq.ico"
 Name: "{group}\Diagnose (Erreichbarkeit)"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\steuerung.ps1"" -Aktion Diagnose"; IconFilename: "{app}\ichq.ico"
 Name: "{group}\Domain ändern"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\steuerung.ps1"" -Aktion Domain"; IconFilename: "{app}\ichq.ico"
@@ -63,6 +65,8 @@ Name: "{autodesktop}\IC WARE HQ"; Filename: "powershell.exe"; Parameters: "-NoPr
 
 [Code]
 var
+  SeiteArt: TInputOptionWizardPage;
+  SeiteEmail: TInputQueryWizardPage;
   SeiteDomain: TInputQueryWizardPage;
   SeiteToken: TInputQueryWizardPage;
   Ergebnis: Integer;
@@ -100,17 +104,36 @@ begin
   Result := Erlaubt(S, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/_=-') and (Length(S) >= 80);
 end;
 
+function Schnell(): Boolean;
+begin
+  Result := SeiteArt.SelectedValueIndex = 0;
+end;
+
 procedure InitializeWizard();
+var Zugang: String;
 begin
   Update := RegKeyExists(HKLM, 'SOFTWARE\IC WARE HQ Server');
-  SeiteDomain := CreateInputQueryPage(wpSelectTasks, 'Adresse im Internet',
+  SeiteArt := CreateInputOptionPage(wpSelectTasks, 'Erreichbarkeit im Internet',
+    'Wie sollen Nutzer IC WARE HQ erreichen?',
+    'Beide Wege funktionieren ohne Portfreigabe am Router. Später umstellen: Startmenü → „Domain ändern".', True, False);
+  SeiteArt.Add('Schnellstart OHNE Cloudflare-Konto — zufällige Adresse (…trycloudflare.com). Ändert sich bei jedem ' +
+    'Neustart, keine Verfügbarkeitsgarantie: zum Ausprobieren');
+  SeiteArt.Add('Eigene, feste Domain mit (kostenlosem) Cloudflare-Konto — für den Dauerbetrieb empfohlen');
+  SeiteArt.SelectedValueIndex := 0;
+  if RegQueryStringValue(HKLM, 'SOFTWARE\IC WARE HQ Server', 'Zugang', Zugang) and (Zugang = 'tunnel') then
+    SeiteArt.SelectedValueIndex := 1;
+  if ExpandConstant('{param:DOMAIN|}') <> '' then SeiteArt.SelectedValueIndex := 1;
+  if ExpandConstant('{param:SCHNELL|}') = '1' then SeiteArt.SelectedValueIndex := 0;
+  SeiteEmail := CreateInputQueryPage(SeiteArt.ID, 'Betreiber',
+    'Ihre E-Mail-Adresse', 'Für Warnungen (Sicherung, Ausfälle) und — im Schnellstart — neue Adressen.');
+  SeiteEmail.Add('E-Mail-Adresse:', False);
+  SeiteEmail.Values[0] := ExpandConstant('{param:EMAIL|}');
+  SeiteDomain := CreateInputQueryPage(SeiteEmail.ID, 'Eigene Domain',
     'Unter welcher Adresse sollen alle Nutzer IC WARE HQ erreichen?',
     'Die Domain muss in Ihrem Cloudflare-Konto verwaltet sein (kostenloser Tarif genügt). ' +
     'Beispiel: hq.meine-firma.de. Ändern geht später über Startmenü → „Domain ändern".');
   SeiteDomain.Add('Domain:', False);
-  SeiteDomain.Add('Ihre E-Mail-Adresse (Betreiber, für Warnungen):', False);
   SeiteDomain.Values[0] := ExpandConstant('{param:DOMAIN|}');
-  SeiteDomain.Values[1] := ExpandConstant('{param:EMAIL|}');
   SeiteToken := CreateInputQueryPage(SeiteDomain.ID, 'Cloudflare-Tunnel',
     'Token des Tunnels aus Cloudflare',
     'dash.cloudflare.com → Zero Trust → Networks → Tunnels → „Create a tunnel" (Cloudflared) → Namen vergeben → ' +
@@ -118,6 +141,11 @@ begin
     '„Public Hostname" Ihre Domain mit Dienst HTTP und Adresse caddy:80 eintragen.' + #13#10#13#10 +
     'Bei einem Update leer lassen = bisheriges Token bleibt.');
   SeiteToken.Add('Token oder Befehl:', True);
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := Schnell() and ((PageID = SeiteDomain.ID) or (PageID = SeiteToken.ID));
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -129,10 +157,11 @@ begin
     if not DomainOk(SeiteDomain.Values[0]) then begin
       MsgBox('Bitte nur den Hostnamen eingeben, z. B. hq.meine-firma.de (ohne https:// und ohne Pfad).', mbError, MB_OK);
       Result := False;
-    end else if not EmailOk(Trim(SeiteDomain.Values[1])) then begin
-      MsgBox('Bitte eine gültige E-Mail-Adresse eingeben.', mbError, MB_OK);
-      Result := False;
     end;
+  end;
+  if (CurPageID = SeiteEmail.ID) and not EmailOk(Trim(SeiteEmail.Values[0])) then begin
+    MsgBox('Bitte eine gültige E-Mail-Adresse eingeben.', mbError, MB_OK);
+    Result := False;
   end;
   if CurPageID = SeiteToken.ID then begin
     T := LetztesWort(SeiteToken.Values[0]);
@@ -156,9 +185,12 @@ begin
   if (T = '') and (ExpandConstant('{param:TOKENFILE|}') <> '') then
     if LoadStringFromFile(ExpandConstant('{param:TOKENFILE|}'), Roh) then T := LetztesWort(String(Roh));
   Parameter := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\einrichten.ps1') + '"' +
-    ' -Domain "' + SeiteDomain.Values[0] + '" -Email "' + Trim(SeiteDomain.Values[1]) + '"' +
-    ' -Quelle "' + ExpandConstant('{app}\quelle.tar') + '"';
-  if TokenOk(T) then begin
+    ' -Email "' + Trim(SeiteEmail.Values[0]) + '"' + ' -Quelle "' + ExpandConstant('{app}\quelle.tar') + '"';
+  if Schnell() then
+    Parameter := Parameter + ' -Schnell'
+  else
+    Parameter := Parameter + ' -Domain "' + SeiteDomain.Values[0] + '"';
+  if TokenOk(T) and not Schnell() then begin
     { Token nie als Argument (Prozessliste): Datei im privaten Setup-Temp-Ordner, einrichten.ps1 löscht sie }
     TokenDatei := ExpandConstant('{tmp}\token.txt');
     SaveStringToFile(TokenDatei, T, False);

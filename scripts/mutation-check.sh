@@ -332,6 +332,9 @@ mutation_deploy "Tunnel: cloudflared sieht App und Datenbank" "docker-compose.ym
 mutation_deploy "Tunnel: Caddy-Ports im Tunnelbetrieb offen" "lib/tunnel.sh" "env_aendern ICHQ_BIND 127.0.0.1|||env_aendern ICHQ_BIND 0.0.0.0" "$TUN"
 mutation_deploy "Domainwechsel ungeprüft (Caddyfile-Injektion)" "lib/tunnel.sh" "  [[ \"\$1\" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\$ || \"\$1\" == localhost ]]|||  [[ -n \"\$1\" ]]" "$TUN"
 mutation_deploy "setup-admin bricht bei letzter Zeile ohne Umbruch still ab" "hq" "read -rsp \"\$2: \" wert || true|||read -rsp \"\$2: \" wert" "$DEP"
+mutation_deploy "Schnellstart: Adresse auch außerhalb der Cloudflare-Meldung" "lib/tunnel.sh" "'\\|[[:space:]]+https://[a-z0-9]+(-[a-z0-9]+)+\\.trycloudflare\\.com[[:space:]]+\\|'|||'https://[a-z0-9]+(-[a-z0-9]+)+\\.trycloudflare\\.com'" "$TUN"
+mutation_deploy "Schnellstart: Adresswechsel startet den Tunnel neu" "lib/tunnel.sh" "compose up -d --no-deps app worker jobs scanner caddy|||compose up -d app worker jobs scanner caddy cloudflared-schnell" "$TUN"
+mutation_deploy "Schnellstart: Domain frei wählbar" "lib/tunnel.sh" "  schnell_modus && fehler|||  false && fehler" "$TUN"
 mutation_deploy "Tunnel-Token ungeprüft" "lib/tunnel.sh" "  [[ \"\$1\" =~ ^[A-Za-z0-9+/_=-]{80,4096}\$ ]]|||  [[ -n \"\$1\" ]]" "$TUN"
 
 # ---------- Windows-Launcher (ADR-017) ----------

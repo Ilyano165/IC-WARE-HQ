@@ -6,7 +6,7 @@ Linux-Umgebung „IC-WARE-HQ" auf — derselbe, geprüfte Weg wie auf einem Linu
 param(
     [Parameter(Mandatory)]
     [ValidateSet('Oeffnen', 'Status', 'Diagnose', 'Domain', 'Token', 'ErsteFirma', 'Sicherung', 'Pruefung', 'Logs',
-                 'Starten', 'Stoppen', 'Einrichten', 'SicherungExtern', 'EMail')]
+                 'Starten', 'Stoppen', 'Einrichten', 'SicherungExtern', 'EMail', 'Adresse')]
     [string]$Aktion
 )
 $ErrorActionPreference = 'Stop'
@@ -43,6 +43,7 @@ if ((Get-IchqWslListe) -notcontains $K.Distro) {
 
 switch ($Aktion) {
     'Oeffnen' {
+        if ((Get-IchqEnvWert HQ_ZUGANG) -eq 'schnell') { $null = Invoke-IchqLinux 'deploy/hq adresse --still' }
         $d = Get-IchqDomain
         if (-not (Test-IchqDomain $d)) { Write-Host "Keine gültige Domain eingerichtet ($d)."; Ende 1 }
         Start-Process "https://$d/app/"
@@ -55,7 +56,34 @@ switch ($Aktion) {
     'Logs'       { Write-Host 'Logs (laufend; beenden mit Strg+C) …'; Ende (Invoke-IchqLinux 'deploy/hq logs </dev/null') }
     'Starten'    { Start-ScheduledTask -TaskName 'IC WARE HQ Server' -ErrorAction SilentlyContinue; Ende (Invoke-IchqLinux 'deploy/hq start') }
     'Stoppen'    { Ende (Invoke-IchqLinux 'deploy/hq stop') }
+    'Adresse' {
+        $null = Invoke-IchqLinux 'deploy/hq adresse --still'
+        $url = "https://$(Get-IchqDomain)/app/"
+        Write-Host "`nAdresse von IC WARE HQ:  $url`n"
+        try { Set-Clipboard -Value $url; Write-Host '(in die Zwischenablage kopiert — zum Weitergeben an Nutzer)' } catch { $null = $_ }
+        if ((Get-IchqEnvWert HQ_ZUGANG) -eq 'schnell') {
+            Write-Host 'Schnellstart: Diese Adresse ändert sich bei jedem Neustart des PCs/Tunnels — Nutzer brauchen dann die neue.' -ForegroundColor Yellow
+        }
+        Ende 0
+    }
     'Domain' {
+        if ((Get-IchqEnvWert HQ_ZUGANG) -eq 'schnell') {
+            Write-Host @"
+Im Schnellstart vergibt Cloudflare eine zufällige Adresse — sie lässt sich nicht wählen.
+Für eine FESTE, eigene Domain (empfohlen für den Dauerbetrieb) brauchen Sie ein kostenloses Cloudflare-Konto:
+  1. Domain zu Cloudflare (dash.cloudflare.com → Add a domain, Nameserver umstellen)
+  2. Zero Trust → Networks → Tunnels → Create a tunnel (Cloudflared) → Befehl kopieren
+  3. Im Tunnel → Public Hostname: Ihre Domain, Dienst HTTP, URL caddy:80
+"@
+            $ok = Read-Host 'Jetzt auf eigene Domain umstellen? [j/N]'
+            if ($ok -notmatch '^[jJyY]$') { Write-Host 'Abgebrochen — nichts geändert.'; Ende 1 }
+            $neu = (Read-Host 'Ihre Domain (z. B. hq.meine-firma.de)').Trim().ToLowerInvariant()
+            if (-not (Test-IchqDomain $neu)) { Write-Host 'Ungültig — nur der Hostname.'; Ende 2 }
+            $t = ConvertTo-IchqToken (Read-Host 'Cloudflare-Tunnel-Token (oder ganzer kopierter Befehl)')
+            if (-not (Test-IchqToken $t)) { Write-Host 'Das ist kein Tunnel-Token.'; Ende 2 }
+            $e = Get-IchqEnvWert ICHQ_ACME_EMAIL
+            Ende (Invoke-IchqLinux "export HQ_TUNNEL_TOKEN='$t'`ndeploy/install.sh --domain '$neu' --email '$e' --tunnel --no-build </dev/null")
+        }
         $alt = Get-IchqDomain
         Write-Host "Aktuelle Domain: $alt"
         $neu = (Read-Host 'Neue Domain (z. B. hq.meine-firma.de)').Trim().ToLowerInvariant()
@@ -71,6 +99,7 @@ Die Domain muss in Cloudflare verwaltet sein.
         Ende (Invoke-IchqLinux "deploy/hq domain '$neu' </dev/null")
     }
     'Token' {
+        if ((Get-IchqEnvWert HQ_ZUGANG) -eq 'schnell') { Write-Host 'Schnellstart braucht kein Token. Eigene Domain: Startmenü → „Domain ändern“.'; Ende 1 }
         $t = ConvertTo-IchqToken (Read-Host 'Neues Cloudflare-Tunnel-Token (oder ganzer Befehl aus Cloudflare)')
         if (-not (Test-IchqToken $t)) { Write-Host 'Das ist kein Tunnel-Token.'; Ende 2 }
         Ende (Invoke-IchqLinux "export HQ_TUNNEL_TOKEN='$t'`ndeploy/hq tunnel-token </dev/null")
@@ -125,8 +154,9 @@ Die Domain muss in Cloudflare verwaltet sein.
         $quelle = Join-Path $PSScriptRoot 'quelle.tar'
         $d = Get-IchqDomain
         $e = Get-IchqEnvWert ICHQ_ACME_EMAIL
+        $zusatz = @(); if ((Get-IchqEnvWert HQ_ZUGANG) -eq 'schnell') { $zusatz = @('-Schnell') }
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'einrichten.ps1') `
-            -Domain $d -Email $e -Quelle $quelle
+            -Domain $d -Email $e -Quelle $quelle @zusatz
         Ende $LASTEXITCODE
     }
 }

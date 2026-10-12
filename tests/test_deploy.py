@@ -150,7 +150,8 @@ def test_restore_verlangt_bestaetigung() -> None:
 
 
 EINHEITEN = ("ichq.service", "ichq-backup.service", "ichq-backup.timer", "ichq-backup-verify.service",
-             "ichq-backup-verify.timer", "ichq-check.service", "ichq-check.timer")
+             "ichq-backup-verify.timer", "ichq-check.service", "ichq-check.timer", "ichq-adresse.service",
+             "ichq-adresse.timer")
 
 
 def test_systemd_units(tmp_path: Path) -> None:

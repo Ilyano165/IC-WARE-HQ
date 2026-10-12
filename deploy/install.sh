@@ -13,6 +13,8 @@
 #   --skip-dns-check    DNS-Prüfung überspringen (z. B. Server hinter NAT, DNS noch nicht verteilt)
 #   --tunnel            Tunnelbetrieb über Cloudflare (ADR-018): kein offener Port, z. B. privater PC im Heimnetz.
 #                       Token: Umgebung HQ_TUNNEL_TOKEN oder verdeckte Abfrage. Zurück: --no-tunnel
+#   --schnell           Schnellstart OHNE Cloudflare-Konto (ADR-019): zufällige Adresse <…>.trycloudflare.com, die
+#                       sich bei jedem Neustart ändert; --domain entfällt. Nur zum Ausprobieren, nicht für den Dauerbetrieb
 #   --firewall          ufw einrichten: nur 22, 80, 443 eingehend
 #   --no-systemd        keine systemd-Units (Autostart, Sicherung, Prüfung)
 #   --backup-repository R  Sicherungsziel, extern: s3:https://<endpunkt>/<bucket>/<pfad> (ADR-016);
@@ -30,7 +32,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 DEPLOY="$ROOT/deploy"
 ENVFILE="$DEPLOY/.env"
-DOMAIN="" EMAIL="" DNS=1 TUNNEL="" FIREWALL=0 SYSTEMD=1 CAFILE="" BAUEN=1 SPIEGEL="" REPO="" ALERT=""
+DOMAIN="" EMAIL="" DNS=1 ZUGANG="" FIREWALL=0 SYSTEMD=1 CAFILE="" BAUEN=1 SPIEGEL="" REPO="" ALERT=""
 SMTP_HOST="" SMTP_PORT="" SMTP_USER="" SMTP_FROM="" SMTP_SSL=""
 
 fehler() { echo "Fehler: $*" >&2; exit 1; }
@@ -42,8 +44,9 @@ while [ $# -gt 0 ]; do
     --domain) DOMAIN="${2:-}"; shift 2 ;;
     --email) EMAIL="${2:-}"; shift 2 ;;
     --skip-dns-check) DNS=0; shift ;;
-    --tunnel) TUNNEL=1; shift ;;
-    --no-tunnel) TUNNEL=0; shift ;;
+    --tunnel) ZUGANG=tunnel; shift ;;
+    --no-tunnel) ZUGANG=direkt; shift ;;
+    --schnell) ZUGANG=schnell; shift ;;
     --firewall) FIREWALL=1; shift ;;
     --no-systemd) SYSTEMD=0; shift ;;
     --no-build) BAUEN=0; shift ;;
@@ -65,6 +68,12 @@ done
 # --- 1. Eingaben prüfen --------------------------------------------------------------------------------------------
 # shellcheck source=deploy/lib/tunnel.sh
 . "$DEPLOY/lib/tunnel.sh"
+alt_wert() { [ -f "$ENVFILE" ] && sed -n "s/^$1=//p" "$ENVFILE" | tail -1 || true; }
+env_wert() { alt_wert "$1"; }
+[ -n "$ZUGANG" ] || ZUGANG="$(alt_wert HQ_ZUGANG)"; ZUGANG="${ZUGANG:-direkt}"   # Wiederholung: Modus bleibt
+if [ "$ZUGANG" = schnell ] && [ -z "$DOMAIN" ]; then   # Cloudflare vergibt die Adresse; bis dahin localhost
+  DOMAIN="$(alt_wert ICHQ_DOMAIN)"; DOMAIN="${DOMAIN:-localhost}"
+fi
 [ -n "$DOMAIN" ] && [ -n "$EMAIL" ] || hilfe 1
 [ -z "${HQ_TUNNEL_TOKEN:-}" ] || token_pruefen "$HQ_TUNNEL_TOKEN"   # vor jeder Änderung, auch ohne root
 DOMAIN="${DOMAIN,,}"
@@ -85,12 +94,9 @@ MAILRE='^[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,63}$'
 [[ -z "$SMTP_HOST" || -n "$SMTP_FROM" ]] || fehler "--smtp-host braucht --smtp-from"
 [ "$(id -u)" -eq 0 ] || fehler "als root ausführen (sudo) — Secrets müssen UID 10001 gehören, systemd braucht root."
 command -v python3 >/dev/null || fehler "python3 fehlt (für das Erzeugen der Geheimnisse): apt-get install python3"
-alt_wert() { [ -f "$ENVFILE" ] && sed -n "s/^$1=//p" "$ENVFILE" | tail -1 || true; }
-env_wert() { alt_wert "$1"; }
-[ -n "$TUNNEL" ] || { [ "$(alt_wert HQ_ZUGANG)" = tunnel ] && TUNNEL=1 || TUNNEL=0; }   # Wiederholung: Modus bleibt
-[ "$TUNNEL" -eq 0 ] || [ "$FIREWALL" -eq 0 ] || fehler "--firewall ist im Tunnelbetrieb unnötig (keine eingehenden Ports)."
+[ "$ZUGANG" = direkt ] || [ "$FIREWALL" -eq 0 ] || fehler "--firewall ist im Tunnelbetrieb unnötig (keine eingehenden Ports)."
 TOKEN=""
-if [ "$TUNNEL" -eq 1 ] && { [ -n "${HQ_TUNNEL_TOKEN:-}" ] || [ ! -s "$ROOT/secrets/cloudflare_tunnel_token" ]; }; then
+if [ "$ZUGANG" = tunnel ] && { [ -n "${HQ_TUNNEL_TOKEN:-}" ] || [ ! -s "$ROOT/secrets/cloudflare_tunnel_token" ]; }; then
   TOKEN="$(token_abfragen)"; token_pruefen "$TOKEN"   # vor allen Änderungen: ungültig ⇒ Abbruch mit Erklärung
 fi
 
@@ -119,12 +125,12 @@ mem_mb=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
 [ "$mem_mb" -ge 3500 ] || echo "WARNUNG: nur ${mem_mb} MB RAM — ClamAV braucht ~1,5 GB, empfohlen sind 4 GB." >&2
 
 eigener_stack() { docker ps --filter label=com.docker.compose.project=ichq --filter label=com.docker.compose.service=caddy -q | grep -q .; }
-if [ "$TUNNEL" -eq 0 ] && ! eigener_stack && command -v ss >/dev/null; then
+if [ "$ZUGANG" = direkt ] && ! eigener_stack && command -v ss >/dev/null; then
   belegt="$(ss -ltnH 2>/dev/null | awk '{print $4}' | grep -E ':(80|443)$' || true)"
   [ -z "$belegt" ] || fehler "Port 80/443 belegt ($(echo "$belegt" | tr '\n' ' ')) — anderen Webserver (nginx/apache) stoppen."
 fi
 
-if [ "$TUNNEL" -eq 1 ]; then
+if [ "$ZUGANG" != direkt ]; then
   info "Tunnelbetrieb: keine DNS-/Port-Prüfung hier — die Domain zeigt auf Cloudflare (deploy/hq diagnose danach)"
 elif [ "$DNS" -eq 1 ] && [ "$DOMAIN" != localhost ]; then
   info "DNS prüfen: $DOMAIN (A und AAAA — JEDER Eintrag muss auf diesen Server zeigen)"
@@ -165,12 +171,8 @@ else
   info "Geheimnisse erzeugen"
   "$DEPLOY/generate-secrets.sh"
 fi
-if [ "$TUNNEL" -eq 1 ]; then modus_setzen tunnel; [ -z "$TOKEN" ] || token_speichern "$TOKEN"
-else
-  modus_setzen direkt
-  docker rm -f "$(docker ps -aq --filter label=com.docker.compose.project=ichq \
-    --filter label=com.docker.compose.service=cloudflared)" >/dev/null 2>&1 || true   # Wechsel aus dem Tunnelbetrieb
-fi
+modus_setzen "$ZUGANG"; [ -z "$TOKEN" ] || token_speichern "$TOKEN"
+andere_tunnel_entfernen "$ZUGANG"   # beim Wechsel: den nicht mehr passenden cloudflared-Container entfernen
 if [ -n "$SMTP_USER" ]; then   # SMTP-Passwort nie als Argument: Umgebung oder verdeckte Abfrage
   pw="${HQ_SMTP_PASSWORD:-}"
   if [ -z "$pw" ] && [ -t 0 ]; then read -rsp "SMTP-Passwort für $SMTP_USER: " pw; echo; fi
@@ -189,12 +191,12 @@ if [ "$SYSTEMD" -eq 1 ]; then
   if [ -d /run/systemd/system ]; then
     info "systemd: Autostart, Sicherung alle 6 h, Wiederherstellungstest wöchentlich, Betriebsprüfung alle 5 min"
     for f in ichq.service ichq-backup.service ichq-backup.timer ichq-backup-verify.service ichq-backup-verify.timer \
-             ichq-check.service ichq-check.timer; do
+             ichq-check.service ichq-check.timer ichq-adresse.service ichq-adresse.timer; do
       sed -e "s#@ROOT@#$ROOT#g" "$DEPLOY/systemd/$f.in" > "/etc/systemd/system/$f"
     done
     systemctl daemon-reload
     systemctl enable ichq.service >/dev/null
-    systemctl enable --now ichq-backup.timer ichq-backup-verify.timer ichq-check.timer >/dev/null
+    systemctl enable --now ichq-backup.timer ichq-backup-verify.timer ichq-check.timer ichq-adresse.timer >/dev/null
   else
     echo "WARNUNG: kein systemd — Autostart nur über Docker (restart: unless-stopped); Sicherung und Prüfung" \
          "müssen per cron laufen (deploy/hq backup · backup-verify · check --alert)." >&2
@@ -208,7 +210,15 @@ if [ "$FIREWALL" -eq 1 ]; then
   ufw --force enable >/dev/null
 fi
 
-[ "$TUNNEL" -eq 0 ] || cloudflare_anleitung "$DOMAIN"
+[ "$ZUGANG" != tunnel ] || cloudflare_anleitung "$DOMAIN"
+if [ "$ZUGANG" = schnell ]; then
+  DOMAIN="$(alt_wert ICHQ_DOMAIN)"
+  echo
+  echo "SCHNELLSTART (ohne Cloudflare-Konto): zufällige Adresse https://$DOMAIN/app/"
+  echo "  Sie ändert sich bei jedem Neustart des Tunnels (PC-Neustart, Update). Aktuell: sudo deploy/hq adresse"
+  echo "  Keine Verfügbarkeitsgarantie, höchstens 200 gleichzeitige Anfragen — nur zum Ausprobieren. Dauerbetrieb:"
+  echo "  sudo deploy/install.sh --domain <ihre-domain> --email $EMAIL --tunnel   (kostenloses Cloudflare-Konto)"
+fi
 cat <<EOF
 
 IC WARE HQ läuft: https://$DOMAIN/app/

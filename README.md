@@ -48,7 +48,8 @@ ein Zugang zur zentralen Instanz, kein zweiter Server: [docs/windows.md](docs/wi
 
 **Server auf dem eigenen Windows-PC:** `IC-WARE-HQ-Server-Setup-<version>.exe` — WSL2 + derselbe Linux-Stack,
 öffentlich über Cloudflare Tunnel (kein offener Port), Domain änderbar: [docs/windows-server.md](docs/windows-server.md), ADR-018.
-Linux-Server im Tunnelbetrieb: `deploy/install.sh … --tunnel`.
+Linux-Server im Tunnelbetrieb: `deploy/install.sh … --tunnel`; ohne Cloudflare-Konto mit Zufallsadresse
+(nur zum Ausprobieren): `deploy/install.sh --email … --schnell` (ADR-019).
 
 ## Schnellstart (Entwicklung)
 

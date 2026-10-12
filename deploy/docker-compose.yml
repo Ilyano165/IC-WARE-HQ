@@ -168,6 +168,23 @@ services:
     logging: {driver: json-file, options: {max-size: "10m", max-file: "5"}}
     restart: unless-stopped
 
+  cloudflared-schnell:
+    # Schnellstart OHNE Cloudflare-Konto (deploy/install.sh --schnell, ADR-019): Quick Tunnel mit zufälliger Adresse
+    # <…>.trycloudflare.com — neu bei jedem Start dieses Dienstes; deploy/hq adresse führt App und Caddy nach.
+    # Gleiche feste Adresse wie cloudflared (nie beide zugleich) ⇒ gleiche fälschungssichere Besucher-IP in Caddy.
+    image: cloudflare/cloudflared:2026.9.3
+    profiles: [schnell]
+    command: ["tunnel", "--no-autoupdate", "--metrics", "127.0.0.1:20241", "--url", "http://caddy:80"]
+    depends_on: {caddy: {condition: service_started}}
+    networks:
+      tunnel: {ipv4_address: 172.31.250.10}
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "--metrics", "127.0.0.1:20241", "ready"]
+      interval: 30s
+      start_period: 30s
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "5"}}
+    restart: unless-stopped
+
 networks:
   default: {}
   tunnel:
