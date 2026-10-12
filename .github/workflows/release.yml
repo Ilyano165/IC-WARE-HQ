@@ -1,0 +1,39 @@
+name: Release
+# Tag v<version> (gleich src/ichq/__init__.py) → Tests, Windows-Installer, GitHub-Release (Vorabversion bei rc/a/b)
+# mit Installer, SHA-256 und Release Notes aus docs/release-notes-<version>.md.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    # Alle Prüfungen inklusive Windows-Installer (ci.yml ruft windows.yml auf; Artefakt im selben Lauf)
+    uses: ./.github/workflows/ci.yml
+  veroeffentlichen:
+    needs: [ci]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {name: IC-WARE-HQ-Windows-Installer, path: dist}
+      - uses: actions/download-artifact@v4
+        with: {name: IC-WARE-HQ-Server-Installer, path: dist}
+      - name: GitHub-Release anlegen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/ichq/__init__.py)"
+          [ "$TAG" = "v$version" ] || { echo "Tag $TAG passt nicht zu Version $version" >&2; exit 1; }
+          notes="docs/release-notes-$version.md"
+          [ -f "$notes" ] || { echo "$notes fehlt" >&2; exit 1; }
+          vorab=(); case "$version" in *rc*|*a*|*b*) vorab=(--prerelease) ;; esac
+          (cd dist && sha256sum -c ./*.sha256)
+          gh release create "$TAG" dist/IC-WARE-HQ-Setup-*.exe dist/IC-WARE-HQ-Setup-*.exe.sha256 \
+            dist/IC-WARE-HQ-Server-Setup-*.exe dist/IC-WARE-HQ-Server-Setup-*.exe.sha256 \
+            --title "IC WARE HQ $version" --notes-file "$notes" --verify-tag "${vorab[@]}"

@@ -22,7 +22,7 @@ export async function liste(el, _p, q) {
     h("div", { class: "muted small" }, p.email)), h("td", { class: "opt" }, p.title || "—"),
   h("td", {}, h("span", { class: `tag${p.status === "active" ? "" : " tag--muted"}` }, STATUS[p.status] || p.status))));
   const offen = e ? e.items.filter((i) => !i.accepted && !i.revoked) : [];
-  ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("h1", {}, "Mitglieder"), h("p", {}, `${m.items.length} Personen${status ? ` · nur ${STATUS[status]}` : ""}`)), einladen),
+  ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("h1", {}, "Mitglieder"), h("p", {}, `${m.items.length} ${m.items.length === 1 ? "Person" : "Personen"}${status ? ` · nur ${STATUS[status]}` : ""}`)), einladen),
     h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Person"), h("th", { class: "opt" }, "Funktion"),
       h("th", {}, "Status"))), h("tbody", {}, zeilen))),
     offen.length ? h("section", { class: "card" }, h("h2", {}, "Offene Einladungen"), h("div", { class: "list" }, offen.map((i) =>

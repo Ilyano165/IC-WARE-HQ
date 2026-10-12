@@ -1,0 +1,5 @@
+# Alles, was unter Linux läuft (Server, Skripte, Container, Caddy), hat IMMER LF — auch beim Auschecken bzw.
+# `git archive` auf Windows (core.autocrlf=true). Sonst: „/usr/bin/env: 'bash\r'“ in der WSL (Tester, 12.10.2026).
+* text=auto eol=lf
+# Windows-Dateien: Zeilenenden nach Einstellung des Rechners (PowerShell/Inno Setup lesen beides).
+windows/** text=auto !eol

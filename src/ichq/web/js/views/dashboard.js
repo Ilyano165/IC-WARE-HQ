@@ -16,7 +16,7 @@ function listenLink(liste, filter) {
 }
 
 function kennzahl(w, m) {
-  const ziel = listenLink(w.list, m.filter);
+  const ziel = m.linked === false ? null : listenLink(w.list, m.filter);
   const inhalt = [h("span", { class: "metric-value" }, String(m.value)), h("span", { class: "metric-label" }, m.label)];
   const art = `metric metric--${m.tone}`;
   return ziel ? h("a", { class: art, href: ziel, "aria-label": `${m.label}: ${m.value}` }, inhalt) : h("div", { class: art }, inhalt);

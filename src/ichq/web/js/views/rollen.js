@@ -14,7 +14,7 @@ export async function liste(el, _p, q) {
   h("div", { class: "row" }, h("a", { class: "btn btn--ghost btn--sm", href: archiv ? "#/rollen" : "#/rollen?archiv=1" },
     archiv ? "Nur aktive" : "Mit archivierten"), neu)),
   h("div", { class: "list" }, daten.items.map((r) => h("a", { class: "item", href: `#/rollen/${r.id}` },
-    h("span", {}, h("b", {}, r.name), h("div", { class: "meta" }, `Rang ${r.rank} · ${r.permissions.length} Rechte · ${r.members} Personen`)),
+    h("span", {}, h("b", {}, r.name), h("div", { class: "meta" }, `Rang ${r.rank} · ${r.permissions.length} ${r.permissions.length === 1 ? "Recht" : "Rechte"} · ${r.members} ${r.members === 1 ? "Person" : "Personen"}`)),
     h("span", { class: "row" }, r.locked ? h("span", { class: "tag" }, "gesperrt") : null,
       r.archived ? h("span", { class: "tag tag--muted" }, "archiviert") : null)))));
 }
@@ -22,7 +22,8 @@ export async function liste(el, _p, q) {
 async function anlegen() {
   const d = await dialog("Neue Rolle", [feld("Name", h("input", { name: "name", required: true, maxlength: 60 })),
     feld("Beschreibung", h("input", { name: "description", maxlength: 200 })),
-    feld("Rang", h("input", { name: "rank", type: "number", min: 1, max: 999, value: 10, required: true }),
+    feld("Rang", h("input", { name: "rank", type: "number", min: 1, max: 999, value: 10, required: true,
+      title: "Muss kleiner sein als der eigene Rang" }),
       "Nur unter dem eigenen Rang. Rechte danach im Editor setzen.")], "Anlegen");
   if (!d) return;
   try {

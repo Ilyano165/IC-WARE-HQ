@@ -1,6 +1,6 @@
 // Aufgaben (C0): Liste mit Filtern und Seiten, anlegen, Detail mit Bearbeiten, Status, Zuweisung, Kommentaren.
-import { alertBox, datum, dialog, ersetze, feld, h, toast, zeit } from "../dom.js";
-import { get, meldung, patch, post, query } from "../api.js";
+import { alertBox, datum, dialog, einmal, ersetze, feld, h, toast, zeit } from "../dom.js";
+import { del, get, meldung, patch, post, query } from "../api.js";
 import { gehe } from "../router.js";
 import { darf } from "../state.js";
 import { kommentare } from "./kommentare.js";
@@ -100,18 +100,40 @@ export async function detail(el, { ref }) {
         feld("Fällig am", h("input", { name: "due_date", type: "date", value: a.due_date || "" })),
         personen.length ? feld("Zuständig", personenAuswahl(personen, a.assignee ? a.assignee.id : "")) : null),
       h("div", { class: "row row--end" }, h("button", { class: "btn", type: "submit" }, "Speichern")));
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
+    form.addEventListener("submit", einmal(async () => {
       const d = Object.fromEntries(new FormData(form).entries());
       const aenderung = { title: d.title, description: d.description, status: d.status, priority: d.priority,
         due_date: d.due_date || null };
       if (personen.length) aenderung.assignee = d.assignee || null;
       try { await patch(`/tasks/${ref}`, aenderung); toast("Gespeichert."); detail(el, { ref }); } catch (err) { ersetze(fehler, alertBox(meldung(err))); }
-    });
+    }));
   }
+  const anhaenge = h("section", { class: "card" });
   ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("a", { href: "#/aufgaben", class: "small" }, "← Aufgaben"), h("h1", {}, a.title),
     h("p", {}, `angelegt ${zeit(a.created_at)}${a.created_by ? ` von ${a.created_by.display_name}` : ""}`)),
   h("span", { class: "row" }, prioritaet(a.priority), status(a.status))),
-  h("section", { class: "card" }, form), kom);
-  await kommentare(kom, ref);
+  h("section", { class: "card" }, form), anhaenge, kom);
+  await Promise.all([anhaengeZeigen(anhaenge, ref), kommentare(kom, ref)]);
+}
+
+// Anhänge = verknüpfte Dokumente (nur sichtbare Gegenseiten liefert der Server)
+async function anhaengeZeigen(el, ref) {
+  if (!darf("files.read")) { ersetze(el); return; }
+  const docs = (await get(`/objects/${ref}/links`)).items.filter((l) => l.object.type === "document");
+  const neu = () => anhaengeZeigen(el, ref);
+  const knopf = darf("tasks.update") ? h("button", { class: "btn btn--ghost btn--sm", type: "button", on: { click: einmal(async () => {
+    const auswahl = (await get("/documents?limit=100")).items.filter((d) => !docs.some((l) => l.object.id === d.id));
+    if (!auswahl.length) { toast("Keine weiteren Dokumente vorhanden — zuerst unter „Dokumente“ hochladen.", "error"); return; }
+    const d = await dialog("Dokument anhängen", feld("Dokument", h("select", { name: "document", required: true },
+      auswahl.map((x) => h("option", { value: x.id }, x.title)))), "Anhängen");
+    if (!d) return;
+    try { await post(`/tasks/${ref}/attachments`, { document: d.document }); toast("Angehängt."); neu(); }
+    catch (e) { toast(meldung(e), "error"); }
+  }) } }, "Dokument anhängen") : null;
+  ersetze(el, h("div", { class: "row row--between" }, h("h2", {}, "Anhänge"), knopf),
+    docs.length ? h("div", { class: "list" }, docs.map((l) => h("div", { class: "item" },
+      h("a", { href: `#/dokumente/${l.object.id}` }, l.object.title),
+      darf("tasks.update") ? h("button", { class: "btn btn--ghost btn--sm", type: "button", on: { click: einmal(async () => {
+        try { await del(`/links/${l.id}`); toast("Anhang entfernt."); neu(); } catch (e) { toast(meldung(e), "error"); }
+      }) } }, "Entfernen") : null))) : h("p", { class: "muted" }, "Keine Anhänge."));
 }

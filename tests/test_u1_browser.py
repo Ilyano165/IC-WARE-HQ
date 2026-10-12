@@ -162,7 +162,7 @@ def test_mobil_ohne_querscrollen(browser: Any, server: str, leute: dict[str, Any
         assert breite[0] <= breite[1], (ziel, breite)
     assert not p.get_by_role("navigation", name="Hauptnavigation").get_by_role("link", name="Aufgaben").is_visible() \
         or p.evaluate("getComputedStyle(document.querySelector('.side')).transform") != "none"
-    p.get_by_role("button", name="Menü").click()
+    p.get_by_role("button", name="Menü", exact=True).click()
     s.gehe("Aufgaben")
     p.get_by_role("heading", name="Aufgaben").wait_for()
     s.sauber()

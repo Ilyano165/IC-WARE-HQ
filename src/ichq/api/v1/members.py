@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
-from pydantic import Field
+from fastapi import APIRouter, Depends, Query, Response
+from pydantic import Field, StringConstraints
 from starlette.concurrency import run_in_threadpool
 
 from ichq.api.problems import problem
@@ -13,6 +13,8 @@ from ichq.api.state import AppState, get_state
 from ichq.api.v1.common import DEFAULT, Cursor, Limit, Strict, refs_for, writing
 from ichq.auth.sessions import SessionInfo
 from ichq.authz.service import Principal
+from ichq.mail import templates
+from ichq.mail.outbox import enqueue
 from ichq.members import accept as invitations_accept
 from ichq.members import service as members
 
@@ -27,7 +29,8 @@ class InviteIn(Strict):
 class AcceptNewIn(Strict):
     token: str = Field(min_length=16, max_length=128)
     display_name: str = Field(min_length=1, max_length=120)
-    password: str = Field(min_length=1, max_length=512)
+    # Passwörter nie kürzen: Login und Reset nehmen sie wörtlich (Audit F6)
+    password: Annotated[str, StringConstraints(strip_whitespace=False)] = Field(min_length=1, max_length=512)
 
 
 class AcceptExistingIn(Strict):
@@ -76,19 +79,17 @@ def list_invitations(p: Principal = Depends(require("users.read")), db: TenantDB
 
 
 @router.post("/invitations", status_code=201)
-def create_invitation(body: InviteIn, tasks: BackgroundTasks, p: Principal = Depends(require("users.create")),
+def create_invitation(body: InviteIn, p: Principal = Depends(require("users.create")),
                       db: TenantDB = Depends(tenant_db), state: AppState = Depends(get_state)) -> Any:
-    if state.mailer is None:
+    if not state.mail_enabled:
         return problem(503, "invitation_unavailable", detail="E-Mail-Versand ist auf diesem Server nicht eingerichtet.")
-    with writing(db) as s:
-        inv, roh = members.invite(s, p, email=body.email, title=body.title)
-        antwort = {"id": inv.public_id, "email": inv.email, "expires_at": inv.expires_at}
     basis = (state.settings.public_origin or "http://localhost").rstrip("/")
-    text_ = (f"Hallo,\n\ndu wurdest zu IC WARE HQ eingeladen. Der Link ist {members.INVITATION_DAYS} Tage gültig und "
-             f"nur einmal verwendbar:\n\n{basis}/invite#token={roh}\n\nWenn du nichts damit anfangen kannst, "
-             "ignoriere diese Mail.\n")
-    tasks.add_task(state.mailer.send, inv.email, "IC WARE HQ: Einladung", text_)
-    return antwort
+    with writing(db) as s:   # Einladung und Mail in EINER Transaktion: beides oder nichts
+        inv, roh = members.invite(s, p, email=body.email, title=body.title)
+        enqueue(s, kind="invitation", to=inv.email, tenant_id=p.tenant_id, expires_at=inv.expires_at,
+                mail=templates.invitation(basis, roh, members.INVITATION_DAYS),
+                secret_key=state.settings.secret_key.get_secret_value())
+        return {"id": inv.public_id, "email": inv.email, "expires_at": inv.expires_at}
 
 
 @router.delete("/invitations/{ref}", status_code=204)

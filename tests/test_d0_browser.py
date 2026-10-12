@@ -108,7 +108,7 @@ def test_dashboard_mobil(browser: Any, server: str, team: dict[str, Any]) -> Non
     links = s.page.locator("section.widget").first.bounding_box()
     zweite = s.page.locator("section.widget").nth(1).bounding_box()
     assert links and zweite and zweite["y"] > links["y"] + links["height"] - 1     # eine Spalte, untereinander
-    s.page.get_by_role("button", name="Menü").click()
+    s.page.get_by_role("button", name="Menü", exact=True).click()
     s.gehe("Rückfragen")
     s.page.get_by_text("Fehlt die Inventurliste?").wait_for()
     s.sauber()

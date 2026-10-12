@@ -98,6 +98,17 @@ def verify_mfa(s: Session, settings: Settings, challenge: sessions.SessionInfo, 
         return Outcome(False, "mfa_invalid")
     u = s.execute(text("SELECT id, totp_secret_enc, totp_last_step FROM users WHERE id = :id FOR UPDATE"),
                   {"id": challenge.user_id}).one()
+    # Nach der Sperre neu lesen: parallele Anfragen derselben Challenge sehen den aktuellen Stand (Audit F2)
+    noch_gueltig = s.execute(text("SELECT 1 FROM auth_sessions WHERE id = :id AND revoked_at IS NULL "
+                                  "AND stage = 'mfa_pending' FOR UPDATE"), {"id": challenge.id}).scalar()
+    if not noch_gueltig:
+        return Outcome(False, "mfa_invalid")
+    # Fehlversuche je KONTO über alle Logins hinweg; ein richtiges Passwort setzt sie nicht zurück (Audit F1)
+    subjekt = keyed_hash(settings.session_secret.get_secret_value(), f"mfa:{u.id}")
+    if throttle.is_throttled(s, settings, "mfa", subjekt, ip):
+        sessions.revoke(s, challenge.id, "mfa_throttled")
+        events.record(s, "mfa_throttled", user_id=u.id, session_id=challenge.id, ip=ip)
+        return Outcome(False, "too_many_attempts", data={"retry_after": settings.throttle_window_minutes * 60})
     schritt = None
     if u.totp_secret_enc:
         geheimnis = totp.decrypt(settings.secret_key.get_secret_value(), u.totp_secret_enc, str(u.id))
@@ -109,14 +120,15 @@ def verify_mfa(s: Session, settings: Settings, challenge: sessions.SessionInfo, 
                              {"u": u.id, "h": keyed_hash(settings.session_secret.get_secret_value(),
                                                          "recovery:" + normalize_recovery_code(code))}).scalar()
     if schritt is None and recovery is None:
-        versuche = challenge.mfa_attempts + 1
-        s.execute(text("UPDATE auth_sessions SET mfa_attempts = :n WHERE id = :id"),
-                  {"n": versuche, "id": challenge.id})
+        versuche = s.execute(text("UPDATE auth_sessions SET mfa_attempts = mfa_attempts + 1 WHERE id = :id "
+                                  "RETURNING mfa_attempts"), {"id": challenge.id}).scalar_one()
+        throttle.record_attempt(s, "mfa", subjekt, ip, False)
         events.record(s, "mfa_failed", user_id=u.id, session_id=challenge.id, ip=ip, attempt=versuche)
         if versuche >= MFA_MAX_ATTEMPTS:
             sessions.revoke(s, challenge.id, "mfa_attempts_exceeded")
             events.record(s, "mfa_locked_out", user_id=u.id, session_id=challenge.id, ip=ip)
         return Outcome(False, "mfa_invalid")
+    throttle.record_attempt(s, "mfa", subjekt, ip, True)
     if schritt is not None:
         s.execute(text("UPDATE users SET totp_last_step = :st WHERE id = :id"), {"st": schritt, "id": u.id})
     roh, sid = sessions.rotate(s, settings, challenge, "mfa_completed", ip=ip, user_agent=user_agent,

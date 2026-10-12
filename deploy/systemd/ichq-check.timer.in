@@ -1,0 +1,10 @@
+# IC WARE HQ — Betriebsprüfung alle 5 Minuten.
+[Unit]
+Description=IC WARE HQ: Betriebsprüfung alle 5 Minuten
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

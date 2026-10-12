@@ -62,7 +62,21 @@ def check_migrations(engine: Engine) -> Check:
         return Check("migrations", False, _zeit(t0), "unknown")
 
 
+_SPEICHER_CACHE: dict[int, tuple[float, Check]] = {}
+SPEICHER_TTL = 5.0   # /health, /readiness sind öffentlich: Anfrageflut ≠ Speicher-Schreibzugriffe
+
+
 def check_storage(storage: Storage) -> Check:
+    jetzt = time.monotonic()
+    treffer = _SPEICHER_CACHE.get(id(storage))
+    if treffer and jetzt - treffer[0] < SPEICHER_TTL:
+        return treffer[1]
+    ergebnis = _check_storage(storage)
+    _SPEICHER_CACHE[id(storage)] = (jetzt, ergebnis)
+    return ergebnis
+
+
+def _check_storage(storage: Storage) -> Check:
     t0 = time.perf_counter()
     try:
         storage.check()

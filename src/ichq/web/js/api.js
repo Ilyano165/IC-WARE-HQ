@@ -16,7 +16,10 @@ async function antwort(r) {
   const daten = typ.includes("json") ? await r.json() : await r.text();
   if (!r.ok) {
     const fehler = new ApiError(r.status, typeof daten === "object" ? daten : null);
-    if (r.status === 401) window.dispatchEvent(new CustomEvent("ichq:abgemeldet"));
+    // Nur eine wirklich beendete Sitzung meldet ab — ein falsches Passwort/Code (auch 401) ist ein Formularfehler
+    if (fehler.code === "authentication_required") window.dispatchEvent(new CustomEvent("ichq:abgemeldet"));
+    // Zugang zur Firma weg (z. B. Mitgliedschaft deaktiviert): zurück zur Firmenwahl
+    if (fehler.code === "tenant_required") window.dispatchEvent(new CustomEvent("ichq:firma-weg"));
     throw fehler;
   }
   return daten;
@@ -55,6 +58,29 @@ export function query(params) {
   return s ? `?${s}` : "";
 }
 
+const FELDER = { title: "Titel", body: "Text", name: "Name", email: "E-Mail", password: "Passwort",
+  new_password: "Neues Passwort", current_password: "Aktuelles Passwort", code: "Code", due_date: "Fällig am",
+  since: "Seit", until: "Bis", status: "Status", priority: "Priorität", rank: "Rang", description: "Beschreibung",
+  display_name: "Name", reason: "Grund", timezone: "Zeitzone", currency: "Währung", language: "Sprache",
+  legal_name: "Firmenname (rechtlich)", decision: "Entscheidung", filename: "Dateiname", q: "Suchbegriff" };
+const feldname = (loc) => { const f = (loc || []).filter((t) => typeof t === "string" && !["body", "query", "path"].includes(t));
+  return FELDER[f[f.length - 1]] || "Eingabe"; };
+
+// Pydantic-Fehlertypen in verständliches Deutsch (der Server-Text ist englisch und technisch)
+function pruefung(x) {
+  const c = x.ctx || {};
+  const t = {
+    missing: "fehlt", string_too_short: c.min_length > 1 ? `mindestens ${c.min_length} Zeichen` : "darf nicht leer sein",
+    string_too_long: `höchstens ${c.max_length} Zeichen`, too_short: "zu wenige Einträge", too_long: "zu viele Einträge",
+    greater_than_equal: `mindestens ${c.ge}`, less_than_equal: `höchstens ${c.le}`, int_parsing: "keine ganze Zahl",
+    datetime_from_date_parsing: "kein gültiges Datum", datetime_parsing: "kein gültiger Zeitpunkt",
+    date_from_datetime_parsing: "kein gültiges Datum", date_parsing: "kein gültiges Datum", literal_error: "unzulässiger Wert",
+    enum: "unzulässiger Wert", string_pattern_mismatch: "ungültiges Format", value_error: "ungültiger Wert",
+    extra_forbidden: "unbekanntes Feld", bool_parsing: "kein Ja/Nein-Wert",
+  };
+  return t[x.type] || "ungültiger Wert";
+}
+
 // Lesbare Meldung für Menschen — ohne interne Details
 export function meldung(e) {
   if (!(e instanceof ApiError)) return "Verbindung fehlgeschlagen. Bitte erneut versuchen.";
@@ -66,7 +92,7 @@ export function meldung(e) {
     last_admin: "Danach gäbe es niemanden mehr mit Verwaltungsrechten.",
   };
   if (e.code === "validation_failed" && e.problem.errors) {
-    return e.problem.errors.map((x) => `${(x.loc || []).slice(1).join(".")}: ${x.msg}`).join(" · ");
+    return e.problem.errors.map((x) => `${feldname(x.loc)}: ${pruefung(x)}`).join(" · ");
   }
   return e.problem.detail || texte[e.code] || e.message;
 }

@@ -112,7 +112,7 @@ class ObjectLink(IdMixin, TenantScoped, Base):
     )
 
 
-GRANT_SOURCES = ("manual", "task_assignment")
+GRANT_SOURCES = ("manual", "task_assignment", "project_team")
 
 
 class ObjectGrant(TenantScoped, Base):
@@ -121,12 +121,13 @@ class ObjectGrant(TenantScoped, Base):
     __tablename__ = "object_grants"
     object_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     membership_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    # manual = über die API erteilt; task_assignment = automatisch durch Zuweisung (entfällt bei Neuzuweisung)
+    # manual = über die API erteilt; task_assignment = automatisch durch Zuweisung (entfällt bei Neuzuweisung);
+    # project_team = automatisch durch Aufnahme ins Projektteam (entfällt beim Entfernen, ADR-020)
     source: Mapped[str] = mapped_column(String(24), primary_key=True, server_default="manual")
     granted_by_membership_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     __table_args__ = (
-        CheckConstraint("source IN ('manual','task_assignment')", name="source_valid"),
+        CheckConstraint(_in("source", GRANT_SOURCES), name="source_valid"),
         _objekt_fk("object_id", "CASCADE"),
         _mitglied_fk("membership_id", "CASCADE"),
         _mitglied_fk("granted_by_membership_id"),
