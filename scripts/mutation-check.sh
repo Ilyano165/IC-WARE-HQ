@@ -337,6 +337,17 @@ mutation_deploy "Schnellstart: Adresswechsel startet den Tunnel neu" "lib/tunnel
 mutation_deploy "Schnellstart: Domain frei wählbar" "lib/tunnel.sh" "  schnell_modus && fehler|||  false && fehler" "$TUN"
 mutation_deploy "Tunnel-Token ungeprüft" "lib/tunnel.sh" "  [[ \"\$1\" =~ ^[A-Za-z0-9+/_=-]{80,4096}\$ ]]|||  [[ -n \"\$1\" ]]" "$TUN"
 
+# ---------- Fachmodule (ADR-020) ----------
+CRM="tests/test_e1_crm.py"
+mutation "CRM: Kundenliste ohne Sichtbarkeit" "api/v1/crm.py" "customers.list_customers(s, visible_clause(p), f,|||customers.list_customers(s, __import__('sqlalchemy').true(), f," "$CRM"
+mutation "CRM: Anfrage nennt unsichtbaren Kunden" "api/v1/crm.py" "if i.customer_id is not None and can_see(s, p, i.customer_id):|||if i.customer_id is not None:" "$CRM"
+mutation "CRM: RLS auf Kunden liest alles" "migrations/versions/0009_crm.py" "                       USING (tenant_id = ichq_current_tenant())|||                       USING (true)" "$CRM"
+mutation "CRM: Dublettenprüfung aus" "crm/customers.py" "    if doppelt and not allow_duplicate:|||    if False:" "$CRM"
+mutation "CRM: Archivieren ohne Änderungsrecht" "objects/service.py" "    if not can_update(principal, obj):|||    if False:" "$CRM"
+mutation "CRM: Zusammenführen prüft fremde ID zu spät" "crm/customers.py" "    alt, alt_o = get(session, principal, ref)             # erst auflösen: fremde IDs ⇒ 404, nie 422|||    if ref == into_ref:
+        raise ValidationFailed(\"selbst\")
+    alt, alt_o = get(session, principal, ref)" "tests/test_core_security.py"
+
 # ---------- Windows-Launcher (ADR-017) ----------
 WIN="tests/test_windows_launcher.py"
 mutation_windows "Launcher: http:// zu fremdem Host" "launcher/ichq_launcher.py" "    if teile.scheme == \"http\" and host not in _LOKAL:|||    if False:" "$WIN"

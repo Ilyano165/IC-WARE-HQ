@@ -16,6 +16,7 @@ from ichq.api.state import AppState
 from ichq.api.ui import router as ui_router
 from ichq.api.v1.auth import router as auth_router
 from ichq.api.v1.comments import router as comments_router
+from ichq.api.v1.crm import router as crm_router
 from ichq.api.v1.dashboard import router as dashboard_router
 from ichq.api.v1.documents import router as documents_router
 from ichq.api.v1.inbox import router as inbox_router
@@ -62,7 +63,7 @@ def create_app(settings: Settings | None = None, *, engines: Engines | None = No
     app.include_router(v1_router)
     app.include_router(auth_router)
     for core in (objects_router, tasks_router, comments_router, documents_router, inbox_router, members_router,
-                 roles_router, dashboard_router):
+                 roles_router, dashboard_router, crm_router):
         app.include_router(core)
     for r in extra_routers:
         app.include_router(r)  # type: ignore[arg-type]

@@ -26,7 +26,8 @@ class ObjectType:
 _T = ObjectType
 OBJECT_TYPES: dict[str, ObjectType] = {t.code: t for t in (
     _T("company", "Firma", "companies", "customers.read", "customers.update", False),
-    _T("customer", "Kunde", "companies", "customers.read", "customers.update", False),
+    _T("customer", "Kunde", "companies", "customers.read", "customers.update", True),
+    _T("inquiry", "Anfrage", "companies", "customers.read", "customers.update", True),
     _T("supplier", "Lieferant", "companies", "suppliers.read", "suppliers.update", False),
     _T("employee", "Mitarbeiter", "persons", "users.read", "users.update", False),
     _T("project", "Projekt", "projects", "projects.read", "projects.update", False),
@@ -39,6 +40,7 @@ OBJECT_TYPES: dict[str, ObjectType] = {t.code: t for t in (
     _T("entertainment", "Bewirtung", "receipts", "hospitality.read", "hospitality.update", False),
     _T("contract", "Vertrag", "documents", "contracts.read", "contracts.update", False),
     _T("asset", "Anlage", "receipts", "finance.read", "finance.update", False),
+    _T("deadline", "Frist", "receipts", "finance.read", "finance.update", False),
     _T("website", "Website", "projects", "projects.read", "projects.update", False),
     _T("document", "Dokument", "documents", "files.read", "files.update", True),
 )}

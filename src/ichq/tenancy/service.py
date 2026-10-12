@@ -8,10 +8,10 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -153,3 +153,15 @@ def update_profile(session: Session, changes: dict[str, str | None], *,
         record(session, "company.updated", actor_membership_id=actor_membership_id, target_type="company",
                data={"changes": diff})
     return TenantInfo.of(t)
+
+
+def company_today(session: Session) -> date:
+    """„Heute" in der Zeitzone der Firma der laufenden Mandanten-Transaktion (Fälligkeit = Kalendertag der Firma)."""
+    heute = session.execute(text("SELECT (now() AT TIME ZONE timezone)::date FROM tenants "
+                                 "WHERE id = ichq_current_tenant()")).scalar_one()
+    assert isinstance(heute, date)
+    return heute
+
+
+def company_currency(session: Session) -> str:
+    return str(session.execute(text("SELECT currency FROM tenants WHERE id = ichq_current_tenant()")).scalar_one())

@@ -36,6 +36,15 @@ VERBS: dict[str, str] = {
     "object.unlinked": "Verknüpfung entfernt",
     "object.shared": "Freigegeben",
     "object.unshared": "Freigabe entzogen",
+    "object.archived": "Archiviert",
+    "object.restored": "Wiederhergestellt",
+    "customer.created": "Kunde angelegt",
+    "customer.updated": "Kunde geändert",
+    "customer.contact_changed": "Kontaktperson geändert",
+    "customer.merged": "Kunden zusammengeführt",
+    "inquiry.created": "Anfrage erfasst",
+    "inquiry.updated": "Anfrage geändert",
+    "inquiry.status_changed": "Anfragestatus geändert",
 }
 SORT = SortKey("occurred_at", Activity.occurred_at, "ts")
 

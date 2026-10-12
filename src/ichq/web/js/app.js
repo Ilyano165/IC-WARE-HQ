@@ -12,6 +12,8 @@ import * as mitglieder from "./views/mitglieder.js";
 import * as rollen from "./views/rollen.js";
 import * as verwaltung from "./views/verwaltung.js";
 import * as konto from "./views/konto.js";
+import * as kunden from "./views/kunden.js";
+import * as anfragen from "./views/anfragen.js";
 
 const app = $("#app");
 
@@ -21,6 +23,10 @@ route("/aufgaben", aufgaben.liste, "tasks.read");
 route("/aufgaben/:ref", aufgaben.detail, "tasks.read");
 route("/dokumente", dokumente.liste, "files.read");
 route("/dokumente/:ref", dokumente.detail, "files.read");
+route("/kunden", kunden.liste, "customers.read");
+route("/kunden/:ref", kunden.detail, "customers.read");
+route("/anfragen", anfragen.liste, "customers.read");
+route("/anfragen/:ref", anfragen.detail, "customers.read");
 route("/benachrichtigungen", inbox.benachrichtigungen);
 route("/suche", inbox.suche);
 route("/mitglieder", mitglieder.liste, "users.read");
@@ -38,6 +44,9 @@ const NAV = [
   { pfad: "/dokumente", text: "Dokumente", recht: "files.read" },
   { pfad: "/rueckfragen", text: "Rückfragen", recht: "comments.read" },
   { pfad: "/benachrichtigungen", text: "Benachrichtigungen" },
+  { gruppe: "Geschäft" },
+  { pfad: "/kunden", text: "Kunden", recht: "customers.read" },
+  { pfad: "/anfragen", text: "Anfragen", recht: "customers.read" },
   { gruppe: "Verwaltung" },
   { pfad: "/mitglieder", text: "Mitglieder", recht: "users.read" },
   { pfad: "/rollen", text: "Rollen & Rechte", recht: "roles.read" },
