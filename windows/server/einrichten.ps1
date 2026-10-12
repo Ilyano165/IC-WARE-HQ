@@ -29,8 +29,10 @@ $protokoll = Join-Path $K.Basis 'einrichten.log'
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { $null = $_ }   # Umlaute aus wsl.exe lesbar
 
 function Schritt([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Green }
-function Warten {   # Fehler bleiben sichtbar — sonst schließt sich das Fenster sofort (beim Tester passiert)
-    if (-not $OhnePause -and -not $NurPruefen -and [Environment]::UserInteractive) {
+# Fehler bleiben sichtbar — sonst schließt sich das Fenster sofort (beim Tester passiert)
+$script:Pausieren = -not $OhnePause -and -not $NurPruefen -and [Environment]::UserInteractive
+function Warten {
+    if ($script:Pausieren) {
         Read-Host "`nFenster schließen mit Eingabetaste" | Out-Null
     }
 }
