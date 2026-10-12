@@ -64,6 +64,69 @@ Describe 'Download' {
     }
 }
 
+Describe 'WSL2-Voraussetzungen (Fehler beim Tester: HCS_E_SERVICE_NOT_AVAILABLE)' {
+    BeforeAll {
+        # Unter Linux-pwsh gibt es die Windows-Befehle nicht — Platzhalter, damit Pester sie ersetzen kann.
+        if (-not (Get-Command Get-WindowsOptionalFeature -ErrorAction SilentlyContinue)) {
+            function global:Get-WindowsOptionalFeature { param([switch]$Online, [string]$FeatureName) $null = $Online, $FeatureName }
+        }
+        if (-not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) {
+            function global:Get-CimInstance { param([Parameter(Position = 0)][string]$ClassName) $null = $ClassName }
+        }
+    }
+
+    It 'echte Meldung vom Tester-PC → Windows-Funktionen einschalten' {
+        $aus = "Der Vorgang konnte nicht gestartet werden, da ein erforderliches Feature nicht installiert ist.`n" +
+               'Fehlercode: Wsl/Service/RegisterDistro/CreateVm/HCS/HCS_E_SERVICE_NOT_AVAILABLE'
+        $f = Resolve-IchqWslFehler $aus
+        $f.Funktionen | Should -BeTrue
+        $f.Text | Should -Match 'VM-Plattform'
+        $f.Text | Should -Match 'BIOS'
+    }
+    It 'Hyper-V fehlt / 0x80370102 → ebenfalls' {
+        (Resolve-IchqWslFehler 'Wsl/Service/CreateInstance/CreateVm/HCS/HCS_E_HYPERV_NOT_INSTALLED').Funktionen | Should -BeTrue
+        (Resolve-IchqWslFehler 'Error: 0x80370102').Funktionen | Should -BeTrue
+    }
+    It 'andere Fehler → kein Neustart-Versprechen' {
+        (Resolve-IchqWslFehler 'Wsl/Service/RegisterDistro/ERROR_PATH_NOT_FOUND').Funktionen | Should -BeFalse
+        (Resolve-IchqWslFehler '').Funktionen | Should -BeFalse
+    }
+
+    It 'VM-Plattform aus → als fehlend erkannt' {
+        Mock -ModuleName IchqServer Get-WindowsOptionalFeature {
+            [pscustomobject]@{ State = $(if ($FeatureName -eq 'VirtualMachinePlatform') { 'Disabled' } else { 'Enabled' }) }
+        }
+        @(Get-IchqFehlendeWslFunktion) | Should -Be @('VirtualMachinePlatform')
+    }
+    It 'beide an → nichts fehlt' {
+        Mock -ModuleName IchqServer Get-WindowsOptionalFeature { [pscustomobject]@{ State = 'Enabled' } }
+        @(Get-IchqFehlendeWslFunktion).Count | Should -Be 0
+    }
+    It 'Abfrage unmöglich → nicht als fehlend raten' {
+        Mock -ModuleName IchqServer Get-WindowsOptionalFeature { throw 'keine Rechte' }
+        @(Get-IchqFehlendeWslFunktion).Count | Should -Be 0
+    }
+
+    It 'Virtualisierung: Hypervisor läuft → an (auch wenn die CPU-Abfrage false meldet)' {
+        Mock -ModuleName IchqServer Get-CimInstance {
+            if ($ClassName -match 'ComputerSystem') { [pscustomobject]@{ HypervisorPresent = $true } }
+            else { [pscustomobject]@{ VirtualizationFirmwareEnabled = $false } }
+        }
+        Get-IchqVirtualisierung | Should -Be 'an'
+    }
+    It 'Virtualisierung im BIOS aus → aus' {
+        Mock -ModuleName IchqServer Get-CimInstance {
+            if ($ClassName -match 'ComputerSystem') { [pscustomobject]@{ HypervisorPresent = $false } }
+            else { [pscustomobject]@{ VirtualizationFirmwareEnabled = $false } }
+        }
+        Get-IchqVirtualisierung | Should -Be 'aus'
+    }
+    It 'Virtualisierung: Abfrage scheitert → unbekannt (kein Abbruch)' {
+        Mock -ModuleName IchqServer Get-CimInstance { throw 'WMI kaputt' }
+        Get-IchqVirtualisierung | Should -Be 'unbekannt'
+    }
+}
+
 Describe 'Pfade' {
     It '<W> → <L>' -ForEach @(
         @{ W = 'C:\Program Files\IC WARE HQ Server\quelle.tar'; L = '/mnt/c/Program Files/IC WARE HQ Server/quelle.tar' },

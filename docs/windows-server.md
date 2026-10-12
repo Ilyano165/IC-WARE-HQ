@@ -81,6 +81,8 @@ in `C:\ProgramData\IC-WARE-HQ\wsl`, eine Neuinstallation übernimmt sie. **Ja:**
 | `Cloudflare kennt die Domain, der Tunnel ist aber nicht verbunden` | PC/Internet an? „Server starten“ |
 | `antwortet mit HTTP 404` | Hostname in Cloudflare ≠ Domain hier → „Domain ändern“ oder Hostname anpassen |
 | Installer: „wsl --install scheiterte“ | Virtualisierung im BIOS/UEFI aktivieren (Intel VT-x / AMD-V) |
+| `HCS_E_SERVICE_NOT_AVAILABLE` / „erforderliches Feature nicht installiert“ | Windows-Funktion „VM-Plattform“ fehlt: Der Installer schaltet sie selbst ein und verlangt **einen Neustart**, danach geht es automatisch weiter (die Ubuntu-Datei wird nicht erneut geladen). Kommt der Fehler nach dem Neustart wieder: Virtualisierung im BIOS/UEFI einschalten (Intel VT-x, AMD SVM/AMD-V) |
+| Installer: „Virtualisierung ist im BIOS/UEFI abgeschaltet“ | PC neu starten, ins BIOS/UEFI (meist Entf/F2), Virtualisierung einschalten, speichern → „Einrichtung wiederholen“ |
 | Installer: „Prüfsumme falsch“ | Download beschädigt oder verändert — erneut versuchen; nie eine fremde Datei nehmen |
 | Protokoll der Einrichtung | `C:\ProgramData\IC-WARE-HQ\einrichten.log` |
 
@@ -98,5 +100,9 @@ in `C:\ProgramData\IC-WARE-HQ\wsl`, eine Neuinstallation übernimmt sie. **Ja:**
   download.docker.com installiert, Image gebaut, alle 7 Dienste gesund, Caddy nur auf 127.0.0.1, systemd-Zeitpläne
   aktiv, „Erste Firma anlegen“ → Anmeldung 200, „Domain ändern“ → Anmeldung unter neuer Domain 200, Sicherung ok.
   Dabei gefunden und behoben: „Erste Firma anlegen“ brach still ab, wenn die letzte Eingabe keinen Zeilenumbruch hatte.
-* **Nicht geprüft:** Installation auf einem echten Windows-PC (WSL2-Einrichtung, Neustart-Fortsetzung, Autostart
+* **Echter Windows-PC (Tester, 12.10.2026):** Ubuntu-Download klappt; `wsl --import` scheiterte mit
+  `HCS_E_SERVICE_NOT_AVAILABLE`, weil nur die WSL-App, nicht aber die Windows-Funktion „VM-Plattform“ da war — die
+  Prüfung „WSL bereit“ sah nur `wsl --version`. Behoben: Funktionen und Virtualisierung werden geprüft, fehlende
+  Funktionen eingeschaltet (Neustart, automatisch weiter); Meldung von `wsl --import` wird übersetzt (Pester-Fälle).
+* **Nicht geprüft:** vollständige Installation auf einem echten Windows-PC (WSL2-Einrichtung, Neustart-Fortsetzung, Autostart
   ohne Anmeldung per S4U, Energieeinstellungen, Deinstallation), echter Cloudflare-Tunnel mit echter Domain.

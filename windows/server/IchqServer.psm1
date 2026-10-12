@@ -116,6 +116,67 @@ function Set-IchqAdminZugriff {
 }
 
 # ---- WSL ----------------------------------------------------------------------------------------------------------
+# WSL2 braucht BEIDE Windows-Funktionen. Die WSL-App (wsl --version) läuft auch ohne „VM-Plattform" — dann scheitert
+# erst wsl --import mit HCS_E_SERVICE_NOT_AVAILABLE (beim Tester passiert, 12.10.2026).
+$script:WslFunktionen = @('VirtualMachinePlatform', 'Microsoft-Windows-Subsystem-Linux')
+
+function Get-IchqFehlendeWslFunktion {
+    <# Namen der Windows-Funktionen, die nachweislich NICHT eingeschaltet sind. Unbekannter Zustand (Abfrage nicht
+       möglich) zählt nicht als fehlend — dann entscheidet der Fehler von wsl --import (Resolve-IchqWslFehler). #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param()
+    $fehlend = @()
+    foreach ($name in $script:WslFunktionen) {
+        try { $zustand = "$((Get-WindowsOptionalFeature -Online -FeatureName $name -ErrorAction Stop).State)" }
+        catch { continue }
+        if ($zustand -and $zustand -ne 'Enabled') { $fehlend += $name }
+    }
+    return $fehlend
+}
+
+function Enable-IchqWslFunktion {
+    <# Schaltet die Windows-Funktionen für WSL2 ein (dism; 3010 = Neustart nötig, ist Erfolg). #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param([string[]]$Name = $script:WslFunktionen)
+    foreach ($n in $Name) {
+        if (-not $PSCmdlet.ShouldProcess($n, 'Windows-Funktion einschalten')) { continue }
+        & dism.exe /online /enable-feature "/featurename:$n" /all /norestart | Out-Host
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3010) { throw "Windows-Funktion $n ließ sich nicht einschalten (dism $LASTEXITCODE)." }
+    }
+}
+
+function Get-IchqVirtualisierung {
+    <# 'an' (Hypervisor läuft), 'aus' (im BIOS/UEFI abgeschaltet), 'unbekannt'. Läuft schon ein Hypervisor, meldet
+       Win32_Processor die Firmware-Einstellung als false — deshalb zuerst HypervisorPresent. #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+    try {
+        if ((Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).HypervisorPresent) { return 'an' }
+        $cpu = @(Get-CimInstance Win32_Processor -ErrorAction Stop)[0]
+        if ($cpu.VirtualizationFirmwareEnabled -eq $false) { return 'aus' }
+        if ($cpu.VirtualizationFirmwareEnabled -eq $true) { return 'an' }
+    } catch { return 'unbekannt' }
+    return 'unbekannt'
+}
+
+function Resolve-IchqWslFehler {
+    <# Ausgabe von wsl.exe → verständlicher Satz + ob Einschalten der Windows-Funktionen mit Neustart helfen kann. #>
+    [CmdletBinding()]
+    param([AllowEmptyString()][string]$Ausgabe)
+    if ($Ausgabe -match 'HCS_E_SERVICE_NOT_AVAILABLE|HCS_E_HYPERV_NOT_INSTALLED|0x80370102|0x8037010[0-9a-f]|VirtualMachinePlatform|VM-Plattform|Plattform f.r virtuelle Computer') {
+        return [pscustomobject]@{ Funktionen = $true
+            Text = 'Windows kann die virtuelle Maschine für WSL2 nicht starten: Die Windows-Funktion „VM-Plattform" ist aus ' +
+                   'oder die Virtualisierung ist im BIOS/UEFI abgeschaltet (Intel VT-x / AMD-V / SVM).' }
+    }
+    if ($Ausgabe -match 'ERROR_ALREADY_EXISTS|ERROR_FILE_EXISTS|already exists|bereits vorhanden') {
+        return [pscustomobject]@{ Funktionen = $false
+            Text = 'Im Ordner der Linux-Umgebung liegt noch eine Datei von einem früheren Versuch.' }
+    }
+    return [pscustomobject]@{ Funktionen = $false; Text = '' }
+}
+
 function Get-IchqWslListe {
     [CmdletBinding()]
     [OutputType([string[]])]
@@ -166,6 +227,6 @@ function Get-IchqDomain {
     return Get-IchqEnvWert ICHQ_DOMAIN
 }
 
-Export-ModuleMember -Function Get-IchqKonstante, Save-IchqDownload, Get-IchqFreierPlatzGb, Test-IchqDomain, Test-IchqEmail, Test-IchqToken, ConvertTo-IchqToken,
+Export-ModuleMember -Function Get-IchqKonstante, Get-IchqFehlendeWslFunktion, Enable-IchqWslFunktion, Get-IchqVirtualisierung, Resolve-IchqWslFehler, Save-IchqDownload, Get-IchqFreierPlatzGb, Test-IchqDomain, Test-IchqEmail, Test-IchqToken, ConvertTo-IchqToken,
     Assert-IchqPruefsumme, ConvertTo-IchqWslPfad, Set-IchqAdminZugriff, Get-IchqWslListe, Test-IchqWslBereit,
     Invoke-IchqLinux, Get-IchqEnvWert, Get-IchqDomain

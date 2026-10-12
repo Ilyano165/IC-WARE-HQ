@@ -91,17 +91,34 @@ if ($token) {   # bis zur Übergabe an Linux nur für Administratoren lesbar (ü
 }
 
 # ---- 2. WSL2 ------------------------------------------------------------------------------------------------------
-Schritt 'WSL2 prüfen'
-if (-not (Test-IchqWslBereit)) {
-    Write-Host 'WSL wird installiert (Windows-Funktion + aktuelle WSL). Danach ist ein NEUSTART nötig.'
-    & wsl.exe --install --no-distribution
-    if ($LASTEXITCODE -ne 0) { Abbruch "wsl --install scheiterte ($LASTEXITCODE). Virtualisierung im BIOS/UEFI aktiv?" }
-    @{ Domain = $Domain; Email = $Email; Quelle = $Quelle; EnergieAus = [bool]$EnergieAus; Schnell = [bool]$Schnell } | ConvertTo-Json |
-        Set-Content -LiteralPath $fortsetzenDatei -Encoding utf8
+function NeustartUndWeiter([string]$Grund) {   # Werte merken, nach der Anmeldung automatisch weiter (RunOnce)
+    @{ Domain = $Domain; Email = $Email; Quelle = $Quelle; EnergieAus = [bool]$EnergieAus; Schnell = [bool]$Schnell } |
+        ConvertTo-Json | Set-Content -LiteralPath $fortsetzenDatei -Encoding utf8
     $befehl = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Fortsetzen"
     Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'IC-WARE-HQ-Einrichtung' -Value $befehl
-    Write-Host "`nBitte Windows NEU STARTEN. Nach der Anmeldung geht die Einrichtung automatisch weiter." -ForegroundColor Yellow
+    Write-Host "`n$Grund`nBitte Windows jetzt NEU STARTEN. Nach der Anmeldung geht die Einrichtung automatisch weiter." -ForegroundColor Yellow
     Warten; exit 3010
+}
+$biosText = 'Virtualisierung im BIOS/UEFI einschalten (Intel: „VT-x"/„Intel Virtualization Technology", AMD: „SVM"/„AMD-V"), ' +
+            'speichern, neu starten, dann Startmenü → IC WARE HQ Server → „Einrichtung wiederholen".'
+
+Schritt 'WSL2 prüfen'
+$virt = Get-IchqVirtualisierung
+Write-Host "Virtualisierung: $virt"
+if ($virt -eq 'aus') { Abbruch "Die Virtualisierung ist im BIOS/UEFI abgeschaltet — ohne sie läuft WSL2 nicht. $biosText" }
+$fehlend = @(Get-IchqFehlendeWslFunktion)
+if (-not (Test-IchqWslBereit) -or $fehlend.Count) {
+    if ($Fortsetzen) {   # schon einmal neu gestartet — keine Endlosschleife
+        Abbruch "WSL2 ist auch nach dem Neustart nicht bereit (aus: $($fehlend -join ', ')). $biosText"
+    }
+    if (-not (Test-IchqWslBereit)) {
+        Write-Host 'WSL wird installiert (aktuelle WSL von Microsoft).'
+        & wsl.exe --install --no-distribution
+        if ($LASTEXITCODE -ne 0) { Abbruch "wsl --install scheiterte ($LASTEXITCODE). $biosText" }
+    }
+    Write-Host 'Windows-Funktionen für WSL2 einschalten (VM-Plattform, Windows-Subsystem für Linux) …'
+    Enable-IchqWslFunktion
+    NeustartUndWeiter 'WSL2 ist eingerichtet, Windows braucht dafür einen Neustart.'
 }
 & wsl.exe --update 2>&1 | Out-Host        # aktuelle WSL (Fehler hier sind nicht fatal, z. B. ohne Store)
 
@@ -111,12 +128,39 @@ if (-not $distroDa) {
     $download = Join-Path $K.Basis 'download'
     $null = New-Item -ItemType Directory -Force -Path $download
     $datei = Join-Path $download 'ubuntu-24.04-wsl.tar.gz'
-    $weg = Save-IchqDownload -Url $K.UbuntuUrl -Ziel $datei
-    Write-Host "Geladen ($weg), Prüfsumme wird geprüft …"
-    Assert-IchqPruefsumme -Pfad $datei -Sha256 $K.UbuntuSha256
+    $vorhanden = $false
+    if (Test-Path -LiteralPath $datei) {   # von einem abgebrochenen Versuch — Prüfsumme entscheidet (falsch ⇒ gelöscht)
+        try { Assert-IchqPruefsumme -Pfad $datei -Sha256 $K.UbuntuSha256; $vorhanden = $true } catch { $vorhanden = $false }
+    }
+    if ($vorhanden) { Write-Host 'Schon geladen, Prüfsumme stimmt — kein erneuter Download.' }
+    else {
+        $weg = Save-IchqDownload -Url $K.UbuntuUrl -Ziel $datei
+        Write-Host "Geladen ($weg), Prüfsumme wird geprüft …"
+        Assert-IchqPruefsumme -Pfad $datei -Sha256 $K.UbuntuSha256
+    }
     Schritt "Distribution „$($K.Distro)“ anlegen"
-    & wsl.exe --import $K.Distro (Join-Path $K.Basis 'wsl') $datei --version 2
-    if ($LASTEXITCODE -ne 0) { Abbruch "wsl --import scheiterte ($LASTEXITCODE)." }
+    $ordner = Join-Path $K.Basis 'wsl'
+    $platte = Join-Path $ordner 'ext4.vhdx'
+    if (Test-Path -LiteralPath $platte) {   # Rest eines gescheiterten Imports (Distribution ist nicht registriert) — nie löschen
+        $alt = "$platte.alt-$(Get-Date -Format yyyyMMdd-HHmmss)"
+        Write-Warning "Unregistrierte Linux-Platte gefunden — beiseitegelegt als $alt"
+        Move-Item -LiteralPath $platte -Destination $alt
+    }
+    $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'   # PS 5.1: stderr von wsl.exe ist kein Abbruch
+    $aus = @(& wsl.exe --import $K.Distro $ordner $datei --version 2 2>&1 | ForEach-Object { "$_" })
+    $code = $LASTEXITCODE; $ErrorActionPreference = $eap
+    $aus | Out-Host
+    if ($code -ne 0) {
+        $f = Resolve-IchqWslFehler ($aus -join "`n")
+        if ($f.Funktionen -and -not $Fortsetzen) {
+            Write-Host "`n$($f.Text)" -ForegroundColor Yellow
+            Write-Host 'Windows-Funktionen für WSL2 werden eingeschaltet …'
+            Enable-IchqWslFunktion
+            NeustartUndWeiter 'Die Ubuntu-Datei bleibt gespeichert und wird nicht erneut geladen.'
+        }
+        if ($f.Funktionen) { Abbruch "wsl --import scheiterte ($code). $($f.Text) $biosText" }
+        Abbruch "wsl --import scheiterte ($code). $($f.Text)"
+    }
     Remove-Item -LiteralPath $datei -Force
 }
 
