@@ -197,6 +197,7 @@ begin
     Parameter := Parameter + ' -TokenDatei "' + TokenDatei + '"';
   end;
   if WizardIsTaskSelected('energie') then Parameter := Parameter + ' -EnergieAus';
+  if WizardSilent() then Parameter := Parameter + ' -OhnePause';
   WizardForm.StatusLabel.Caption := 'IC WARE HQ wird eingerichtet (10–20 Minuten, Fortschritt im Konsolenfenster) …';
   if not Exec('powershell.exe', Parameter, '', SW_SHOW, ewWaitUntilTerminated, Ergebnis) then Ergebnis := -1;
   DeleteFile(ExpandConstant('{tmp}\token.txt'));

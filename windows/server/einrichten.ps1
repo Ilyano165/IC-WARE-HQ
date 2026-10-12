@@ -15,7 +15,8 @@ param(
     [switch]$EnergieAus,
     [switch]$Schnell,             # Schnellstart OHNE Cloudflare-Konto: zufällige Adresse <…>.trycloudflare.com (ADR-019)
     [switch]$Fortsetzen,          # nach Neustart (WSL-Installation) — Werte aus fortsetzen.json
-    [switch]$NurPruefen           # nur Eingaben und Voraussetzungen prüfen, nichts ändern (Test/CI)
+    [switch]$NurPruefen,          # nur Eingaben und Voraussetzungen prüfen, nichts ändern (Test/CI)
+    [switch]$OhnePause            # bei Fehlern nicht auf Eingabetaste warten (stille Installation)
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -24,9 +25,26 @@ $K = Get-IchqKonstante
 $null = New-Item -ItemType Directory -Force -Path $K.Basis
 $tokenAblage = Join-Path $K.Basis 'token.tmp'
 $fortsetzenDatei = Join-Path $K.Basis 'fortsetzen.json'
+$protokoll = Join-Path $K.Basis 'einrichten.log'
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { $null = $_ }   # Umlaute aus wsl.exe lesbar
 
 function Schritt([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Green }
-function Abbruch([string]$Text) { Write-Host "`nFEHLER: $Text" -ForegroundColor Red; exit 1 }
+function Warten {   # Fehler bleiben sichtbar — sonst schließt sich das Fenster sofort (beim Tester passiert)
+    if (-not $OhnePause -and -not $NurPruefen -and [Environment]::UserInteractive) {
+        Read-Host "`nFenster schließen mit Eingabetaste" | Out-Null
+    }
+}
+function Abbruch([string]$Text) {
+    Write-Host "`nFEHLER: $Text" -ForegroundColor Red
+    if (-not $NurPruefen) { Write-Host "Protokoll: $protokoll" }
+    Warten; exit 1
+}
+trap {   # jeder unerwartete Fehler: Meldung + Stelle + Protokoll, Fenster bleibt offen
+    Write-Host "`nFEHLER (unerwartet): $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Stelle: einrichten.ps1, Zeile $($_.InvocationInfo.ScriptLineNumber): $("$($_.InvocationInfo.Line)".Trim())"
+    if (-not $NurPruefen) { Write-Host "Protokoll: $protokoll  — bitte bei Rückfragen mitschicken." }
+    Warten; exit 1
+}
 
 if ($Fortsetzen) {
     if (-not (Test-Path $fortsetzenDatei)) { Abbruch 'Keine unterbrochene Einrichtung gefunden.' }
@@ -34,7 +52,7 @@ if ($Fortsetzen) {
     $Domain = $w.Domain; $Email = $w.Email; $Quelle = $w.Quelle; $EnergieAus = [bool]$w.EnergieAus
     $Schnell = [bool]$w.Schnell
 }
-if (-not $NurPruefen) { Start-Transcript -Path (Join-Path $K.Basis 'einrichten.log') -Append | Out-Null }
+if (-not $NurPruefen) { Start-Transcript -Path $protokoll -Append | Out-Null; Write-Host "Protokoll: $protokoll" }
 
 # ---- 1. Eingaben und Voraussetzungen ------------------------------------------------------------------------------
 Schritt 'Eingaben und Voraussetzungen prüfen'
@@ -61,6 +79,8 @@ if (-not [Environment]::Is64BitOperatingSystem) { Abbruch '64-Bit-Windows nötig
 $ramGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
 if ($ramGb -lt 8) { Write-Warning "Nur $ramGb GB RAM — empfohlen sind 8 GB (WSL nutzt bis zur Hälfte, ClamAV braucht ~1,5 GB)." }
 if (-not $NurPruefen -and -not (Test-Path -LiteralPath "$Quelle")) { Abbruch "Quelltext fehlt: $Quelle" }
+$frei = Get-IchqFreierPlatzGb $K.Basis
+if ($frei -lt 15) { Abbruch "Nur $frei GB frei auf dem Laufwerk von $($K.Basis) — nötig sind mindestens 15 GB (Ubuntu, Docker-Images, Daten)." }
 if ($NurPruefen) { Write-Host 'Prüfung bestanden (nichts geändert).'; exit 0 }
 
 if ($token) {   # bis zur Übergabe an Linux nur für Administratoren lesbar (überlebt ggf. den Neustart)
@@ -79,7 +99,7 @@ if (-not (Test-IchqWslBereit)) {
     $befehl = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Fortsetzen"
     Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'IC-WARE-HQ-Einrichtung' -Value $befehl
     Write-Host "`nBitte Windows NEU STARTEN. Nach der Anmeldung geht die Einrichtung automatisch weiter." -ForegroundColor Yellow
-    exit 3010
+    Warten; exit 3010
 }
 & wsl.exe --update 2>&1 | Out-Host        # aktuelle WSL (Fehler hier sind nicht fatal, z. B. ohne Store)
 
@@ -89,8 +109,8 @@ if (-not $distroDa) {
     $download = Join-Path $K.Basis 'download'
     $null = New-Item -ItemType Directory -Force -Path $download
     $datei = Join-Path $download 'ubuntu-24.04-wsl.tar.gz'
-    $ProgressPreference = 'SilentlyContinue'   # sonst ist Invoke-WebRequest in PowerShell 5.1 extrem langsam
-    Invoke-WebRequest -Uri $K.UbuntuUrl -OutFile $datei -UseBasicParsing
+    $weg = Save-IchqDownload -Url $K.UbuntuUrl -Ziel $datei
+    Write-Host "Geladen ($weg), Prüfsumme wird geprüft …"
     Assert-IchqPruefsumme -Pfad $datei -Sha256 $K.UbuntuSha256
     Schritt "Distribution „$($K.Distro)“ anlegen"
     & wsl.exe --import $K.Distro (Join-Path $K.Basis 'wsl') $datei --version 2
@@ -154,4 +174,4 @@ if ($Schnell) {
 }
 Write-Host 'Nächste Schritte (Startmenü „IC WARE HQ Server"): „Erste Firma anlegen", dann „Diagnose".'
 Write-Host 'WICHTIG: Den angezeigten SICHERUNGSSCHLÜSSEL getrennt von diesem PC aufbewahren (Passwortmanager).'
-exit 0
+Warten; exit 0

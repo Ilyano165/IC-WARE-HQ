@@ -47,6 +47,17 @@ jobs:
           $c = New-PesterConfiguration; $c.Run.Path = 'windows/server/tests'; $c.Run.Exit = $true
           $c.Output.Verbosity = 'Detailed'
           Invoke-Pester -Configuration $c
+      - name: Server — echter Download des Ubuntu-Abbilds mit Windows PowerShell 5.1 + Prüfsumme (wie auf dem PC)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Import-Module .\windows\server\IchqServer.psm1 -Force
+          $k = Get-IchqKonstante
+          $ziel = Join-Path $env:RUNNER_TEMP 'ubuntu-24.04-wsl.tar.gz'
+          $weg = Save-IchqDownload -Url $k.UbuntuUrl -Ziel $ziel
+          Assert-IchqPruefsumme -Pfad $ziel -Sha256 $k.UbuntuSha256
+          Write-Host "Download ok über $weg, $([math]::Round((Get-Item $ziel).Length / 1MB)) MB, Prüfsumme stimmt"
+          Remove-Item $ziel
       - name: Server-Installer bauen (WSL2 + Linux-Stack + Cloudflare-Tunnel, ADR-018)
         shell: pwsh
         run: windows/build-server.ps1

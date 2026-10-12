@@ -56,6 +56,14 @@ Describe 'Download-Prüfung' {
     }
 }
 
+Describe 'Download' {
+    It 'scheitert mit verständlicher Meldung und lässt keine halbe Datei liegen' {
+        $ziel = Join-Path ([IO.Path]::GetTempPath()) "ichq-dl-$([guid]::NewGuid()).bin"
+        { Save-IchqDownload -Url 'http://127.0.0.1:9/gibt-es-nicht' -Ziel $ziel } | Should -Throw '*Download von*gescheitert*'
+        Test-Path $ziel | Should -BeFalse
+    }
+}
+
 Describe 'Pfade' {
     It '<W> → <L>' -ForEach @(
         @{ W = 'C:\Program Files\IC WARE HQ Server\quelle.tar'; L = '/mnt/c/Program Files/IC WARE HQ Server/quelle.tar' },

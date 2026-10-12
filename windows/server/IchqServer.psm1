@@ -62,6 +62,40 @@ function Assert-IchqPruefsumme {
     }
 }
 
+function Save-IchqDownload {
+    <# Große Datei zuverlässig laden. Reihenfolge: curl.exe (in Windows 10/11 eingebaut, Wiederholungen, Fortschritt) →
+       BITS → Invoke-WebRequest. Windows PowerShell 5.1 allein scheiterte beim ≈ 390-MB-Ubuntu-Abbild auf einem echten PC. #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Url, [Parameter(Mandatory)][string]$Ziel)
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $fehler = @()
+    $curl = if ($env:SystemRoot) { Join-Path $env:SystemRoot 'System32\curl.exe' } else { '' }
+    if ($curl -and (Test-Path -LiteralPath $curl)) {
+        & $curl -L --fail --retry 5 --retry-delay 5 --connect-timeout 30 -o $Ziel $Url
+        if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $Ziel)) { return 'curl' }
+        $fehler += "curl.exe Exitcode $LASTEXITCODE"
+    }
+    if (Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue) {
+        try { Start-BitsTransfer -Source $Url -Destination $Ziel -ErrorAction Stop; return 'bits' }
+        catch { $fehler += "BITS: $($_.Exception.Message)" }
+    }
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $Url -OutFile $Ziel -UseBasicParsing -ErrorAction Stop
+        return 'invoke-webrequest'
+    } catch { $fehler += "Invoke-WebRequest: $($_.Exception.Message)" }
+    Remove-Item -LiteralPath $Ziel -Force -ErrorAction SilentlyContinue
+    throw "Download von $Url gescheitert — Internetverbindung, Proxy oder Virenscanner? ($($fehler -join ' | '))"
+}
+
+function Get-IchqFreierPlatzGb {
+    [CmdletBinding()]
+    [OutputType([double])]
+    param([Parameter(Mandatory)][string]$Pfad)
+    $laufwerk = (Split-Path -Qualifier ([IO.Path]::GetFullPath($Pfad))).TrimEnd(':')
+    return [math]::Round((Get-PSDrive -Name $laufwerk).Free / 1GB, 1)
+}
+
 function ConvertTo-IchqWslPfad {
     <# C:\Program Files\X\a.tar → /mnt/c/Program Files/X/a.tar (WSL-Standard-Einhängepunkt) #>
     [CmdletBinding()]
@@ -132,6 +166,6 @@ function Get-IchqDomain {
     return Get-IchqEnvWert ICHQ_DOMAIN
 }
 
-Export-ModuleMember -Function Get-IchqKonstante, Test-IchqDomain, Test-IchqEmail, Test-IchqToken, ConvertTo-IchqToken,
+Export-ModuleMember -Function Get-IchqKonstante, Save-IchqDownload, Get-IchqFreierPlatzGb, Test-IchqDomain, Test-IchqEmail, Test-IchqToken, ConvertTo-IchqToken,
     Assert-IchqPruefsumme, ConvertTo-IchqWslPfad, Set-IchqAdminZugriff, Get-IchqWslListe, Test-IchqWslBereit,
     Invoke-IchqLinux, Get-IchqEnvWert, Get-IchqDomain
