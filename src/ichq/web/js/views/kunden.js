@@ -90,14 +90,15 @@ export async function detail(el, { ref }) {
   const zusammen = darf("customers.delete") && !k.archived ? h("button", { class: "btn btn--ghost btn--sm", type: "button", on: { click: einmal(() => zusammenfuehren(k)) } }, "Mit anderem Kunden zusammenführen") : null;
   const kontakte = h("section", { class: "card" });
   const anfragen = h("section", { class: "card" });
+  const projekteEl = h("section", { class: "card" });
   const kom = h("section", { class: "card" });
   ersetze(el, seitenkopf(k.name, { href: "#/kunden", text: "Kunden" }, statusTag(k.status),
     k.archived ? h("span", { class: "tag tag--muted" }, "archiviert") : null, darf("customers.update") ? archivKnopf(k, neu) : null),
   k.merged_into ? alertBox(`Zusammengeführt in „${k.merged_into.title}“.`, "info") : null,
   h("p", { class: "muted small" }, `angelegt ${zeit(k.created_at)}${k.created_by ? ` von ${k.created_by.display_name}` : ""}`),
-  h("section", { class: "card" }, h("h2", {}, "Stammdaten"), stamm), kontakte, anfragen, h("div", { class: "row" }, zusammen), kom);
+  h("section", { class: "card" }, h("h2", {}, "Stammdaten"), stamm), kontakte, anfragen, projekteEl, h("div", { class: "row" }, zusammen), kom);
   kontakteZeigen(kontakte, k, neu);
-  await Promise.all([anfragenZeigen(anfragen, k), kommentare(kom, ref)]);
+  await Promise.all([anfragenZeigen(anfragen, k), projekteZeigen(projekteEl, k), kommentare(kom, ref)]);
 }
 
 function kontaktFelder(x = {}) {
@@ -150,4 +151,13 @@ async function zusammenfuehren(k) {
   if (!d) return;
   try { const z = await post(`/customers/${k.id}/merge`, d); toast("Zusammengeführt."); gehe(`/kunden/${z.id}`); }
   catch (e) { toast(meldung(e), "error"); }
+}
+
+async function projekteZeigen(el, k) {
+  if (!darf("projects.read")) { ersetze(el); return; }
+  const daten = await get(`/projects?customer=${k.id}&status=planned&status=active&status=on_hold&status=completed&status=cancelled&limit=20`);
+  ersetze(el, h("div", { class: "row row--between" }, h("h2", {}, "Projekte"),
+    h("a", { class: "btn btn--ghost btn--sm", href: `#/projekte?customer=${k.id}` }, "Alle")),
+  daten.items.length ? h("div", { class: "list" }, daten.items.map((p) => h("div", { class: "item" },
+    h("a", { href: `#/projekte/${p.id}` }, p.name), h("span", { class: "muted small" }, p.status)))) : h("p", { class: "muted" }, "Keine Projekte."));
 }

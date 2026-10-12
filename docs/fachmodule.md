@@ -37,3 +37,29 @@ Vorgang mit 409 — nichts wird teilweise umgehängt.
 **Anfragen:** Status `new → in_progress/waiting → won/lost/closed`. Abschluss setzt `closed_at`, Wiederöffnen leert es
 (die Datenbank prüft, dass beides zusammenpasst). Wiedervorlage: `follow_up_before=<Datum>` liefert offene Anfragen mit
 fälliger Wiedervorlage. Ein Kunde wird in der Antwort nur genannt, wenn der Aufrufer ihn sehen darf.
+
+## Projekte
+
+| Methode | Pfad | Recht |
+| --- | --- | --- |
+| `GET` | `/api/v1/projects` | projects.read |
+| `POST` | `/api/v1/projects` | projects.create |
+| `GET` | `/api/v1/projects/{ref}` | projects.read |
+| `PATCH` | `/api/v1/projects/{ref}` | projects.update |
+| `PUT` | `/api/v1/projects/{ref}/members/{member}` | projects.assign |
+| `DELETE` | `/api/v1/projects/{ref}/members/{member}` | projects.assign |
+| `GET` | `/api/v1/projects/{ref}/time-entries` | projects.read |
+| `POST` | `/api/v1/projects/{ref}/time-entries` | projects.read |
+| `DELETE` | `/api/v1/projects/{ref}/time-entries/{entry}` | projects.read |
+
+* **Status** `planned → active ⇄ on_hold → completed | cancelled`. `completed` setzt `completed_at`, die Datenbank
+  prüft, dass beides zusammenpasst. Zeitraum: Ende nicht vor Beginn (422, zusätzlich als DB-CHECK). Budget in Cent.
+* **Team = Sichtbarkeit:** Wer ins Team kommt und kein `objects.read_all` hat, bekommt eine Freigabe mit der Quelle
+  `project_team`, nur für das Projekt. Beim Entfernen endet genau diese Freigabe, eine manuelle bleibt bestehen. Die
+  Projektleitung ist automatisch im Team und kann nicht entfernt werden, solange sie Leitung ist.
+* **Kostensätze** (kalkulatorischer Stundensatz je Teammitglied): Setzen und Sehen nur mit `finance.read`.
+* **Projektzeiten** sind Aufwand je Projekt, **keine Arbeitszeiterfassung** im arbeitsrechtlichen Sinn (nicht geprüft,
+  Produktvision 7). Erfassen kann jedes Teammitglied für sich, für andere braucht es `projects.assign`. Löschen darf,
+  wer den Eintrag erfasst hat, oder jemand mit `projects.update` (Audit).
+* **Aufgaben** am Projekt sind normale Aufgaben mit `subject` = Projekt (`POST /api/v1/objects/{ref}/tasks`).
+  **Dokumente** werden über Verknüpfungen angehängt (`part_of`/`attachment`).

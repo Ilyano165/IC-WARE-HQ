@@ -14,6 +14,7 @@ import * as verwaltung from "./views/verwaltung.js";
 import * as konto from "./views/konto.js";
 import * as kunden from "./views/kunden.js";
 import * as anfragen from "./views/anfragen.js";
+import * as projekte from "./views/projekte.js";
 
 const app = $("#app");
 
@@ -27,6 +28,8 @@ route("/kunden", kunden.liste, "customers.read");
 route("/kunden/:ref", kunden.detail, "customers.read");
 route("/anfragen", anfragen.liste, "customers.read");
 route("/anfragen/:ref", anfragen.detail, "customers.read");
+route("/projekte", projekte.liste, "projects.read");
+route("/projekte/:ref", projekte.detail, "projects.read");
 route("/benachrichtigungen", inbox.benachrichtigungen);
 route("/suche", inbox.suche);
 route("/mitglieder", mitglieder.liste, "users.read");
@@ -45,6 +48,7 @@ const NAV = [
   { pfad: "/rueckfragen", text: "Rückfragen", recht: "comments.read" },
   { pfad: "/benachrichtigungen", text: "Benachrichtigungen" },
   { gruppe: "Geschäft" },
+  { pfad: "/projekte", text: "Projekte", recht: "projects.read" },
   { pfad: "/kunden", text: "Kunden", recht: "customers.read" },
   { pfad: "/anfragen", text: "Anfragen", recht: "customers.read" },
   { gruppe: "Verwaltung" },

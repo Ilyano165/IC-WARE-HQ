@@ -348,6 +348,15 @@ mutation "CRM: Zusammenführen prüft fremde ID zu spät" "crm/customers.py" "  
         raise ValidationFailed(\"selbst\")
     alt, alt_o = get(session, principal, ref)" "tests/test_core_security.py"
 
+PRJ="tests/test_e2_projects.py"
+mutation "Projekt: Teamfreigabe bleibt nach Entfernen" "projects/service.py" "    drop_assignment_grant(session, principal, o, m.id, TEAM)|||    pass" "$PRJ"
+mutation "Projekt: Kostensatz ohne Finanzrecht sichtbar" "api/v1/projects.py" "    kosten = decide(p, \"finance.read\")|||    kosten = True" "$PRJ"
+mutation "Projekt: Kostensatz ohne Finanzrecht setzbar" "projects/service.py" "    if cost_given and not decide(principal, \"finance.read\"):|||    if False:" "$PRJ"
+mutation "Projekt: Zeit für andere ohne projects.assign" "projects/service.py" "    if mid != principal.membership_id and not decide(principal, \"projects.assign\"):|||    if False:" "$PRJ"
+mutation "Projekt: Zeit ohne Teammitgliedschaft" "projects/service.py" "    if session.get(ProjectMember, (o.id, mid)) is None:|||    if False:" "$PRJ"
+mutation "Projekt: fremde Zeiten löschbar" "projects/service.py" "    if e.created_by_membership_id != principal.membership_id and not decide(principal, \"projects.update\"):|||    if False:" "$PRJ"
+mutation "Projekt: RLS liest alles" "migrations/versions/0010_projects.py" "                       USING (tenant_id = ichq_current_tenant())|||                       USING (true)" "$PRJ"
+
 # ---------- Windows-Launcher (ADR-017) ----------
 WIN="tests/test_windows_launcher.py"
 mutation_windows "Launcher: http:// zu fremdem Host" "launcher/ichq_launcher.py" "    if teile.scheme == \"http\" and host not in _LOKAL:|||    if False:" "$WIN"

@@ -197,6 +197,15 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/objects/{ref}/restore` | POST | authenticated | angemeldet + Firma |
 | `/api/v1/objects/{ref}/tasks` | POST | permission | `tasks.create` |
 | `/api/v1/permissions` | GET | permission | `roles.read` |
+| `/api/v1/projects` | GET | permission | `projects.read` |
+| `/api/v1/projects` | POST | permission | `projects.create` |
+| `/api/v1/projects/{ref}` | GET | permission | `projects.read` |
+| `/api/v1/projects/{ref}` | PATCH | permission | `projects.update` |
+| `/api/v1/projects/{ref}/members/{member}` | DELETE | permission | `projects.assign` |
+| `/api/v1/projects/{ref}/members/{member}` | PUT | permission | `projects.assign` |
+| `/api/v1/projects/{ref}/time-entries` | GET | permission | `projects.read` |
+| `/api/v1/projects/{ref}/time-entries` | POST | permission | `projects.read` |
+| `/api/v1/projects/{ref}/time-entries/{entry}` | DELETE | permission | `projects.read` |
 | `/api/v1/questions` | GET | permission | `comments.read` |
 | `/api/v1/roles` | GET | permission | `roles.read` |
 | `/api/v1/roles` | POST | permission | `roles.create` |

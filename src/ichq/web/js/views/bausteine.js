@@ -88,11 +88,15 @@ export function archivKnopf(obj, nachher) {
   }) } }, archiviert ? "Wiederherstellen" : "Archivieren");
 }
 
+// Eingabefehler, den die Oberfläche selbst erkennt (z. B. ungültiger Betrag) — wird wörtlich angezeigt
+export class Eingabefehler extends Error {}
+export const fehlertext = (e) => (e instanceof Eingabefehler ? e.message : meldung(e));
+
 // Formular speichern mit Fehleranzeige im Formular
 export function speichern(form, fehler, aktion) {
   form.addEventListener("submit", einmal(async () => {
     const d = Object.fromEntries(new FormData(form).entries());
-    try { await aktion(d); } catch (e) { ersetze(fehler, alertBox(meldung(e))); }
+    try { await aktion(d); } catch (e) { ersetze(fehler, alertBox(fehlertext(e))); }
   }));
   return form;
 }

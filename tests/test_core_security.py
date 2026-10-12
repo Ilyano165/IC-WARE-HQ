@@ -41,9 +41,14 @@ def _bestand(cw: CoreWorld, mid: Any) -> dict[str, str]:
     kontakt = ok(c.post(f"/api/v1/customers/{kunde['id']}/contacts", json={"name": "Geheim Kontakt"}), 201)
     anfrage = ok(c.post("/api/v1/inquiries", json={"title": f"Geheim Anfrage {mid.hex[:6]}",
                                                    "customer": kunde["id"]}), 201)
+    projekt = ok(c.post("/api/v1/projects", json={"name": f"Geheim Projekt {mid.hex[:6]}", "customer": kunde["id"]}), 201)
+    ok(c.put(f"/api/v1/projects/{projekt['id']}/members/{cw.public_id(mid)}", json={}))
+    zeit = ok(c.post(f"/api/v1/projects/{projekt['id']}/time-entries", json={"work_date": "2026-10-01",
+                                                                            "minutes": 30}), 201)
     return {"task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"],
             "member": cw.public_id(mid), "invitation": inv.public_id, "role": rolle["id"],
-            "customer": kunde["id"], "contact": kontakt["id"], "inquiry": anfrage["id"]}
+            "customer": kunde["id"], "contact": kontakt["id"], "inquiry": anfrage["id"], "project": projekt["id"],
+            "entry": zeit["id"]}
 
 
 def _notification(cw: CoreWorld, engines: Engines, empfaenger: Any, tid: Any, absender: Any) -> str:
@@ -84,11 +89,14 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("PATCH", "/api/v1/customers/{ref}/contacts/{contact}"): {"name": "Übernommen"},
     ("POST", "/api/v1/customers/{ref}/merge"): {},                               # into wird eingesetzt
     ("PATCH", "/api/v1/inquiries/{ref}"): {"title": "Übernommen", "status": "won"},
+    ("PATCH", "/api/v1/projects/{ref}"): {"name": "Übernommen", "status": "cancelled"},
+    ("PUT", "/api/v1/projects/{ref}/members/{member}"): {},
+    ("POST", "/api/v1/projects/{ref}/time-entries"): {"work_date": "2026-10-02", "minutes": 15},
 }
 
 
 def _ref_fuer(pfad: str, param: str, refs: dict[str, str]) -> str:
-    if param in ("member", "role", "contact"):
+    if param in ("member", "role", "contact", "entry"):
         return refs[param]
     if param == "permission":
         return "tasks.read"
@@ -96,7 +104,8 @@ def _ref_fuer(pfad: str, param: str, refs: dict[str, str]) -> str:
                          ("/api/v1/comments/", "comment"),
                          ("/api/v1/documents/", "document"), ("/api/v1/notifications/", "notification"),
                          ("/api/v1/links/", "link"), ("/api/v1/objects/", "task"),
-                         ("/api/v1/customers/", "customer"), ("/api/v1/inquiries/", "inquiry")):
+                         ("/api/v1/customers/", "customer"), ("/api/v1/inquiries/", "inquiry"),
+                         ("/api/v1/projects/", "project")):
         if pfad.startswith(praefix):
             return refs[art]
     raise AssertionError(f"Route {pfad} ist im IDOR-Test nicht abgedeckt — Zuordnung ergänzen")
@@ -169,7 +178,8 @@ def test_fremde_ids_in_listen_filtern_und_suche_unsichtbar(cw: CoreWorld) -> Non
     for pfad in ("/api/v1/tasks?limit=100", "/api/v1/documents?limit=100", "/api/v1/activities?limit=100",
                  "/api/v1/audit?limit=100", "/api/v1/notifications", "/api/v1/members?limit=100",
                  "/api/v1/search?q=Geheim&per_group=20", "/api/v1/customers?limit=100", "/api/v1/inquiries?limit=100",
-                 "/api/v1/customers?q=Geheim", "/api/v1/customers/duplicates?name=Geheim%20Kunde"):
+                 "/api/v1/customers?q=Geheim", "/api/v1/customers/duplicates?name=Geheim%20Kunde",
+                 "/api/v1/projects?limit=100", "/api/v1/projects?member=me"):
         r = ok(c.get(pfad))
         text = str(r)
         for wert in fremde.values():
