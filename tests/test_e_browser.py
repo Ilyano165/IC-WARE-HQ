@@ -154,3 +154,30 @@ def test_rechnung_entwurf_ausstellen_zahlung_druck(browser: Any, server: str, le
     s.page.get_by_text("Köln").wait_for()
     assert s.page.evaluate("window.__xss") is None
     s.sauber()
+
+
+def test_ausgabe_ohne_beleg_dann_hochladen(browser: Any, server: str, leute: dict[str, Any], tmp_path: Any) -> None:  # noqa: F811
+    s = Seite(browser, server)
+    s.anmelden("chefin@alpha.test")
+    s.gehe("Ausgaben & Belege")
+    s.page.get_by_text("Keine fehlenden Belege").wait_for()
+    s.page.get_by_role("button", name="Ausgabe erfassen").click()
+    d = _dialog(s)
+    d.get_by_label("Titel").fill(f"Baumarkt {XSS}")
+    d.get_by_label("Betrag brutto (€)").fill("49,99")
+    d.get_by_label("Lieferant").fill("Hornbach")
+    d.get_by_role("button", name="Erfassen").click()
+    s.page.locator(".pagehead .tag", has_text="Beleg fehlt").wait_for()
+    s.page.get_by_label("Warum fehlt der Beleg?").fill("Bon liegt im Auto")
+    s.page.get_by_role("button", name="Vermerken").click()
+    s.page.get_by_text("Vermerk: Bon liegt im Auto").wait_for()
+    pdf = tmp_path / "bon.pdf"
+    pdf.write_bytes(b"%PDF-1.4 bon")
+    s.page.get_by_label("Beleg hochladen").set_input_files(str(pdf))
+    s.page.get_by_role("button", name="Hochladen & verknüpfen").click()
+    s.page.locator(".pagehead .tag", has_text="Beleg wird geprüft").wait_for()     # Quarantäne ≠ vorhanden
+    s.gehe("Ausgaben & Belege")
+    s.page.locator("tbody tr").first.wait_for()
+    assert "Baumarkt" in s.page.locator("tbody").inner_text()
+    assert s.page.evaluate("window.__xss") is None
+    s.sauber()

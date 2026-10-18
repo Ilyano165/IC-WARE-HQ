@@ -16,6 +16,7 @@ import * as kunden from "./views/kunden.js";
 import * as anfragen from "./views/anfragen.js";
 import * as projekte from "./views/projekte.js";
 import * as rechnungen from "./views/rechnungen.js";
+import * as belege from "./views/belege.js";
 
 const app = $("#app");
 
@@ -34,6 +35,8 @@ route("/projekte/:ref", projekte.detail, "projects.read");
 route("/rechnungen", rechnungen.liste, "invoices.read");
 route("/rechnungen/:ref", rechnungen.detail, "invoices.read");
 route("/rechnungen/:ref/druck", rechnungen.druck, "invoices.read");
+route("/belege", belege.liste, "finance.read");
+route("/belege/:ref", belege.detail, "finance.read");
 route("/benachrichtigungen", inbox.benachrichtigungen);
 route("/suche", inbox.suche);
 route("/mitglieder", mitglieder.liste, "users.read");
@@ -54,6 +57,7 @@ const NAV = [
   { gruppe: "Geschäft" },
   { pfad: "/projekte", text: "Projekte", recht: "projects.read" },
   { pfad: "/rechnungen", text: "Rechnungen", recht: "invoices.read" },
+  { pfad: "/belege", text: "Ausgaben & Belege", recht: "finance.read" },
   { pfad: "/kunden", text: "Kunden", recht: "customers.read" },
   { pfad: "/anfragen", text: "Anfragen", recht: "customers.read" },
   { gruppe: "Verwaltung" },

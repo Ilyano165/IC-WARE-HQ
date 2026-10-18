@@ -372,6 +372,15 @@ mutation "Rechnung: Überfällig ohne Fälligkeitsprüfung" "finance/invoices.py
 mutation "Rechnung: Zahlungen ohne Finanzrecht sichtbar" "api/v1/invoices.py" "        if decide(p, \"finance.read\"):|||        if True:" "$RE"
 mutation "Rechnung: Storno zeigt offenen Betrag" "api/v1/invoices.py" "if inv.kind == \"invoice\" and inv.status not in (\"draft\", \"cancelled\") else 0|||if inv.kind == \"invoice\" and inv.status != \"draft\" else 0" "$RE"
 
+BEL="tests/test_e4_receipts.py"
+mutation "Beleg: Quarantäne zählt als vorhanden" "finance/receipts.py" "(_SCAN == \"clean\", \"complete\"),|||(_SCAN != \"infected\", \"complete\")," "$BEL"
+mutation "Beleg: Einzelstatus Quarantäne als vorhanden" "finance/receipts.py" "    return {\"clean\": \"complete\", \"infected\": \"rejected\"}.get(scan or \"\", \"unchecked\")|||    return \"complete\"" "$BEL"
+mutation "Beleg: storniert änderbar (Service)" "finance/receipts.py" "    if r.voided_at is not None:|||    if False:" "$BEL"
+mutation "Beleg: storniert änderbar (Trigger)" "migrations/versions/0012_receipts.py" "        RAISE EXCEPTION 'ichq: stornierte Ausgabe ist unveränderlich';|||        NULL;" "$BEL"
+mutation "Beleg: löschbar (Trigger)" "migrations/versions/0012_receipts.py" "        RAISE EXCEPTION 'ichq: Ausgaben werden nicht gelöscht — stornieren';|||        RETURN OLD;" "$BEL"
+mutation "Beleg: archivierbar" "finance/receipts.py" "ARCHIVE_GUARDS[\"receipt\"] = lambda _s, _o: \"Ausgaben werden nicht archiviert — Fehlerfassung bitte stornieren\"|||" "$BEL"
+mutation "Beleg: Storno zählt weiter mit" "finance/receipts.py" "    teile: list[Any] = [Receipt.voided_at.is_not(None) if f.voided else Receipt.voided_at.is_(None)]|||    teile: list[Any] = []" "$BEL"
+
 # ---------- Windows-Launcher (ADR-017) ----------
 WIN="tests/test_windows_launcher.py"
 mutation_windows "Launcher: http:// zu fremdem Host" "launcher/ichq_launcher.py" "    if teile.scheme == \"http\" and host not in _LOKAL:|||    if False:" "$WIN"

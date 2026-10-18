@@ -108,3 +108,28 @@ fälliger Wiedervorlage. Ein Kunde wird in der Antwort nur genannt, wenn der Auf
   wird lediglich vermerkt (`dispatches`). Für einen Versand an Kunden fehlen Konfiguration und Freigabe.
 * **PDF:** eine serverseitige PDF-Erzeugung gibt es nicht. Die Oberfläche hat eine Druckansicht, die der Browser als PDF
   speichern kann.
+
+## Ausgaben und Belege
+
+| Methode | Pfad | Recht |
+| --- | --- | --- |
+| `GET` | `/api/v1/receipts` | finance.read |
+| `POST` | `/api/v1/receipts` | finance.create |
+| `GET` | `/api/v1/receipts/{ref}` | finance.read |
+| `PATCH` | `/api/v1/receipts/{ref}` | finance.update |
+| `PUT` | `/api/v1/receipts/{ref}/document` | finance.update |
+| `POST` | `/api/v1/receipts/{ref}/void` | finance.update |
+
+* **Belegprinzip:** Jede Ausgabe hat einen berechneten Belegstatus. `missing` heißt kein Dokument, `unchecked` heißt
+  Dokument noch in Quarantäne, `rejected` heißt bei der Virenprüfung als gefährlich erkannt, `complete` heißt geprüft und
+  sauber. Ein hochgeladenes Dokument zählt also erst nach bestandener Prüfung (ADR-015). Liste der fehlenden Belege:
+  `GET /receipts?evidence=missing&evidence=unchecked&evidence=rejected`. Wiedervorlage: `follow_up_due=true`, nur
+  solange der Beleg nicht vollständig ist. `missing_reason` dokumentiert, warum der Beleg (noch) fehlt, der Status
+  bleibt dabei trotzdem „fehlt“.
+* **Beträge:** brutto laut Beleg in Cent. Der Steuersatz ist optional und wird vom Nutzer erfasst. Ausgaben- und
+  Zahlungsdatum dürfen nicht in der Zukunft liegen.
+* **Stornieren statt Löschen:** Eine Fehlerfassung wird mit Grund storniert, bleibt sichtbar (`voided=true`), zählt
+  nirgends mehr mit und ist danach unveränderlich. Die Datenbank verbietet das Löschen von Ausgaben ganz (Trigger, auch
+  für den Superuser) und jede Änderung nach dem Stornieren. Archivieren ist für Ausgaben gesperrt.
+* Belegdokumente sind normale Dokumente (Upload mit Virenprüfung, `files.*`). Verknüpfen kann man nur ein sichtbares
+  Dokument der eigenen Firma, ein fremdes ergibt 404, die Datenbank prüft zusätzlich Firma und Typ.

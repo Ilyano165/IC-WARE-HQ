@@ -32,7 +32,7 @@ OBJECT_TYPES: dict[str, ObjectType] = {t.code: t for t in (
     _T("employee", "Mitarbeiter", "persons", "users.read", "users.update", False),
     _T("project", "Projekt", "projects", "projects.read", "projects.update", True),
     _T("task", "Aufgabe", "tasks", "tasks.read", "tasks.update", True),
-    _T("receipt", "Beleg", "receipts", "finance.read", "finance.update", False),
+    _T("receipt", "Ausgabe/Beleg", "receipts", "finance.read", "finance.update", True),
     _T("invoice", "Rechnung", "invoices", "invoices.read", "invoices.update", True),
     _T("payment", "Zahlung", "invoices", "finance.read", "finance.update", True),
     _T("trip", "Fahrt", "receipts", "vehicles.read", "vehicles.update", False),

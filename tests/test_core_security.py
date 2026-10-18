@@ -54,7 +54,8 @@ def _bestand(cw: CoreWorld, mid: Any) -> dict[str, str]:
     ausgestellt = ok(c.post(f"/api/v1/invoices/{ausgestellt['id']}/issue", json={"due_date": "2099-01-01"}))
     zahlung = ok(c.post(f"/api/v1/invoices/{ausgestellt['id']}/payments",
                         json={"amount_minor": 100, "paid_on": ausgestellt["issue_date"]}), 201)["payments"][0]["id"]
-    return {"task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"],
+    ausgabe = ok(c.post("/api/v1/receipts", json={"title": f"Geheim Ausgabe {mid.hex[:6]}", "amount_minor": 100}), 201)
+    return {"task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"], "receipt": ausgabe["id"],
             "invoice": rech["id"], "line": pos["id"], "issued": ausgestellt["id"], "payment": zahlung,
             "member": cw.public_id(mid), "invitation": inv.public_id, "role": rolle["id"],
             "customer": kunde["id"], "contact": kontakt["id"], "inquiry": anfrage["id"], "project": projekt["id"],
@@ -112,6 +113,9 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("POST", "/api/v1/invoices/{ref}/payments"): {"amount_minor": 1, "paid_on": "2026-01-01"},
     ("POST", "/api/v1/invoices/{ref}/payments/{payment}/reverse"): {},
     ("POST", "/api/v1/invoices/{ref}/followups"): {"kind": "note"},
+    ("PATCH", "/api/v1/receipts/{ref}"): {"title": "Übernommen"},
+    ("PUT", "/api/v1/receipts/{ref}/document"): {},                              # document wird eingesetzt
+    ("POST", "/api/v1/receipts/{ref}/void"): {"reason": "Eingeschleust"},
 }
 
 
@@ -127,7 +131,8 @@ def _ref_fuer(pfad: str, param: str, refs: dict[str, str]) -> str:
                          ("/api/v1/documents/", "document"), ("/api/v1/notifications/", "notification"),
                          ("/api/v1/links/", "link"), ("/api/v1/objects/", "task"),
                          ("/api/v1/customers/", "customer"), ("/api/v1/inquiries/", "inquiry"),
-                         ("/api/v1/projects/", "project"), ("/api/v1/invoices/", "invoice")):
+                         ("/api/v1/projects/", "project"), ("/api/v1/invoices/", "invoice"),
+                         ("/api/v1/receipts/", "receipt")):
         if pfad.startswith(praefix):
             return refs[art]
     raise AssertionError(f"Route {pfad} ist im IDOR-Test nicht abgedeckt — Zuordnung ergänzen")
@@ -157,7 +162,8 @@ def _aufrufe(settings: Settings, engines: Engines, refs: dict[str, str], ziel: d
 def _felder(m: str, pfad: str) -> set[str]:
     return {("POST", "/api/v1/objects/{ref}/links"): {"target"}, ("POST", "/api/v1/objects/{ref}/grants"): {"member"},
             ("POST", "/api/v1/tasks/{ref}/attachments"): {"document"},
-            ("POST", "/api/v1/customers/{ref}/merge"): {"into"}}.get((m, pfad), set())
+            ("POST", "/api/v1/customers/{ref}/merge"): {"into"},
+            ("PUT", "/api/v1/receipts/{ref}/document"): {"document"}}.get((m, pfad), set())
 
 
 def test_idor_jede_route_mit_id_liefert_404_fuer_fremde_firma(cw: CoreWorld, settings: Settings,
@@ -202,7 +208,8 @@ def test_fremde_ids_in_listen_filtern_und_suche_unsichtbar(cw: CoreWorld) -> Non
                  "/api/v1/search?q=Geheim&per_group=20", "/api/v1/customers?limit=100", "/api/v1/inquiries?limit=100",
                  "/api/v1/customers?q=Geheim", "/api/v1/customers/duplicates?name=Geheim%20Kunde",
                  "/api/v1/projects?limit=100", "/api/v1/projects?member=me", "/api/v1/invoices?limit=100",
-                 "/api/v1/invoices?open=true", "/api/v1/invoices?q=Geheim"):
+                 "/api/v1/invoices?open=true", "/api/v1/invoices?q=Geheim", "/api/v1/receipts?limit=100",
+                 "/api/v1/receipts?evidence=missing"):
         r = ok(c.get(pfad))
         text = str(r)
         for wert in fremde.values():

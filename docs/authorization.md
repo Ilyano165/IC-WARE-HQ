@@ -220,6 +220,12 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/projects/{ref}/time-entries` | POST | permission | `projects.read` |
 | `/api/v1/projects/{ref}/time-entries/{entry}` | DELETE | permission | `projects.read` |
 | `/api/v1/questions` | GET | permission | `comments.read` |
+| `/api/v1/receipts` | GET | permission | `finance.read` |
+| `/api/v1/receipts` | POST | permission | `finance.create` |
+| `/api/v1/receipts/{ref}` | GET | permission | `finance.read` |
+| `/api/v1/receipts/{ref}` | PATCH | permission | `finance.update` |
+| `/api/v1/receipts/{ref}/document` | PUT | permission | `finance.update` |
+| `/api/v1/receipts/{ref}/void` | POST | permission | `finance.update` |
 | `/api/v1/roles` | GET | permission | `roles.read` |
 | `/api/v1/roles` | POST | permission | `roles.create` |
 | `/api/v1/roles/{role}` | DELETE | permission | `roles.delete` |
