@@ -181,3 +181,30 @@ def test_ausgabe_ohne_beleg_dann_hochladen(browser: Any, server: str, leute: dic
     assert "Baumarkt" in s.page.locator("tbody").inner_text()
     assert s.page.evaluate("window.__xss") is None
     s.sauber()
+
+
+def test_liquiditaet_manueller_stand_und_planposten(browser: Any, server: str, leute: dict[str, Any]) -> None:  # noqa: F811
+    s = Seite(browser, server)
+    s.anmelden("chefin@alpha.test")
+    s.gehe("Liquidität")
+    s.page.get_by_text("Keine Bankanbindung").wait_for()
+    s.page.get_by_role("button", name="Konto anlegen").click()
+    d = _dialog(s)
+    d.get_by_label("Name").fill(f"Sparkasse {XSS}")
+    d.get_by_role("button", name="Anlegen").click()
+    s.page.get_by_text("Ohne Stand:").wait_for()
+    s.page.get_by_role("button", name="Stand erfassen").click()
+    d = _dialog(s)
+    d.get_by_label("Kontostand (€, negativ = Soll)").fill("1.250,00")
+    d.get_by_role("button", name="Erfassen").click()
+    s.page.locator(".metric", has_text="geschätzt heute").get_by_text("1.250,00").wait_for()
+    s.page.get_by_role("button", name="Planposten anlegen").click()
+    d = _dialog(s)
+    d.get_by_label("Bezeichnung").fill("Steuervorauszahlung")
+    d.get_by_label("Erwartet am").fill("2026-12-10")
+    d.get_by_label("Betrag (€, + Einzahlung / − Auszahlung)").fill("-300")
+    d.get_by_role("button", name="Anlegen").click()
+    s.page.get_by_role("cell", name="Steuervorauszahlung").wait_for()
+    assert "Sparkasse" in s.page.locator("main").inner_text()
+    assert s.page.evaluate("window.__xss") is None
+    s.sauber()

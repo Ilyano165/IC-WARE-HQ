@@ -55,7 +55,12 @@ def _bestand(cw: CoreWorld, mid: Any) -> dict[str, str]:
     zahlung = ok(c.post(f"/api/v1/invoices/{ausgestellt['id']}/payments",
                         json={"amount_minor": 100, "paid_on": ausgestellt["issue_date"]}), 201)["payments"][0]["id"]
     ausgabe = ok(c.post("/api/v1/receipts", json={"title": f"Geheim Ausgabe {mid.hex[:6]}", "amount_minor": 100}), 201)
-    return {"task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"], "receipt": ausgabe["id"],
+    konto = ok(c.post("/api/v1/liquidity/accounts", json={"name": f"Geheim Konto {mid.hex[:6]}"}), 201)
+    ok(c.post(f"/api/v1/liquidity/accounts/{konto['id']}/balances", json={"as_of": "2026-10-01",
+                                                                         "balance_minor": 4242}), 201)
+    plan = ok(c.post("/api/v1/liquidity/forecasts", json={"expected_on": "2026-12-01", "amount_minor": 100,
+                                                          "label": f"Geheim Plan {mid.hex[:6]}"}), 201)
+    return {"account": konto["id"], "item": plan["id"], "task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"], "receipt": ausgabe["id"],
             "invoice": rech["id"], "line": pos["id"], "issued": ausgestellt["id"], "payment": zahlung,
             "member": cw.public_id(mid), "invitation": inv.public_id, "role": rolle["id"],
             "customer": kunde["id"], "contact": kontakt["id"], "inquiry": anfrage["id"], "project": projekt["id"],
@@ -116,11 +121,14 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("PATCH", "/api/v1/receipts/{ref}"): {"title": "Übernommen"},
     ("PUT", "/api/v1/receipts/{ref}/document"): {},                              # document wird eingesetzt
     ("POST", "/api/v1/receipts/{ref}/void"): {"reason": "Eingeschleust"},
+    ("PATCH", "/api/v1/liquidity/accounts/{account}"): {"name": "Übernommen"},
+    ("POST", "/api/v1/liquidity/accounts/{account}/balances"): {"as_of": "2026-10-01", "balance_minor": 1},
+    ("PATCH", "/api/v1/liquidity/forecasts/{item}"): {"label": "Übernommen"},
 }
 
 
 def _ref_fuer(pfad: str, param: str, refs: dict[str, str]) -> str:
-    if param in ("member", "role", "contact", "entry", "line", "payment"):
+    if param in ("member", "role", "contact", "entry", "line", "payment", "account", "item"):
         return refs[param]
     if re.search(r"/invoices/\{ref\}/(payments|followups|dispatches|cancel)", pfad):
         return refs["issued"]                          # nur auf ausgestellte Rechnungen sinnvoll
@@ -209,7 +217,8 @@ def test_fremde_ids_in_listen_filtern_und_suche_unsichtbar(cw: CoreWorld) -> Non
                  "/api/v1/customers?q=Geheim", "/api/v1/customers/duplicates?name=Geheim%20Kunde",
                  "/api/v1/projects?limit=100", "/api/v1/projects?member=me", "/api/v1/invoices?limit=100",
                  "/api/v1/invoices?open=true", "/api/v1/invoices?q=Geheim", "/api/v1/receipts?limit=100",
-                 "/api/v1/receipts?evidence=missing"):
+                 "/api/v1/receipts?evidence=missing", "/api/v1/liquidity", "/api/v1/liquidity/accounts",
+                 "/api/v1/liquidity/forecasts"):
         r = ok(c.get(pfad))
         text = str(r)
         for wert in fremde.values():

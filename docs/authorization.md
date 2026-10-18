@@ -181,6 +181,15 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/invoices/{ref}/payments` | POST | permission | `finance.create` |
 | `/api/v1/invoices/{ref}/payments/{payment}/reverse` | POST | permission | `finance.update` |
 | `/api/v1/links/{ref}` | DELETE | authenticated | angemeldet + Firma |
+| `/api/v1/liquidity` | GET | permission | `finance.read` |
+| `/api/v1/liquidity/accounts` | GET | permission | `finance.read` |
+| `/api/v1/liquidity/accounts` | POST | permission | `finance.update` |
+| `/api/v1/liquidity/accounts/{account}` | GET | permission | `finance.read` |
+| `/api/v1/liquidity/accounts/{account}` | PATCH | permission | `finance.update` |
+| `/api/v1/liquidity/accounts/{account}/balances` | POST | permission | `finance.update` |
+| `/api/v1/liquidity/forecasts` | GET | permission | `finance.read` |
+| `/api/v1/liquidity/forecasts` | POST | permission | `finance.update` |
+| `/api/v1/liquidity/forecasts/{item}` | PATCH | permission | `finance.update` |
 | `/api/v1/me` | GET | authenticated | angemeldet + Firma |
 | `/api/v1/me/permissions` | GET | authenticated | angemeldet + Firma |
 | `/api/v1/members` | GET | permission | `users.read` |

@@ -133,3 +133,38 @@ fälliger Wiedervorlage. Ein Kunde wird in der Antwort nur genannt, wenn der Auf
   für den Superuser) und jede Änderung nach dem Stornieren. Archivieren ist für Ausgaben gesperrt.
 * Belegdokumente sind normale Dokumente (Upload mit Virenprüfung, `files.*`). Verknüpfen kann man nur ein sichtbares
   Dokument der eigenen Firma, ein fremdes ergibt 404, die Datenbank prüft zusätzlich Firma und Typ.
+
+## Liquidität
+
+| Methode | Pfad | Recht |
+| --- | --- | --- |
+| `GET` | `/api/v1/liquidity` | finance.read |
+| `GET` | `/api/v1/liquidity/accounts` | finance.read |
+| `POST` | `/api/v1/liquidity/accounts` | finance.update |
+| `GET` | `/api/v1/liquidity/accounts/{account}` | finance.read |
+| `PATCH` | `/api/v1/liquidity/accounts/{account}` | finance.update |
+| `POST` | `/api/v1/liquidity/accounts/{account}/balances` | finance.update |
+| `GET` | `/api/v1/liquidity/forecasts` | finance.read |
+| `POST` | `/api/v1/liquidity/forecasts` | finance.update |
+| `PATCH` | `/api/v1/liquidity/forecasts/{item}` | finance.update |
+
+* **Keine vorgetäuschten Kontostände.** HQ hat keine Bankanbindung. Ein Kontostand ist immer ein **manuell erfasster**
+  Stand laut Auszug, mit Stichtag, Erfasser und Erfassungszeit (`source: manual`). Stände sind nur anhängend: Wer sich
+  vertippt hat, erfasst einen neuen Stand, und der alte bleibt in der Historie. Die Datenbank verbietet Ändern und
+  Löschen (Trigger, auch für den Superuser).
+* **Drei Arten von Zahlen, getrennt ausgewiesen:**
+  * `manual` ist der letzte Stand je aktivem Konto.
+  * `recorded` sind die seit dem **ältesten** Stichtag in HQ erfassten Zahlungseingänge und bezahlten Ausgaben, jeweils
+    mit Verweis auf den Posten.
+  * `expected` sind offene Forderungen (Restbetrag nach Fälligkeit), unbezahlte Ausgaben (Fälligkeit, sonst
+    Ausgabedatum) und offene Planposten.
+
+  Überfällige erwartete Posten zählen ab heute und sind mit `overdue` markiert. `estimated_today_minor` ist
+  `manual` plus `recorded`, die Zeitleiste addiert `expected` je Woche oder Monat.
+* **Unschärfe wird angezeigt, nicht versteckt:** `dates_differ` heißt, dass die Konten unterschiedliche Stichtage
+  haben. `accounts_without_balance` nennt Konten ohne Stand. `hidden_items` zählt Posten, die der Aufrufer nicht sehen
+  darf; seine Übersicht ist dann unvollständig. Ohne Stand gibt es keine Schätzung (0 und `oldest_as_of: null`).
+* **Eine Währung:** Gerechnet wird in der Firmenwährung, oder in `currency=` wenn angegeben. Posten anderer Währungen
+  stehen nur gezählt in `other_currencies`, ohne Umrechnung.
+* Konten und Planposten sind keine Fachobjekte (keine Freigaben): Lesen erfordert `finance.read`, Pflegen
+  `finance.update`. Rechnungen, Zahlungen und Ausgaben zählen nur, soweit der Aufrufer sie sehen darf.
