@@ -357,6 +357,21 @@ mutation "Projekt: Zeit ohne Teammitgliedschaft" "projects/service.py" "    if s
 mutation "Projekt: fremde Zeiten löschbar" "projects/service.py" "    if e.created_by_membership_id != principal.membership_id and not decide(principal, \"projects.update\"):|||    if False:" "$PRJ"
 mutation "Projekt: RLS liest alles" "migrations/versions/0010_projects.py" "                       USING (tenant_id = ichq_current_tenant())|||                       USING (true)" "$PRJ"
 
+RE="tests/test_e3_invoices.py"
+M11="migrations/versions/0011_invoices.py"
+mutation "Rechnung: ausgestellt änderbar (Trigger)" "$M11" "          RAISE EXCEPTION 'ichq: ausgestellte Rechnung ist unveränderlich — Korrektur nur per Storno';|||          NULL;" "$RE"
+mutation "Rechnung: ausgestellt löschbar (Trigger)" "$M11" "          RAISE EXCEPTION 'ichq: ausgestellte Rechnung kann nicht gelöscht werden';|||          NULL;" "$RE"
+mutation "Rechnung: zurück in den Entwurf (Trigger)" "$M11" "          RAISE EXCEPTION 'ichq: ausgestellte Rechnung kann kein Entwurf mehr werden';|||          NULL;" "$RE"
+mutation "Rechnung: Positionen nach Ausstellen änderbar (Trigger)" "$M11" "      IF st IS DISTINCT FROM 'draft' THEN|||      IF false THEN" "$RE"
+mutation "Rechnung: Zahlung auf Entwurf (Trigger)" "$M11" "      IF r.status IS NULL OR r.status IN ('draft', 'cancelled') OR r.kind <> 'invoice' THEN|||      IF false THEN" "$RE"
+mutation "Rechnung: Nummernkreis zählt nicht hoch" "finance/invoices.py" "ON CONFLICT (tenant_id, year) DO UPDATE SET next_value = invoice_number_counters.next_value + 1|||ON CONFLICT (tenant_id, year) DO UPDATE SET next_value = invoice_number_counters.next_value" "$RE"
+mutation "Rechnung: Überzahlung erlaubt" "finance/payments.py" "    if amount_minor > offen:|||    if False:" "$RE"
+mutation "Rechnung: Storno trotz Zahlungen" "finance/invoices.py" "    if paid(session, inv.id) != 0:|||    if False:" "$RE"
+mutation "Rechnung: ausgestellte archivierbar" "finance/invoices.py" "    if inv is not None and inv.status != \"draft\":|||    if False:" "$RE"
+mutation "Rechnung: Überfällig ohne Fälligkeitsprüfung" "finance/invoices.py" "        teile.append(Invoice.due_date < f.overdue_on)|||        pass" "$RE"
+mutation "Rechnung: Zahlungen ohne Finanzrecht sichtbar" "api/v1/invoices.py" "        if decide(p, \"finance.read\"):|||        if True:" "$RE"
+mutation "Rechnung: Storno zeigt offenen Betrag" "api/v1/invoices.py" "if inv.kind == \"invoice\" and inv.status not in (\"draft\", \"cancelled\") else 0|||if inv.kind == \"invoice\" and inv.status != \"draft\" else 0" "$RE"
+
 # ---------- Windows-Launcher (ADR-017) ----------
 WIN="tests/test_windows_launcher.py"
 mutation_windows "Launcher: http:// zu fremdem Host" "launcher/ichq_launcher.py" "    if teile.scheme == \"http\" and host not in _LOKAL:|||    if False:" "$WIN"

@@ -63,3 +63,48 @@ fälliger Wiedervorlage. Ein Kunde wird in der Antwort nur genannt, wenn der Auf
   wer den Eintrag erfasst hat, oder jemand mit `projects.update` (Audit).
 * **Aufgaben** am Projekt sind normale Aufgaben mit `subject` = Projekt (`POST /api/v1/objects/{ref}/tasks`).
   **Dokumente** werden über Verknüpfungen angehängt (`part_of`/`attachment`).
+
+## Rechnungen, Zahlungen, Überfälligkeit
+
+| Methode | Pfad | Recht |
+| --- | --- | --- |
+| `GET` | `/api/v1/invoices` | invoices.read |
+| `POST` | `/api/v1/invoices` | invoices.create |
+| `GET` | `/api/v1/invoices/{ref}` | invoices.read |
+| `PATCH` | `/api/v1/invoices/{ref}` | invoices.update |
+| `POST` | `/api/v1/invoices/{ref}/lines` | invoices.update |
+| `PATCH` | `/api/v1/invoices/{ref}/lines/{line}` | invoices.update |
+| `DELETE` | `/api/v1/invoices/{ref}/lines/{line}` | invoices.update |
+| `POST` | `/api/v1/invoices/{ref}/issue` | invoices.approve |
+| `POST` | `/api/v1/invoices/{ref}/dispatches` | invoices.update |
+| `POST` | `/api/v1/invoices/{ref}/cancel` | invoices.approve |
+| `POST` | `/api/v1/invoices/{ref}/payments` | finance.create |
+| `POST` | `/api/v1/invoices/{ref}/payments/{payment}/reverse` | finance.update |
+| `POST` | `/api/v1/invoices/{ref}/followups` | invoices.update |
+
+* **Ablauf:** Entwurf (frei änderbar, keine Nummer) → **Ausstellen** (`invoices.approve`). Dabei wird die Nummer
+  `RE-<Jahr>-<laufend>` vergeben, Kunde (als Stand `customer_snapshot`), Beträge und Positionen werden eingefroren.
+  Danach geht es weiter über Versandvermerk, Zahlungen (teilweise bezahlt/bezahlt) oder **Storno**.
+* **Nummernkreis:** je Firma und Jahr, `INSERT … ON CONFLICT DO UPDATE … RETURNING`. Die Zeilensperre serialisiert
+  parallele Ausstellungen, ein Abbruch rollt die Nummer zurück, dadurch bleibt die Folge lückenlos (Test mit 8 parallelen
+  Ausstellungen). `UNIQUE (tenant_id, number)` gilt zusätzlich.
+* **Unveränderbarkeit (Datenbank):** Trigger lassen nach dem Ausstellen nur Status-, Versand-, Mahn- und
+  Zuständigkeitsfelder zu. Positionen sind gesperrt, Löschen ist verboten, ein Weg zurück in den Entwurf oder aus
+  „storniert“ existiert nicht. Archivieren geht nur für Entwürfe.
+* **Storno:** neue Rechnung `kind = cancellation` mit negierten Positionen, eigener Nummer und Verweis auf das
+  Original (höchstens eine je Rechnung). Das geht nur ohne erfasste Zahlungen.
+* **Beträge:** Menge in Tausendsteln, Preise in Cent, Steuersatz in Basispunkten **vom Nutzer erfasst**. Es gibt keinen
+  Standardsatz und keine Prüfung auf steuerliche Richtigkeit. Gerundet wird kaufmännisch **je Position**
+  (`ichq.finance.rechnen`). Ob das den Anforderungen genügt, ist **nicht geprüft**. Pflichtangaben einer Rechnung
+  (§ 14 UStG) werden nicht behauptet.
+* **Zahlungen:** manuell erfasst, ohne Bankanbindung. Überzahlung und Zahlungen mit Datum in der Zukunft werden
+  abgelehnt. Falsche Zahlungen werden nie gelöscht, sondern durch eine **Gegenbuchung** aufgehoben (beide sichtbar).
+  Die Datenbank prüft: nur auf ausgestellte, nicht stornierte Rechnungen, gleiche Währung, Rücknahme genau einmal und
+  genau mit dem Gegenbetrag.
+* **Überfällig:** ausgestellt/versendet/teilweise bezahlt, Restbetrag > 0, Fälligkeit vor „heute“ (Zeitzone der Firma).
+  Liste: `GET /invoices?overdue=true&sort=due_date&order=asc`.
+* **Mahnwesen:** Kontaktversuche, notierte Erinnerungen, Mahnstufen (0–9), Notizen und Wiedervorlage
+  (`follow_up_due=true`) werden **nur dokumentiert**. HQ verschickt **keine** Mahnung und keine Rechnung. Der Versand
+  wird lediglich vermerkt (`dispatches`). Für einen Versand an Kunden fehlen Konfiguration und Freigabe.
+* **PDF:** eine serverseitige PDF-Erzeugung gibt es nicht. Die Oberfläche hat eine Druckansicht, die der Browser als PDF
+  speichern kann.

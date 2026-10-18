@@ -45,7 +45,17 @@ def _bestand(cw: CoreWorld, mid: Any) -> dict[str, str]:
     ok(c.put(f"/api/v1/projects/{projekt['id']}/members/{cw.public_id(mid)}", json={}))
     zeit = ok(c.post(f"/api/v1/projects/{projekt['id']}/time-entries", json={"work_date": "2026-10-01",
                                                                             "minutes": 30}), 201)
+    rech = ok(c.post("/api/v1/invoices", json={"customer": kunde["id"], "title": f"Geheim Rechnung {mid.hex[:6]}"}), 201)
+    pos = ok(c.post(f"/api/v1/invoices/{rech['id']}/lines", json={"description": "Geheim", "quantity_milli": 1000,
+                                                                  "unit_price_minor": 100, "tax_rate_bp": 0}), 201)
+    ausgestellt = ok(c.post("/api/v1/invoices", json={"customer": kunde["id"]}), 201)
+    ok(c.post(f"/api/v1/invoices/{ausgestellt['id']}/lines", json={"description": "x", "quantity_milli": 1000,
+                                                                   "unit_price_minor": 10000, "tax_rate_bp": 0}), 201)
+    ausgestellt = ok(c.post(f"/api/v1/invoices/{ausgestellt['id']}/issue", json={"due_date": "2099-01-01"}))
+    zahlung = ok(c.post(f"/api/v1/invoices/{ausgestellt['id']}/payments",
+                        json={"amount_minor": 100, "paid_on": ausgestellt["issue_date"]}), 201)["payments"][0]["id"]
     return {"task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"],
+            "invoice": rech["id"], "line": pos["id"], "issued": ausgestellt["id"], "payment": zahlung,
             "member": cw.public_id(mid), "invitation": inv.public_id, "role": rolle["id"],
             "customer": kunde["id"], "contact": kontakt["id"], "inquiry": anfrage["id"], "project": projekt["id"],
             "entry": zeit["id"]}
@@ -92,12 +102,24 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("PATCH", "/api/v1/projects/{ref}"): {"name": "Übernommen", "status": "cancelled"},
     ("PUT", "/api/v1/projects/{ref}/members/{member}"): {},
     ("POST", "/api/v1/projects/{ref}/time-entries"): {"work_date": "2026-10-02", "minutes": 15},
+    ("PATCH", "/api/v1/invoices/{ref}"): {"notes": "Übernommen"},
+    ("POST", "/api/v1/invoices/{ref}/lines"): {"description": "x", "quantity_milli": 1000, "unit_price_minor": 1,
+                                               "tax_rate_bp": 0},
+    ("PATCH", "/api/v1/invoices/{ref}/lines/{line}"): {"unit_price_minor": 1},
+    ("POST", "/api/v1/invoices/{ref}/issue"): {"due_date": "2099-01-01"},
+    ("POST", "/api/v1/invoices/{ref}/dispatches"): {"action": "sent"},
+    ("POST", "/api/v1/invoices/{ref}/cancel"): {},
+    ("POST", "/api/v1/invoices/{ref}/payments"): {"amount_minor": 1, "paid_on": "2026-01-01"},
+    ("POST", "/api/v1/invoices/{ref}/payments/{payment}/reverse"): {},
+    ("POST", "/api/v1/invoices/{ref}/followups"): {"kind": "note"},
 }
 
 
 def _ref_fuer(pfad: str, param: str, refs: dict[str, str]) -> str:
-    if param in ("member", "role", "contact", "entry"):
+    if param in ("member", "role", "contact", "entry", "line", "payment"):
         return refs[param]
+    if re.search(r"/invoices/\{ref\}/(payments|followups|dispatches|cancel)", pfad):
+        return refs["issued"]                          # nur auf ausgestellte Rechnungen sinnvoll
     if param == "permission":
         return "tasks.read"
     for praefix, art in (("/api/v1/invitations/", "invitation"), ("/api/v1/tasks/", "task"),
@@ -105,7 +127,7 @@ def _ref_fuer(pfad: str, param: str, refs: dict[str, str]) -> str:
                          ("/api/v1/documents/", "document"), ("/api/v1/notifications/", "notification"),
                          ("/api/v1/links/", "link"), ("/api/v1/objects/", "task"),
                          ("/api/v1/customers/", "customer"), ("/api/v1/inquiries/", "inquiry"),
-                         ("/api/v1/projects/", "project")):
+                         ("/api/v1/projects/", "project"), ("/api/v1/invoices/", "invoice")):
         if pfad.startswith(praefix):
             return refs[art]
     raise AssertionError(f"Route {pfad} ist im IDOR-Test nicht abgedeckt — Zuordnung ergänzen")
@@ -179,7 +201,8 @@ def test_fremde_ids_in_listen_filtern_und_suche_unsichtbar(cw: CoreWorld) -> Non
                  "/api/v1/audit?limit=100", "/api/v1/notifications", "/api/v1/members?limit=100",
                  "/api/v1/search?q=Geheim&per_group=20", "/api/v1/customers?limit=100", "/api/v1/inquiries?limit=100",
                  "/api/v1/customers?q=Geheim", "/api/v1/customers/duplicates?name=Geheim%20Kunde",
-                 "/api/v1/projects?limit=100", "/api/v1/projects?member=me"):
+                 "/api/v1/projects?limit=100", "/api/v1/projects?member=me", "/api/v1/invoices?limit=100",
+                 "/api/v1/invoices?open=true", "/api/v1/invoices?q=Geheim"):
         r = ok(c.get(pfad))
         text = str(r)
         for wert in fremde.values():

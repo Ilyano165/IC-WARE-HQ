@@ -183,3 +183,13 @@ a.metric:hover{text-decoration:none;border-color:rgba(25,229,110,.45);background
   .metrics{grid-template-columns:repeat(2,1fr)}
   .top .firma{max-width:42vw}
 }
+
+/* Druckansicht (Rechnungen): nur der Beleg, ohne Navigation */
+.druck table{font-size:.9rem}
+@media print{
+  .side,.top,.no-print,.toasts{display:none!important}
+  .shell,.main,.content{display:block;padding:0;margin:0}
+  body{background:#fff;color:#000}
+  .card.druck{border:0;box-shadow:none;background:#fff;color:#000}
+  .druck th,.druck td{color:#000}
+}

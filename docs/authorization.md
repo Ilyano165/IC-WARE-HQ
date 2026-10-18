@@ -167,6 +167,19 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/invitations/accept` | POST | public | öffentlich — Einladung annehmen — neues Konto |
 | `/api/v1/invitations/accept-existing` | POST | signed_in | angemeldet |
 | `/api/v1/invitations/{ref}` | DELETE | permission | `users.create` |
+| `/api/v1/invoices` | GET | permission | `invoices.read` |
+| `/api/v1/invoices` | POST | permission | `invoices.create` |
+| `/api/v1/invoices/{ref}` | GET | permission | `invoices.read` |
+| `/api/v1/invoices/{ref}` | PATCH | permission | `invoices.update` |
+| `/api/v1/invoices/{ref}/cancel` | POST | permission | `invoices.approve` |
+| `/api/v1/invoices/{ref}/dispatches` | POST | permission | `invoices.update` |
+| `/api/v1/invoices/{ref}/followups` | POST | permission | `invoices.update` |
+| `/api/v1/invoices/{ref}/issue` | POST | permission | `invoices.approve` |
+| `/api/v1/invoices/{ref}/lines` | POST | permission | `invoices.update` |
+| `/api/v1/invoices/{ref}/lines/{line}` | DELETE | permission | `invoices.update` |
+| `/api/v1/invoices/{ref}/lines/{line}` | PATCH | permission | `invoices.update` |
+| `/api/v1/invoices/{ref}/payments` | POST | permission | `finance.create` |
+| `/api/v1/invoices/{ref}/payments/{payment}/reverse` | POST | permission | `finance.update` |
 | `/api/v1/links/{ref}` | DELETE | authenticated | angemeldet + Firma |
 | `/api/v1/me` | GET | authenticated | angemeldet + Firma |
 | `/api/v1/me/permissions` | GET | authenticated | angemeldet + Firma |

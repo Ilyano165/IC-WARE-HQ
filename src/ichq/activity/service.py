@@ -50,6 +50,11 @@ VERBS: dict[str, str] = {
     "project.member_added": "Ins Projektteam aufgenommen",
     "project.member_removed": "Aus dem Projektteam entfernt",
     "project.time_logged": "Projektzeit erfasst",
+    "invoice.issued": "Rechnung ausgestellt",
+    "invoice.dispatched": "Versand/Druck vermerkt",
+    "invoice.cancelled": "Rechnung storniert",
+    "invoice.followup": "Bearbeitung offener Rechnung",
+    "payment.reversed": "Zahlung zurückgenommen",
 }
 SORT = SortKey("occurred_at", Activity.occurred_at, "ts")
 

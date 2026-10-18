@@ -16,6 +16,7 @@ from ichq.comments import models as comments_models
 from ichq.crm import models as crm_models
 from ichq.db.base import Base
 from ichq.documents import models as documents_models
+from ichq.finance import models_invoices as invoices_models
 from ichq.identity import models as identity_models
 from ichq.jobs import models as jobs_models
 from ichq.mail import models as mail_models
@@ -28,7 +29,7 @@ from ichq.tenancy import models as tenancy_models
 
 MODULES = (tenancy_models, identity_models, authz_models, audit_models, jobs_models, auth_models,
            objects_models, activity_models, comments_models, tasks_models, documents_models, notifications_models,
-           members_models, mail_models, crm_models, projects_models)
+           members_models, mail_models, crm_models, projects_models, invoices_models)
 
 
 def assert_complete() -> int:
