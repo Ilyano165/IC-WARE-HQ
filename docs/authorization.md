@@ -143,6 +143,12 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/comments/{ref}/tasks` | POST | permission | `tasks.create` |
 | `/api/v1/company` | GET | permission | `company.read` |
 | `/api/v1/company` | PATCH | permission | `company.update` |
+| `/api/v1/contracts` | GET | permission | `contracts.read` |
+| `/api/v1/contracts` | POST | permission | `contracts.create` |
+| `/api/v1/contracts/notice-due` | GET | permission | `contracts.read` |
+| `/api/v1/contracts/{ref}` | GET | permission | `contracts.read` |
+| `/api/v1/contracts/{ref}` | PATCH | permission | `contracts.update` |
+| `/api/v1/contracts/{ref}/terminate` | POST | permission | `contracts.update` |
 | `/api/v1/customers` | GET | permission | `customers.read` |
 | `/api/v1/customers` | POST | permission | `customers.create` |
 | `/api/v1/customers/duplicates` | GET | permission | `customers.read` |
@@ -153,6 +159,12 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/customers/{ref}/contacts/{contact}` | PATCH | permission | `customers.update` |
 | `/api/v1/customers/{ref}/merge` | POST | permission | `customers.delete` |
 | `/api/v1/dashboard` | GET | permission | `dashboard.read` |
+| `/api/v1/deadlines` | GET | permission | `finance.read` |
+| `/api/v1/deadlines` | POST | permission | `finance.create` |
+| `/api/v1/deadlines/{ref}` | GET | permission | `finance.read` |
+| `/api/v1/deadlines/{ref}` | PATCH | permission | `finance.update` |
+| `/api/v1/deadlines/{ref}/cancel` | POST | permission | `finance.update` |
+| `/api/v1/deadlines/{ref}/complete` | POST | permission | `finance.update` |
 | `/api/v1/documents` | GET | permission | `files.read` |
 | `/api/v1/documents` | POST | permission | `files.upload` |
 | `/api/v1/documents/{ref}` | GET | permission | `files.read` |

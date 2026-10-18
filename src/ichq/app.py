@@ -16,8 +16,10 @@ from ichq.api.state import AppState
 from ichq.api.ui import router as ui_router
 from ichq.api.v1.auth import router as auth_router
 from ichq.api.v1.comments import router as comments_router
+from ichq.api.v1.contracts import router as contracts_router
 from ichq.api.v1.crm import router as crm_router
 from ichq.api.v1.dashboard import router as dashboard_router
+from ichq.api.v1.deadlines import router as deadlines_router
 from ichq.api.v1.documents import router as documents_router
 from ichq.api.v1.inbox import router as inbox_router
 from ichq.api.v1.invoices import router as invoices_router
@@ -68,7 +70,7 @@ def create_app(settings: Settings | None = None, *, engines: Engines | None = No
     app.include_router(auth_router)
     for core in (objects_router, tasks_router, comments_router, documents_router, inbox_router, members_router,
                  roles_router, dashboard_router, crm_router, projects_router,
-                 invoices_router, receipts_router, liquidity_router):
+                 invoices_router, receipts_router, liquidity_router, deadlines_router, contracts_router):
         app.include_router(core)
     for r in extra_routers:
         app.include_router(r)  # type: ignore[arg-type]

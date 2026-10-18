@@ -28,6 +28,7 @@ PERMISSIONS: frozenset[str] = frozenset({
     "settings.read", "settings.update",
     # C0 Core-Plattform (docs/core-permissions.md)
     "contracts.read", "contracts.update",
+    "contracts.create",                     # ADR-020 Nr. 14: mit dem Vertragsmodul
     # Fachrechte je Objekttyp (Entscheidung 3a): Fahrten/Fahrzeuge, Reisen, Bewirtung, Lieferanten.
     # Schema wie überall: .read/.update (nicht .write); create/delete/export erst mit dem jeweiligen Fachmodul.
     "vehicles.read", "vehicles.update",

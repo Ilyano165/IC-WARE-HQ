@@ -59,6 +59,13 @@ VERBS: dict[str, str] = {
     "receipt.updated": "Ausgabe geändert",
     "receipt.evidence_changed": "Beleg verknüpft/gelöst",
     "receipt.voided": "Ausgabe storniert",
+    "deadline.created": "Frist angelegt",
+    "deadline.updated": "Frist geändert",
+    "deadline.done": "Frist erledigt",
+    "deadline.cancelled": "Frist abgesagt",
+    "contract.created": "Vertrag angelegt",
+    "contract.updated": "Vertrag geändert",
+    "contract.terminated": "Kündigung erfasst",
 }
 SORT = SortKey("occurred_at", Activity.occurred_at, "ts")
 

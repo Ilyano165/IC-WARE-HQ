@@ -38,9 +38,9 @@ OBJECT_TYPES: dict[str, ObjectType] = {t.code: t for t in (
     _T("trip", "Fahrt", "receipts", "vehicles.read", "vehicles.update", False),
     _T("travel", "Reise", "receipts", "travel.read", "travel.update", False),
     _T("entertainment", "Bewirtung", "receipts", "hospitality.read", "hospitality.update", False),
-    _T("contract", "Vertrag", "documents", "contracts.read", "contracts.update", False),
+    _T("contract", "Vertrag", "documents", "contracts.read", "contracts.update", True),
     _T("asset", "Anlage", "receipts", "finance.read", "finance.update", False),
-    _T("deadline", "Frist", "receipts", "finance.read", "finance.update", False),
+    _T("deadline", "Frist", "receipts", "finance.read", "finance.update", True),
     _T("website", "Website", "projects", "projects.read", "projects.update", False),
     _T("document", "Dokument", "documents", "files.read", "files.update", True),
 )}

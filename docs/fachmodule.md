@@ -168,3 +168,53 @@ fälliger Wiedervorlage. Ein Kunde wird in der Antwort nur genannt, wenn der Auf
   stehen nur gezählt in `other_currencies`, ohne Umrechnung.
 * Konten und Planposten sind keine Fachobjekte (keine Freigaben): Lesen erfordert `finance.read`, Pflegen
   `finance.update`. Rechnungen, Zahlungen und Ausgaben zählen nur, soweit der Aufrufer sie sehen darf.
+
+## Fristen
+
+| Methode | Pfad | Recht |
+| --- | --- | --- |
+| `GET` | `/api/v1/deadlines` | finance.read |
+| `POST` | `/api/v1/deadlines` | finance.create |
+| `GET` | `/api/v1/deadlines/{ref}` | finance.read |
+| `PATCH` | `/api/v1/deadlines/{ref}` | finance.update |
+| `POST` | `/api/v1/deadlines/{ref}/complete` | finance.update |
+| `POST` | `/api/v1/deadlines/{ref}/cancel` | finance.update |
+
+* **HQ gibt keine Fristen vor.** Auch Steuerfristen legt die Firma selbst an, mit Datum, Wiederholung und optional einer
+  Quelle als Freitext (`source_reference`). `source_status` ist `user_reference`, wenn eine Quelle eingetragen ist, sonst
+  `unconfirmed`. Die Oberfläche zeigt dann „nicht amtlich bestätigt“. Geprüft wird die Quelle in keinem Fall.
+* **Erinnerung:** `reminder_on` = Fälligkeit minus `remind_days_before`. `reminder_due=true` listet offene Fristen, deren
+  Erinnerungsdatum erreicht ist, `overdue=true` die überfälligen. „Heute“ gilt in der Zeitzone der Firma.
+* **Wiederholung** (monatlich, vierteljährlich, jährlich): Beim Erledigen entsteht genau eine Folgefrist mit denselben
+  Angaben. Das Monatsende wird gekappt, aus dem 31.01. wird also der 28./29.02. Dass es nur eine Folgefrist gibt,
+  erzwingt die Datenbank über `UNIQUE (tenant_id, follows_deadline_id)`.
+* Erledigt oder abgesagt (mit Grund) ist endgültig. Wer, wann und der Vermerk bleiben sichtbar, Änderungen danach
+  ergeben 409.
+
+## Verträge
+
+| Methode | Pfad | Recht |
+| --- | --- | --- |
+| `GET` | `/api/v1/contracts` | contracts.read |
+| `GET` | `/api/v1/contracts/notice-due` | contracts.read |
+| `POST` | `/api/v1/contracts` | contracts.create |
+| `GET` | `/api/v1/contracts/{ref}` | contracts.read |
+| `PATCH` | `/api/v1/contracts/{ref}` | contracts.update |
+| `POST` | `/api/v1/contracts/{ref}/terminate` | contracts.update |
+
+* **Verwaltungsakte, keine Rechtsprüfung.** Gespeichert werden Partei (Kunde oder Freitext), Art, Laufzeit,
+  Kündigungsfrist (Wert und Einheit), automatische Verlängerung, Kosten und Zuständige. Vertragsdokumente hängen als
+  Anhang am Vertrag (`POST /objects/{ref}/links`, Typ `attachment`). Ein Upload wird nicht ausgewertet.
+* **Termine sind Kalenderrechnung aus den Angaben** (`computed_from`):
+  * `term_end` ist das Ende der laufenden Laufzeit. Ist bei automatischer Verlängerung der Kündigungstermin verstrichen,
+    wird um `renewal_months` fortgeschrieben (`renewals` zählt mit).
+  * `notice_deadline` ist das Laufzeitende minus Kündigungsfrist.
+  * Bei unbefristeten Verträgen ist `term_end` das frühestmögliche Ende ab heute.
+  * `state` ist `draft`, `active`, `terminated` oder `ended`.
+* `GET /contracts/notice-due?days=60` listet laufende Verträge mit Kündigungstermin in höchstens 60 Tagen. Gerechnet
+  wird in Python, für höchstens 1000 Verträge. `truncated` sagt, ob es mehr gibt.
+* **Kündigung erfassen**, nicht versenden: `terminate` speichert, wann sie zugegangen ist und wann sie wirkt, plus
+  Vermerk. Ob sie nach dem berechneten Termin kam, steht in Audit und Aktivität (`late`). Eine Aussage zur Wirksamkeit
+  gibt es nicht. Ein gekündigter Vertrag ist danach unveränderlich (409).
+* Neues Recht `contracts.create` (ADR-020 Nr. 14). Lesen und Ändern laufen über `contracts.read` / `contracts.update`
+  und die Objektsichtbarkeit.

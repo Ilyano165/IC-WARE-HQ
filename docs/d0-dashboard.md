@@ -64,7 +64,7 @@ bestehende Vorlagen-Rollen werden nie überschrieben (Firmen passen sie selbst a
 | `chat` | create, moderate, read | create, moderate, read | create, read | — |
 | `comments` | create, moderate, read | create, moderate, read | create, read | create, read |
 | `company` | read, update | read, update | read | read |
-| `contracts` | read, update | read, update | — | read |
+| `contracts` | create, read, update | create, read, update | — | read |
 | `customers` | create, delete, export, read, update | create, delete, export, read, update | — | — |
 | `dashboard` | read | read | read | read |
 | `files` | delete, read, share, update, upload | delete, read, share, update, upload | read, upload | read |

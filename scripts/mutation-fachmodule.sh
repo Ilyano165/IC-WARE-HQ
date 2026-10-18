@@ -58,3 +58,22 @@ mutation "Liquidität: abgesagte Planposten zählen" "finance/liquidity.py" "   
 mutation "Liquidität: verborgene Posten verschwiegen" "finance/liquidity.py" "    return int(n)|||    return 0" "$LIQ"
 mutation "Liquidität: Überfälliges in der Vergangenheit" "finance/liquidity.py" "    plan = [_posten(\"forecast\", f.public_id, f.label, max(f.expected_on, today), f.amount_minor,|||    plan = [_posten(\"forecast\", f.public_id, f.label, f.expected_on, f.amount_minor," "$LIQ"
 
+
+FV="tests/test_e6_deadlines_contracts.py"
+mutation "Kalender: Monatsende nicht gekappt" "core/kalender.py" "    return date(jahr, monat, min(d.day, calendar.monthrange(jahr, monat)[1]))|||    return date(jahr, monat, min(d.day, 28))" "$FV"
+mutation "Frist: ohne Quelle als bestätigt" "api/v1/deadlines.py" "\"user_reference\" if d.source_reference else \"unconfirmed\"|||\"user_reference\"" "$FV"
+mutation "Frist: abgeschlossene änderbar" "finance/deadlines.py" "    if d.status != \"open\":|||    if False:" "$FV"
+mutation "Frist: keine Folgefrist" "finance/deadlines.py" "    faellig = next_due(d)|||    faellig = None" "$FV"
+mutation "Frist: Folgefrist mehrfach (DB)" "migrations/versions/0014_deadlines_contracts.py" "        sa.UniqueConstraint(\"tenant_id\", \"follows_deadline_id\", name=kurz(\"uq_deadlines_tenant_id_follows_deadline_id\")),|||" "$FV"
+mutation "Frist: Erinnerung ignoriert Vorlauf" "finance/deadlines.py" "        teile += [Deadline.status == \"open\", Deadline.due_on - Deadline.remind_days_before <= f.remind_by]|||        teile += [Deadline.status == \"open\", Deadline.due_on <= f.remind_by]" "$FV"
+mutation "Frist: Absagen ohne Grund" "finance/deadlines.py" "    if len(\" \".join(note.split())) < 3:|||    if False:" "$FV"
+mutation "Vertrag: keine Verlängerung" "contracts/service.py" "    if c.auto_renew and c.renewal_months:
+        while|||    if False:
+        while" "$FV"
+mutation "Vertrag: Kündigungsfrist nicht abgezogen" "contracts/service.py" "    kuendigung = verschiebe(ende, -frist[0], frist[1]) if frist else None|||    kuendigung = ende if frist else None" "$FV"
+mutation "Vertrag: Kündigung in der Zukunft" "contracts/service.py" "    if terminated_on > today:|||    if False:" "$FV"
+mutation "Vertrag: gekündigt änderbar" "contracts/service.py" "    if c.status == \"terminated\":
+        raise Conflict(\"Gekündigter Vertrag|||    if False:
+        raise Conflict(\"Gekündigter Vertrag" "$FV"
+mutation "Vertrag: Status über PATCH kündbar" "contracts/service.py" "    if w.get(\"status\") == \"terminated\":|||    if False:" "$FV"
+mutation "Vertrag: verpasster Termin in Kündigungsliste" "contracts/service.py" "if t.notice_deadline is not None and 0 <= (t.notice_deadline - today).days <= days:|||if t.notice_deadline is not None and (t.notice_deadline - today).days <= days:" "$FV"

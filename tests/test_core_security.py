@@ -60,7 +60,9 @@ def _bestand(cw: CoreWorld, mid: Any) -> dict[str, str]:
                                                                          "balance_minor": 4242}), 201)
     plan = ok(c.post("/api/v1/liquidity/forecasts", json={"expected_on": "2026-12-01", "amount_minor": 100,
                                                           "label": f"Geheim Plan {mid.hex[:6]}"}), 201)
-    return {"account": konto["id"], "item": plan["id"], "task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"], "receipt": ausgabe["id"],
+    vertrag = ok(c.post("/api/v1/contracts", json={"title": f"Geheim Vertrag {mid.hex[:6]}"}), 201)
+    frist = ok(c.post("/api/v1/deadlines", json={"title": f"Geheim Frist {mid.hex[:6]}", "due_on": "2026-12-01"}), 201)
+    return {"account": konto["id"], "item": plan["id"], "contract": vertrag["id"], "deadline": frist["id"], "task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"], "receipt": ausgabe["id"],
             "invoice": rech["id"], "line": pos["id"], "issued": ausgestellt["id"], "payment": zahlung,
             "member": cw.public_id(mid), "invitation": inv.public_id, "role": rolle["id"],
             "customer": kunde["id"], "contact": kontakt["id"], "inquiry": anfrage["id"], "project": projekt["id"],
@@ -124,6 +126,11 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("PATCH", "/api/v1/liquidity/accounts/{account}"): {"name": "Übernommen"},
     ("POST", "/api/v1/liquidity/accounts/{account}/balances"): {"as_of": "2026-10-01", "balance_minor": 1},
     ("PATCH", "/api/v1/liquidity/forecasts/{item}"): {"label": "Übernommen"},
+    ("PATCH", "/api/v1/contracts/{ref}"): {"title": "Übernommen"},
+    ("POST", "/api/v1/contracts/{ref}/terminate"): {"terminated_on": "2026-10-01", "effective_on": "2026-12-31"},
+    ("PATCH", "/api/v1/deadlines/{ref}"): {"title": "Übernommen"},
+    ("POST", "/api/v1/deadlines/{ref}/complete"): {},
+    ("POST", "/api/v1/deadlines/{ref}/cancel"): {"note": "Eingeschleust"},
 }
 
 
@@ -140,7 +147,8 @@ def _ref_fuer(pfad: str, param: str, refs: dict[str, str]) -> str:
                          ("/api/v1/links/", "link"), ("/api/v1/objects/", "task"),
                          ("/api/v1/customers/", "customer"), ("/api/v1/inquiries/", "inquiry"),
                          ("/api/v1/projects/", "project"), ("/api/v1/invoices/", "invoice"),
-                         ("/api/v1/receipts/", "receipt")):
+                         ("/api/v1/receipts/", "receipt"), ("/api/v1/contracts/", "contract"),
+                         ("/api/v1/deadlines/", "deadline")):
         if pfad.startswith(praefix):
             return refs[art]
     raise AssertionError(f"Route {pfad} ist im IDOR-Test nicht abgedeckt — Zuordnung ergänzen")
@@ -218,7 +226,8 @@ def test_fremde_ids_in_listen_filtern_und_suche_unsichtbar(cw: CoreWorld) -> Non
                  "/api/v1/projects?limit=100", "/api/v1/projects?member=me", "/api/v1/invoices?limit=100",
                  "/api/v1/invoices?open=true", "/api/v1/invoices?q=Geheim", "/api/v1/receipts?limit=100",
                  "/api/v1/receipts?evidence=missing", "/api/v1/liquidity", "/api/v1/liquidity/accounts",
-                 "/api/v1/liquidity/forecasts"):
+                 "/api/v1/liquidity/forecasts", "/api/v1/contracts?limit=100", "/api/v1/contracts/notice-due",
+                 "/api/v1/deadlines?limit=100", "/api/v1/search?q=Vertrag&per_group=20"):
         r = ok(c.get(pfad))
         text = str(r)
         for wert in fremde.values():

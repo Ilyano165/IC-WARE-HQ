@@ -208,3 +208,35 @@ def test_liquiditaet_manueller_stand_und_planposten(browser: Any, server: str, l
     assert "Sparkasse" in s.page.locator("main").inner_text()
     assert s.page.evaluate("window.__xss") is None
     s.sauber()
+
+
+def test_frist_ohne_quelle_und_vertrag_mit_kuendigungstermin(browser: Any, server: str, leute: dict[str, Any]) -> None:  # noqa: F811
+    s = Seite(browser, server)
+    s.anmelden("chefin@alpha.test")
+    s.gehe("Fristen")
+    s.page.get_by_text("HQ gibt keine Fristen vor").wait_for()
+    s.page.get_by_role("button", name="Frist anlegen").click()
+    d = _dialog(s)
+    d.get_by_label("Titel").fill(f"USt-Voranmeldung {XSS}")
+    d.get_by_label("Fällig am").fill("2026-11-10")
+    d.get_by_label("Art").select_option("tax")
+    d.get_by_label("Wiederholung").select_option("monthly")
+    d.get_by_role("button", name="Anlegen").click()
+    s.page.get_by_text("nicht amtlich bestätigt", exact=True).wait_for()
+    erste = s.page.url
+    s.page.get_by_role("button", name="Erledigt").click()
+    _dialog(s).get_by_role("button", name="Erledigt").click()
+    s.page.get_by_text("nächste Frist am 10.12.2026 angelegt").wait_for()        # Folgefrist (monatlich)
+    s.page.wait_for_url(lambda u: u != erste)                                     # … und geöffnet
+    s.gehe("Verträge")
+    s.page.get_by_role("heading", name="Verträge", exact=True).wait_for()     # alte Seite hat auch ein h1
+    s.page.get_by_role("button", name="Vertrag anlegen").click()
+    d = _dialog(s)
+    d.get_by_label("Titel").fill("Mietvertrag Halle")
+    d.get_by_label("Laufzeit bis").fill("2030-12-31")
+    d.get_by_label("Kündigungsfrist").fill("3")
+    d.get_by_role("button", name="Anlegen").click()
+    s.page.get_by_text("Kündigung muss zugehen bis: 30.09.2030").wait_for()
+    s.page.get_by_text("keine rechtliche Prüfung").first.wait_for()
+    assert s.page.evaluate("window.__xss") is None
+    s.sauber()
