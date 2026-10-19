@@ -74,13 +74,15 @@ def test_widgets_nach_rechten_im_browser(browser: Any, server: str, team: dict[s
         assert _widget(m, verboten).count() == 0, verboten
     text = m.page.locator("#inhalt").inner_text()
     assert "USt-VA" not in text and "Liquidität" not in text and "Offene Rechnungen" not in text
-    assert m.page.get_by_label("Geplante Module").get_by_text("Fahrten").is_visible()
+    _widget(m, "Fahrtenbuch").wait_for()                                # E9: gebautes Modul statt „geplant“
+    assert m.page.get_by_label("Geplante Module").count() == 0
     k = Seite(browser, server)
     k.anmelden("kanzlei@alpha.test")
     frage = _widget(k, "Offene Rückfragen")
     frage.wait_for()
     assert frage.get_by_role("link", name="Offen: 1").is_visible()
-    assert k.page.get_by_label("Geplante Module").get_by_text("Liquidität").is_visible()
+    _widget(k, "Liquidität").get_by_text("Kein Kontostand erfasst").wait_for()      # keine erfundene Zahl
+    assert k.page.get_by_label("Geplante Module").get_by_text("DATEV-Export").is_visible()
     assert _widget(k, "Firma & Team").count() == 0 and _widget(k, "Aktivität").count() == 0
     frage.get_by_role("link", name="Offen: 1").click()
     k.page.get_by_role("heading", name="Rückfragen").wait_for()

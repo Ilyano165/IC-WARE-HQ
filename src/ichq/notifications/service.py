@@ -42,8 +42,10 @@ KINDS: dict[str, Kind] = {k.code: k for k in (
     Kind("comment.question", "comments.read"),           # „Steuerberater hat eine Rückfrage."
     Kind("task.assigned", "tasks.read"),
     Kind("task.overdue", "tasks.read"),
-    Kind("invoice.overdue", "invoices.read"),            # reserviert: Regel kommt mit dem Rechnungsmodul
-    Kind("contract.expiring", "contracts.read"),         # reserviert: Regel kommt mit dem Vertragsmodul
+    Kind("invoice.overdue", "invoices.read"),            # Regeln der Fachmodule: notifications/fach.py
+    Kind("contract.expiring", "contracts.read"),         # Kündigungstermin naht (aus den Vertragsangaben)
+    Kind("deadline.reminder", "finance.read"),
+    Kind("travel.submitted", "travel.approve"),
 )}
 
 Channel = Callable[[Session, Principal, Kind, ObjectRow | None, str, str | None], bool]

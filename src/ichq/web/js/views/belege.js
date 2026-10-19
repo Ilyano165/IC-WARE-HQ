@@ -9,8 +9,8 @@ import { alsBetrag, auswahl, cent, eingabe, Eingabefehler, feld, fehlertext, fil
 import { kommentare } from "./kommentare.js";
 
 const BELEG = { missing: "Beleg fehlt", unchecked: "Beleg wird geprüft", rejected: "Beleg abgelehnt", complete: "Beleg vorhanden" };
-const ANSICHT = { fehlend: "Fehlende Belege", alle: "Alle Ausgaben", unbezahlt: "Unbezahlt", storniert: "Storniert" };
-const PARAMS = { fehlend: { evidence: ["missing", "unchecked", "rejected"] }, alle: {}, unbezahlt: { payment_status: "unpaid" }, storniert: { voided: true } };
+const ANSICHT = { fehlend: "Fehlende Belege", wiedervorlage: "Wiedervorlage fällig", alle: "Alle Ausgaben", unbezahlt: "Unbezahlt", storniert: "Storniert" };
+const PARAMS = { fehlend: { evidence: ["missing", "unchecked", "rejected"] }, wiedervorlage: { follow_up_due: true }, alle: {}, unbezahlt: { payment_status: "unpaid" }, storniert: { voided: true } };
 const heute = () => new Date().toISOString().slice(0, 10);
 
 export const belegTag = (b) => h("span", { class: `tag${b === "complete" ? "" : b === "unchecked" ? " tag--warn" : " tag--danger"}` }, BELEG[b] || b);

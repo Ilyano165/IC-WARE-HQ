@@ -13,6 +13,7 @@ from ichq.api.v1.common import DEFAULT, Cursor, Limit, Strict, object_out, objec
 from ichq.authz.service import Principal, decide
 from ichq.core.errors import ValidationFailed
 from ichq.db.session import TenantSession
+from ichq.finance.profitability import profitability
 from ichq.objects import service as objects
 from ichq.objects.models import ObjectRow
 from ichq.objects.visibility import can_see, visible_clause
@@ -124,6 +125,15 @@ def get_project(ref: str, p: Principal = Depends(require("projects.read")),
     with db() as s:
         pr, o = projects.get(s, p, ref)
         return project_out(s, p, pr, o, detail=True)
+
+
+@router.get("/projects/{ref}/profitability")
+def project_profitability(ref: str, p: Principal = Depends(require("projects.read", "finance.read")),
+                          db: TenantDB = Depends(tenant_db)) -> dict[str, Any]:
+    """Erlös, Ausgaben, Personalkosten, Marge — mit ``gaps``, wo die Zahl unvollständig ist (``complete``)."""
+    with db() as s:
+        pr, _o = projects.get(s, p, ref)
+        return profitability(s, visible_clause(p), pr)
 
 
 @router.patch("/projects/{ref}")

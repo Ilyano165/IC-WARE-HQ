@@ -85,20 +85,10 @@ def register(key: str, title: str, requires: tuple[str, ...], size: str = "m") -
     return deko
 
 
-# Kommt mit den Fachmodulen (Produktvision 4.2). Bis dahin: keine Werte, keine Platzhalter-Zahlen.
+# Noch nicht gebaute Module: keine Werte, keine Platzhalter-Zahlen (Fachmodule: dashboard/fach.py).
 PLANNED: tuple[Planned, ...] = (
-    Planned("liquidity", "Liquidität", "S6 Zahlungen & Liquidität", ("finance.read",)),
-    Planned("open_invoices", "Offene Rechnungen", "S5 Rechnungen & E-Rechnung", ("invoices.read",)),
-    Planned("overdue_payments", "Überfällige Zahlungen", "S6 Zahlungen & Liquidität", ("finance.read",)),
-    Planned("missing_receipts", "Fehlende Belege", "S1 Belegeingang", ("finance.read",)),
-    Planned("tax_deadlines", "Steuerfristen", "S8 Steuertermine & Fristen", ("finance.read",)),
-    Planned("month_close", "Monatsabschluss", "S7 Steuerberater-Arbeitsplatz", ("finance.export",)),
-    Planned("datev_export", "DATEV-/Exportstatus", "S7 Steuerberater-Arbeitsplatz", ("finance.export",)),
-    Planned("projects", "Projekte", "Projektmodul", ("projects.read",)),
-    Planned("project_profitability", "Projektprofitabilität", "Projektmodul + S6", ("projects.read", "finance.read")),
-    Planned("contracts", "Verträge", "Vertragsmodul", ("contracts.read",)),
-    Planned("travel", "Reisen", "S3 Reisen & Reisekosten", ("travel.read",)),
-    Planned("trips", "Fahrten", "S2 Fahrtenbuch", ("vehicles.read",)),
-    Planned("crm", "Kunden & Anfragen", "CRM", ("customers.read",)),
+    # Nicht gebaut: das DATEV-Format (Export gibt es nur im internen CSV-Format, docs/export-format.md).
+    Planned("datev_export", "DATEV-Export", "nicht gebaut — internes CSV unter Abschluss & Export",
+            ("finance.export",)),
 )
 assert all(is_known(r) for p in PLANNED for r in p.requires)

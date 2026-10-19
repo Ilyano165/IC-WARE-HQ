@@ -304,3 +304,30 @@ fälliger Wiedervorlage. Ein Kunde wird in der Antwort nur genannt, wenn der Auf
   `allowances` sagt das ausdrücklich.
 * Neue Rechte: `vehicles.create`, `travel.create`, `travel.approve` (kritisch). Die Vorlage „Mitarbeiter“ erhält
   `travel.create`. Das ist eine Annahme und mit echten Nutzern zu prüfen.
+
+## Profitabilität, Dashboard, Benachrichtigungen
+
+| Methode | Pfad | Recht |
+| --- | --- | --- |
+| `GET` | `/api/v1/projects/{ref}/profitability` | projects.read, finance.read |
+
+* **Profitabilität je Projekt** (`finance.profitability`):
+  * Erlös ist das Netto der ausgestellten Rechnungen und Stornos, Entwürfe zählen nicht.
+  * Ausgaben sind Belege zum Projekt. Netto nur mit vom Nutzer erfasstem Steuersatz, sonst brutto plus Hinweis.
+    Stornierte Ausgaben zählen nicht.
+  * Personalkosten sind Projektzeit × kalkulatorischer Stundensatz des Teammitglieds.
+  * Was fehlt, steht in `gaps` und `complete: false`: Zeit ohne Stundensatz (zählt nicht als 0 €), Ausgaben ohne
+    Steuersatz, Posten in anderer Währung, für den Aufrufer unsichtbare Posten.
+
+  Das Ergebnis ist eine Rechenhilfe, keine Kostenrechnung.
+* **Dashboard:** Die geplanten Module sind jetzt Widgets mit echten Zahlen (`dashboard/fach.py`): Rechnungen, fehlende
+  Belege, Liquidität, Fristen, Monatsabschluss, Projekte, Profitabilität, Verträge, Dienstreisen, Fahrtenbuch, Anfragen.
+  * Kennzahlen zählen mit denselben `filter_clauses` wie die verlinkte API-Liste (Gleichheitstest
+    `tests/test_e9_profit_dashboard.py`).
+  * Geldbeträge stehen nur als Text mit Herkunft in Einträgen.
+  * Ohne Kontostand zeigt die Liquidität „Kein Kontostand erfasst“, keine Zahl.
+  * „Geplant“ bleibt nur der DATEV-Export (nicht gebaut).
+* **Benachrichtigungen** (`ichq notifications-scan`, `notifications/fach.py`): überfällige Rechnung, Kündigungstermin in
+  30 Tagen, Frist-Erinnerung und eingereichte Reise. Die Reise geht an alle mit `travel.approve`, außer der reisenden
+  Person, höchstens 50. Jede Mitteilung kommt einmal je fachlichem Datum (`dedup_key`) und nur über `deliver`
+  (Recht + Sichtbarkeit beim Zustellen). Es gibt keinen E-Mail-Versand an Kunden.

@@ -94,14 +94,29 @@ export async function detail(el, { ref }) {
   const zeitEl = h("section", { class: "card" });
   const aufgabenEl = h("section", { class: "card" });
   const kom = h("section", { class: "card" });
+  const profitEl = darf("finance.read") ? h("section", { class: "card" }) : null;
   ersetze(el, seitenkopf(p.name, { href: "#/projekte", text: "Projekte" }, statusTag(p.status),
     p.archived ? h("span", { class: "tag tag--muted" }, "archiviert") : null, darf("projects.update") ? archivKnopf(p, neu) : null),
   h("p", { class: "muted small" }, [p.customer ? `Kunde: ${p.customer.title}` : null, p.start_date || p.end_date ? `${datum(p.start_date)} – ${datum(p.end_date)}` : null,
     `angelegt ${zeit(p.created_at)}`].filter(Boolean).join(" · ")),
   p.customer ? h("p", {}, h("a", { href: `#/kunden/${p.customer.id}` }, "Zum Kunden")) : null,
-  kennzahlen, h("br"), h("section", { class: "card" }, h("h2", {}, "Stammdaten"), stamm), teamEl, aufgabenEl, zeitEl, kom);
+  kennzahlen, h("br"), profitEl, h("section", { class: "card" }, h("h2", {}, "Stammdaten"), stamm), teamEl, aufgabenEl, zeitEl, kom);
   teamZeigen(teamEl, p, leute, neu);
-  await Promise.all([zeitenZeigen(zeitEl, p, leute, neu), aufgabenZeigen(aufgabenEl, p), kommentare(kom, ref)]);
+  await Promise.all([zeitenZeigen(zeitEl, p, leute, neu), aufgabenZeigen(aufgabenEl, p), kommentare(kom, ref),
+    profitEl ? profitZeigen(profitEl, ref) : null]);
+}
+
+// Profitabilität: Rechenhilfe aus erfassten Daten; was fehlt, steht ausdrücklich da (nie still als 0 €)
+async function profitZeigen(el, ref) {
+  const r = await get(`/projects/${ref}/profitability`);
+  const zeile = (text, wert) => h("li", {}, `${text}: ${geld(wert, r.currency)}`);
+  ersetze(el, h("h2", {}, "Profitabilität"),
+    h("div", { class: "metrics" }, h("div", { class: `metric${r.margin_minor < 0 ? " metric--danger" : ""}` },
+      h("span", { class: "metric-value" }, geld(r.margin_minor, r.currency)), h("span", { class: "metric-label" }, r.complete ? "Marge" : "Marge (unvollständig)"))),
+    h("ul", { class: "list" }, zeile("Erlös netto (ausgestellte Rechnungen und Stornos)", r.revenue_net_minor),
+      zeile("Ausgaben", r.receipts_net_minor), zeile("Personalkosten (Projektzeit × Stundensatz)", r.labour_cost_minor)),
+    r.gaps.length ? h("ul", { class: "list" }, r.gaps.map((g) => h("li", { class: "small" }, h("span", { class: "tag tag--warn" }, String(g.count)), ` ${g.text}`))) : null,
+    h("p", { class: "muted small" }, r.note));
 }
 
 function teamZeigen(el, p, leute, neu) {

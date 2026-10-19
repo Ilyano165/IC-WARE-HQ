@@ -246,6 +246,7 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/projects/{ref}` | PATCH | permission | `projects.update` |
 | `/api/v1/projects/{ref}/members/{member}` | DELETE | permission | `projects.assign` |
 | `/api/v1/projects/{ref}/members/{member}` | PUT | permission | `projects.assign` |
+| `/api/v1/projects/{ref}/profitability` | GET | permission | `projects.read` + `finance.read` |
 | `/api/v1/projects/{ref}/time-entries` | GET | permission | `projects.read` |
 | `/api/v1/projects/{ref}/time-entries` | POST | permission | `projects.read` |
 | `/api/v1/projects/{ref}/time-entries/{entry}` | DELETE | permission | `projects.read` |

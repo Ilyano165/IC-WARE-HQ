@@ -18,7 +18,10 @@ from tests.auth_helpers import db, login, make_user
 from tests.core_helpers import ok
 from tests.m4_helpers import RbacWorld
 
-ALLE = {"warnings", "my_tasks", "questions", "notifications", "documents", "team_tasks", "company", "activity"}
+KERN = {"warnings", "my_tasks", "questions", "notifications", "documents", "team_tasks", "company", "activity"}
+FACH = {"liquidity", "open_invoices", "missing_receipts", "tax_deadlines", "month_close", "travel", "contracts",
+        "projects", "project_profitability", "crm", "trips"}          # E9: Widgets der Fachmodule (ADR-020)
+ALLE = KERN | FACH
 PDF = {"content": b"%PDF-1.4 x", "headers": {"content-type": "application/pdf"}}
 
 
@@ -54,8 +57,11 @@ def test_widgets_nach_effektiven_rechten(rw: RbacWorld, stb: Any) -> None:
     sicht = {name: {w["key"] for w in _dash(rw.client(mid))["widgets"]}
              for name, mid in (("admin", rw.admin), ("gf", rw.gf), ("ma", rw.ma), ("stb", stb))}
     assert sicht["admin"] == ALLE and sicht["gf"] == ALLE
-    assert sicht["ma"] == {"warnings", "my_tasks", "questions", "notifications", "documents", "activity"}
-    assert sicht["stb"] == {"warnings", "my_tasks", "questions", "notifications", "documents"}
+    assert sicht["ma"] == {"warnings", "my_tasks", "questions", "notifications", "documents", "activity",
+                           "projects", "travel", "trips"}                     # projects/travel/vehicles.read
+    assert sicht["stb"] == {"warnings", "my_tasks", "questions", "notifications", "documents", "liquidity",
+                            "open_invoices", "missing_receipts", "tax_deadlines", "month_close", "travel",
+                            "contracts", "trips"}                             # ohne projects.read/customers.read
     r = rw.client(rw.ohne).get("/api/v1/dashboard")                    # ohne dashboard.read
     assert r.status_code == 403 and r.json()["code"] == "permission_denied"
 
@@ -64,10 +70,9 @@ def test_mitarbeiter_sieht_keine_finanz_oder_firmendaten(rw: RbacWorld) -> None:
     gf = rw.client(rw.gf)
     geheim = ok(gf.post("/api/v1/tasks", json={"title": "Gehaltsrunde vorbereiten", "due_date": "2020-01-01"}), 201)
     d = _dash(rw.client(rw.ma))
-    geplant = {p["key"] for p in d["planned"]}
-    assert not geplant & {"liquidity", "open_invoices", "overdue_payments", "missing_receipts", "tax_deadlines",
-                          "month_close", "datev_export", "crm", "project_profitability"}
-    assert geplant == {"projects", "travel", "trips"}
+    assert d["planned"] == []                                     # DATEV braucht finance.export
+    assert not {w["key"] for w in d["widgets"]} & {"liquidity", "open_invoices", "missing_receipts", "tax_deadlines",
+                                                   "month_close", "crm", "project_profitability", "contracts"}
     assert "Gehalt" not in str(d) and geheim["id"] not in str(d)
     # Zugewiesen, aber für ihn gesperrt (Ressourcen-DENY): zählt nicht und erscheint nicht
     gesperrt = ok(gf.post("/api/v1/tasks", json={"title": "Personalakte prüfen", "assignee": rw.pid(rw.ma)}), 201)
@@ -82,11 +87,10 @@ def test_mitarbeiter_sieht_keine_finanz_oder_firmendaten(rw: RbacWorld) -> None:
 
 
 def test_steuerberater_und_geschaeftsfuehrung_geplante_module(rw: RbacWorld, stb: Any) -> None:
-    stb_plan = {p["key"] for p in _dash(rw.client(stb))["planned"]}
-    assert {"liquidity", "missing_receipts", "tax_deadlines", "month_close", "datev_export"} <= stb_plan
-    assert "crm" not in stb_plan and "projects" not in stb_plan
+    # Nach E9 ist nur noch das DATEV-Format „geplant“ (nicht gebaut) — gebaute Module erscheinen als Widget
+    assert [p["key"] for p in _dash(rw.client(stb))["planned"]] == ["datev_export"]
     gf_plan = _dash(rw.client(rw.gf))["planned"]
-    assert {p["key"] for p in gf_plan} >= {"liquidity", "open_invoices", "crm", "projects"}
+    assert [p["key"] for p in gf_plan] == ["datev_export"]
     assert all(set(p) == {"key", "title", "module"} for p in gf_plan)       # geplant = keine Werte
 
 
