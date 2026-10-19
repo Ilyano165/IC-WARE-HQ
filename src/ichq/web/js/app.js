@@ -21,6 +21,8 @@ import * as liquiditaet from "./views/liquiditaet.js";
 import * as fristen from "./views/fristen.js";
 import * as vertraege from "./views/vertraege.js";
 import * as abschluss from "./views/abschluss.js";
+import * as fahrtenbuch from "./views/fahrtenbuch.js";
+import * as reisen from "./views/reisen.js";
 
 const app = $("#app");
 
@@ -47,6 +49,10 @@ route("/fristen/:ref", fristen.detail, "finance.read");
 route("/vertraege", vertraege.liste, "contracts.read");
 route("/vertraege/:ref", vertraege.detail, "contracts.read");
 route("/abschluss", abschluss.seite, "finance.read");
+route("/fahrtenbuch", fahrtenbuch.liste, "vehicles.read");
+route("/fahrtenbuch/:ref", fahrtenbuch.detail, "vehicles.read");
+route("/reisen", reisen.liste, "travel.read");
+route("/reisen/:ref", reisen.detail, "travel.read");
 route("/benachrichtigungen", inbox.benachrichtigungen);
 route("/suche", inbox.suche);
 route("/mitglieder", mitglieder.liste, "users.read");
@@ -72,6 +78,8 @@ const NAV = [
   { pfad: "/fristen", text: "Fristen", recht: "finance.read" },
   { pfad: "/vertraege", text: "Verträge", recht: "contracts.read" },
   { pfad: "/abschluss", text: "Abschluss & Export", recht: "finance.read" },
+  { pfad: "/fahrtenbuch", text: "Fahrtenbuch", recht: "vehicles.read" },
+  { pfad: "/reisen", text: "Dienstreisen", recht: "travel.read" },
   { pfad: "/kunden", text: "Kunden", recht: "customers.read" },
   { pfad: "/anfragen", text: "Anfragen", recht: "customers.read" },
   { gruppe: "Verwaltung" },

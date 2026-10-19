@@ -253,3 +253,54 @@ fälliger Wiedervorlage. Ein Kunde wird in der Antwort nur genannt, wenn der Auf
   (`datev_compatible: false`). Zeitraum höchstens 400 Tage. Exportiert wird über alle Datensätze der Firma.
 * Monate werden als Abfrage- bzw. Body-Parameter `month` übergeben, nicht als Pfad-ID. Sie sind keine Objekte und
   unterliegen nur der Mandantentrennung (RLS).
+
+## Fahrtenbuch
+
+| Methode | Pfad | Recht |
+| --- | --- | --- |
+| `GET` | `/api/v1/vehicles` | vehicles.read |
+| `POST` | `/api/v1/vehicles` | vehicles.create |
+| `PATCH` | `/api/v1/vehicles/{vehicle}` | vehicles.create |
+| `GET` | `/api/v1/trips` | vehicles.read |
+| `POST` | `/api/v1/trips` | vehicles.update |
+| `GET` | `/api/v1/trips/{ref}` | vehicles.read |
+| `POST` | `/api/v1/trips/{ref}/corrections` | vehicles.update |
+| `POST` | `/api/v1/trips/{ref}/void` | vehicles.update |
+
+* **Fahrtdaten liegen nur in `trip_versions`.** Die App-Rolle darf dort nur einfügen und lesen. Ein Trigger verbietet
+  Ändern und Löschen auch für den Superuser und erzwingt lückenlose Versionsnummern.
+* **Korrektur = neue Version mit Grund**, sichtbar **in der Fahrt selbst** (`versions`), wie es FG Düsseldorf
+  24.11.2023, 3 K 1887/22 H(L) verlangt. Storno ist ebenfalls eine Version (`voided`). Archivieren ist gesperrt.
+* **Erfassungs- und Fahrtzeitpunkt getrennt:** Jede Version trägt `recorded_at` und `recorded_by`.
+  `days_recorded_after_trip` zeigt Nachträge.
+* **Dienstfahrt** braucht Reiseziel und Reisezweck (Service und CHECK). Der Geschäftspartner ist optional.
+* **Kilometer-Kontrolle:** `km_gap` ist der Abstand zum Endstand der vorherigen nicht stornierten Fahrt desselben
+  Fahrzeugs (> 0 Lücke, < 0 Überschneidung). Gerechnet wird über alle Fahrten des Fahrzeugs, ausgegeben wird nur die
+  Zahl. Das ist ein Hinweis, keine Sperre.
+* **Periodensperre:** Fahrten in einem abgeschlossenen Monat lassen sich weder anlegen noch korrigieren noch
+  stornieren (409 im Service, Trigger in der Datenbank).
+* Fahrer ohne `objects.read_all` sehen nur ihre eigenen Fahrten. **HQ trifft keine Aussage, ob ein Fahrtenbuch
+  steuerlich ordnungsgemäß ist.** Ein Privatanteil (1-%-Regel o. Ä.) wird nicht berechnet.
+
+## Dienstreisen
+
+| Methode | Pfad | Recht |
+| --- | --- | --- |
+| `GET` | `/api/v1/travels` | travel.read |
+| `POST` | `/api/v1/travels` | travel.create |
+| `GET` | `/api/v1/travels/{ref}` | travel.read |
+| `PATCH` | `/api/v1/travels/{ref}` | travel.update |
+| `POST` | `/api/v1/travels/{ref}/submit` | travel.update |
+| `POST` | `/api/v1/travels/{ref}/decision` | travel.approve |
+| `POST` | `/api/v1/travels/{ref}/cancel` | travel.update |
+
+* Ablauf: Entwurf → eingereicht → genehmigt oder abgelehnt (Ablehnung mit Begründung) → bei Bedarf storniert.
+  Abgelehnte Anträge lassen sich ändern und neu einreichen.
+* **Keine Selbstgenehmigung:** Der Service antwortet mit 403, zusätzlich greift ein DB-CHECK
+  (`decided_by ≠ traveller`).
+* Belege hängen als Nachweis an (`POST /objects/{beleg}/links`, Typ `evidence`). Die Reise zeigt nur Belege, die der
+  Aufrufer sehen darf.
+* **Keine Verpflegungs- oder Übernachtungspauschalen:** Dafür sind keine amtlichen Werte hinterlegt (Steuerregel 1),
+  `allowances` sagt das ausdrücklich.
+* Neue Rechte: `vehicles.create`, `travel.create`, `travel.approve` (kritisch). Die Vorlage „Mitarbeiter“ erhält
+  `travel.create`. Das ist eine Annahme und mit echten Nutzern zu prüfen.

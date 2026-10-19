@@ -32,6 +32,7 @@ from ichq.api.v1.receipts import router as receipts_router
 from ichq.api.v1.roles import router as roles_router
 from ichq.api.v1.router import router as v1_router
 from ichq.api.v1.tasks import router as tasks_router
+from ichq.api.v1.travel import router as travel_router
 from ichq.core.config import Settings, get_settings
 from ichq.core.logging import configure_logging
 from ichq.db.engine import Engines, build_engines
@@ -72,7 +73,7 @@ def create_app(settings: Settings | None = None, *, engines: Engines | None = No
     for core in (objects_router, tasks_router, comments_router, documents_router, inbox_router, members_router,
                  roles_router, dashboard_router, crm_router, projects_router,
                  invoices_router, receipts_router, liquidity_router, deadlines_router, contracts_router,
-                 closing_router):
+                 closing_router, travel_router):
         app.include_router(core)
     for r in extra_routers:
         app.include_router(r)  # type: ignore[arg-type]

@@ -31,8 +31,8 @@ PERMISSIONS: frozenset[str] = frozenset({
     "contracts.create",                     # ADR-020 Nr. 14: mit dem Vertragsmodul
     # Fachrechte je Objekttyp (Entscheidung 3a): Fahrten/Fahrzeuge, Reisen, Bewirtung, Lieferanten.
     # Schema wie überall: .read/.update (nicht .write); create/delete/export erst mit dem jeweiligen Fachmodul.
-    "vehicles.read", "vehicles.update",
-    "travel.read", "travel.update",
+    "vehicles.read", "vehicles.update", "vehicles.create",      # create: Fahrzeuge anlegen (ADR-020 Nr. 14)
+    "travel.read", "travel.update", "travel.create", "travel.approve",
     "hospitality.read", "hospitality.update",
     "suppliers.read", "suppliers.update",
     "comments.read", "comments.create", "comments.moderate",
@@ -63,7 +63,7 @@ FLAGGABLE_MODULES: frozenset[str] = MODULES - CORE_MODULES
 CRITICAL: frozenset[str] = frozenset({
     "users.update", "users.deactivate", "users.override",
     "roles.create", "roles.update", "roles.delete", "roles.assign",
-    "company.update", "settings.update", "invoices.approve", "finance.approve", "projects.assign",
+    "company.update", "settings.update", "invoices.approve", "finance.approve", "projects.assign", "travel.approve",
     "objects.read_all", "objects.share", "audit.export",
 })
 

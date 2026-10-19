@@ -270,6 +270,21 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/tasks/{ref}` | GET | permission | `tasks.read` |
 | `/api/v1/tasks/{ref}` | PATCH | permission | `tasks.update` |
 | `/api/v1/tasks/{ref}/attachments` | POST | permission | `tasks.update` |
+| `/api/v1/travels` | GET | permission | `travel.read` |
+| `/api/v1/travels` | POST | permission | `travel.create` |
+| `/api/v1/travels/{ref}` | GET | permission | `travel.read` |
+| `/api/v1/travels/{ref}` | PATCH | permission | `travel.update` |
+| `/api/v1/travels/{ref}/cancel` | POST | permission | `travel.update` |
+| `/api/v1/travels/{ref}/decision` | POST | permission | `travel.approve` |
+| `/api/v1/travels/{ref}/submit` | POST | permission | `travel.update` |
+| `/api/v1/trips` | GET | permission | `vehicles.read` |
+| `/api/v1/trips` | POST | permission | `vehicles.update` |
+| `/api/v1/trips/{ref}` | GET | permission | `vehicles.read` |
+| `/api/v1/trips/{ref}/corrections` | POST | permission | `vehicles.update` |
+| `/api/v1/trips/{ref}/void` | POST | permission | `vehicles.update` |
+| `/api/v1/vehicles` | GET | permission | `vehicles.read` |
+| `/api/v1/vehicles` | POST | permission | `vehicles.create` |
+| `/api/v1/vehicles/{vehicle}` | PATCH | permission | `vehicles.create` |
 | `/app` | GET | public | öffentlich — Weiterleitung zur Oberfläche |
 | `/app/{pfad:path}` | GET | public | öffentlich — Oberfläche: statische Dateien, keine Daten |
 | `/health` | GET | public | öffentlich — Liveness für Orchestrierung |

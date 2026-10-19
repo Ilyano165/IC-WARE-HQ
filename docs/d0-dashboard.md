@@ -77,9 +77,9 @@ bestehende Vorlagen-Rollen werden nie überschrieben (Firmen passen sie selbst a
 | `settings` | read, update | read, update | — | — |
 | `suppliers` | read, update | read, update | — | read |
 | `tasks` | assign, create, delete, read, update | assign, create, delete, read, update | create, read, update | create, read |
-| `travel` | read, update | read, update | read, update | read |
+| `travel` | approve, create, read, update | approve, create, read, update | create, read, update | read |
 | `users` | create, deactivate, override, read, update | create, read | — | — |
-| `vehicles` | read, update | read, update | read, update | read |
+| `vehicles` | create, read, update | create, read, update | read, update | read |
 <!-- vorlagen:end -->
 
 Begründung je Vorlage (D0-Auftrag, Abschnitt 2):

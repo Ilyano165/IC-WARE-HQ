@@ -63,7 +63,13 @@ def _bestand(cw: CoreWorld, mid: Any) -> dict[str, str]:
     vertrag = ok(c.post("/api/v1/contracts", json={"title": f"Geheim Vertrag {mid.hex[:6]}"}), 201)
     frist = ok(c.post("/api/v1/deadlines", json={"title": f"Geheim Frist {mid.hex[:6]}", "due_on": "2026-12-01"}), 201)
     export = ok(c.post("/api/v1/exports", json={"period_from": "2026-10-01", "period_to": "2026-10-31"}), 201)
-    return {"export": export["id"], "account": konto["id"], "item": plan["id"], "contract": vertrag["id"], "deadline": frist["id"], "task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"], "receipt": ausgabe["id"],
+    auto = ok(c.post("/api/v1/vehicles", json={"name": "Geheim", "license_plate": f"K-{mid.hex[:6]}"}), 201)
+    fahrt = ok(c.post("/api/v1/trips", json={"vehicle": auto["id"], "trip_date": "2026-10-01", "start_km": 1,
+                                             "end_km": 2, "purpose": "private"}), 201)
+    reise = ok(c.post("/api/v1/travels", json={"title": f"Geheim Reise {mid.hex[:6]}", "destination": "Bonn",
+                                               "start_date": "2026-11-01", "end_date": "2026-11-02"}), 201)
+    ok(c.post(f"/api/v1/travels/{reise['id']}/submit"))
+    return {"vehicle": auto["id"], "trip": fahrt["id"], "travel": reise["id"], "export": export["id"], "account": konto["id"], "item": plan["id"], "contract": vertrag["id"], "deadline": frist["id"], "task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"], "receipt": ausgabe["id"],
             "invoice": rech["id"], "line": pos["id"], "issued": ausgestellt["id"], "payment": zahlung,
             "member": cw.public_id(mid), "invitation": inv.public_id, "role": rolle["id"],
             "customer": kunde["id"], "contact": kontakt["id"], "inquiry": anfrage["id"], "project": projekt["id"],
@@ -133,11 +139,18 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("POST", "/api/v1/deadlines/{ref}/complete"): {},
     ("POST", "/api/v1/deadlines/{ref}/cancel"): {"note": "Eingeschleust"},
     ("POST", "/api/v1/exports/{ref}/repeat"): {},
+    ("PATCH", "/api/v1/vehicles/{vehicle}"): {"name": "Übernommen"},
+    ("POST", "/api/v1/trips/{ref}/corrections"): {"end_km": 3, "change_reason": "Eingeschleust"},
+    ("POST", "/api/v1/trips/{ref}/void"): {"reason": "Eingeschleust"},
+    ("PATCH", "/api/v1/travels/{ref}"): {"destination": "Übernommen"},
+    ("POST", "/api/v1/travels/{ref}/submit"): {},
+    ("POST", "/api/v1/travels/{ref}/decision"): {"approve": True},
+    ("POST", "/api/v1/travels/{ref}/cancel"): {},
 }
 
 
 def _ref_fuer(pfad: str, param: str, refs: dict[str, str]) -> str:
-    if param in ("member", "role", "contact", "entry", "line", "payment", "account", "item"):
+    if param in ("member", "role", "contact", "entry", "line", "payment", "account", "item", "vehicle"):
         return refs[param]
     if re.search(r"/invoices/\{ref\}/(payments|followups|dispatches|cancel)", pfad):
         return refs["issued"]                          # nur auf ausgestellte Rechnungen sinnvoll
@@ -150,7 +163,8 @@ def _ref_fuer(pfad: str, param: str, refs: dict[str, str]) -> str:
                          ("/api/v1/customers/", "customer"), ("/api/v1/inquiries/", "inquiry"),
                          ("/api/v1/projects/", "project"), ("/api/v1/invoices/", "invoice"),
                          ("/api/v1/receipts/", "receipt"), ("/api/v1/contracts/", "contract"),
-                         ("/api/v1/deadlines/", "deadline"), ("/api/v1/exports/", "export")):
+                         ("/api/v1/deadlines/", "deadline"), ("/api/v1/exports/", "export"),
+                         ("/api/v1/trips/", "trip"), ("/api/v1/travels/", "travel")):
         if pfad.startswith(praefix):
             return refs[art]
     raise AssertionError(f"Route {pfad} ist im IDOR-Test nicht abgedeckt — Zuordnung ergänzen")
@@ -229,7 +243,8 @@ def test_fremde_ids_in_listen_filtern_und_suche_unsichtbar(cw: CoreWorld) -> Non
                  "/api/v1/invoices?open=true", "/api/v1/invoices?q=Geheim", "/api/v1/receipts?limit=100",
                  "/api/v1/receipts?evidence=missing", "/api/v1/liquidity", "/api/v1/liquidity/accounts",
                  "/api/v1/liquidity/forecasts", "/api/v1/contracts?limit=100", "/api/v1/contracts/notice-due",
-                 "/api/v1/deadlines?limit=100", "/api/v1/exports", "/api/v1/periods", "/api/v1/search?q=Vertrag&per_group=20"):
+                 "/api/v1/deadlines?limit=100", "/api/v1/exports", "/api/v1/periods",
+                 "/api/v1/vehicles", "/api/v1/trips", "/api/v1/travels", "/api/v1/search?q=Vertrag&per_group=20"):
         r = ok(c.get(pfad))
         text = str(r)
         for wert in fremde.values():

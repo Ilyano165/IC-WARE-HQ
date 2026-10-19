@@ -66,6 +66,15 @@ VERBS: dict[str, str] = {
     "contract.created": "Vertrag angelegt",
     "contract.updated": "Vertrag geändert",
     "contract.terminated": "Kündigung erfasst",
+    "trip.created": "Fahrt erfasst",
+    "trip.corrected": "Fahrt korrigiert (neue Version)",
+    "trip.voided": "Fahrt storniert",
+    "travel.created": "Reise angelegt",
+    "travel.updated": "Reise geändert",
+    "travel.submitted": "Reise eingereicht",
+    "travel.approved": "Reise genehmigt",
+    "travel.rejected": "Reise abgelehnt",
+    "travel.cancelled": "Reise storniert",
 }
 SORT = SortKey("occurred_at", Activity.occurred_at, "ts")
 
