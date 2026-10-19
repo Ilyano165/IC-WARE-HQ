@@ -58,7 +58,7 @@ Fahrtversionen. Hoch/Runter/Hoch und der Abgleich Modell ↔ Migration laufen in
 | ruff, mypy (196 Dateien), lint-imports | grün |
 | Mutationen Fachmodule, Teilläufe je Modul | CRM 6, Projekte 7, Rechnungen 12, Belege 7, Liquidität 11, Fristen/Verträge 13, Abschluss/Export 15, Fahrtenbuch/Reisen 14, E9 12. **Alle erkannt.** 14 davon waren zunächst unbemerkt und haben zu geschärften Tests geführt |
 | Gesamter Mutationslauf `scripts/mutation-check.sh` | 313 erkannt · 0 unbemerkt · 1 ungültig (Muster angepasst, erkannt), siehe 4a |
-| CI (GitHub) | E7 (`e5de0e7`) und E8 (`0ddf3f3`) vollständig grün inkl. `mutation`. E9/E10: `checks`, `betrieb` und `windows / installer` grün, `mutation` wegen des ungültigen D0-Musters rot, behoben in `0d8ed0f` (CI läuft) |
+| CI (GitHub) | E7 (`e5de0e7`) und E8 (`0ddf3f3`) vollständig grün inkl. `mutation`. Auf `0d8ed0f` alle vier Jobs grün (Mutation 314 · 0 · 0). Dazwischen war E9 rot wegen eines veralteten Musters, das behoben ist |
 
 Geprüft wird, was CLAUDE.md verlangt:
 * CRUD und Statusübergänge,
@@ -77,7 +77,7 @@ Geprüft wird, was CLAUDE.md verlangt:
 * **CI** auf `208b6f2`: **erkannt 313 · unbemerkt 0 · ungültig 1**. Auf `e5de0e7` (E7) war der Job grün mit 288 · 0 · 0.
 * Die eine ungültige Mutation („D0 Kennzahl-Link ohne Filter“) passte seit E9 nicht mehr, weil `dashboard.js` jetzt
   API-Filter in Ansichten übersetzt. Das Muster ist in `0d8ed0f` angepasst und wird lokal wieder erkannt. Damit sind es
-  **314 von 314** Mutationen. Der CI-Lauf auf diesem Stand steht noch aus.
+  **314 von 314** Mutationen. **CI auf `0d8ed0f`: erkannt 314 · unbemerkt 0 · ungültig 0, alle Jobs grün.**
 * Schon vorher war der CI-Job `mutation` von E2 bis E6 rot, ebenfalls wegen eines veralteten Musters („3b
   Neuzuweisung“, in E7 behoben). Muster veralten, wenn Code umgebaut wird. Der ungültige Zähler macht das sichtbar,
   bevor eine Schutzregel unbemerkt ungeprüft bleibt.
@@ -117,7 +117,7 @@ Benachrichtigungen läuft wie bisher über `ichq notifications-scan` (systemd-Ti
 
 ## 8. Nächste Schritte (Vorschlag)
 
-1. CI-Mutationsjob auf `0d8ed0f` bzw. dem Kopf grün sehen, danach Review von PR #2. **Kein Merge ohne
+1. Review von PR #2 (CI grün auf `0d8ed0f`). **Kein Merge ohne
    Prüfung.**
 2. Vorlagenrechte und Abläufe (Abschluss, Fahrtenbuch, Reisen) mit einem Pilotkunden durchgehen.
 3. Steuerwerte nur mit Fundstelle als versionierte Daten (`docs/steuerwerte-pruefung.md`), danach Tor S.
