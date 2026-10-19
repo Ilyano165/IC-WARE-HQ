@@ -22,7 +22,7 @@ export async function firma(el) {
     d.legal_name = d.legal_name || null;
     try { await patch("/company", d); toast("Firmenprofil gespeichert."); firma(el); } catch (err) { ersetze(fehler, alertBox(meldung(err))); }
   });
-  ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("h1", {}, "Firma"), h("p", {}, `${f.slug} · Status ${f.status}`))),
+  ersetze(el, h("div", { class: "pagehead" }, h("div", {}, h("h1", {}, "Firma"), h("p", {}, `${f.slug} · ${({ active: "aktiv", paused: "pausiert", pending: "in Einrichtung", deactivated: "deaktiviert" })[f.status] || f.status}`))),
     f.status === "paused" ? alertBox("Die Firma ist pausiert — nur Lesen ist möglich.", "info") : null, h("section", { class: "card" }, form));
 }
 

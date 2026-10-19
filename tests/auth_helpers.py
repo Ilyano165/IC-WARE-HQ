@@ -37,8 +37,39 @@ def join(engines: Engines, tenant_id: uuid.UUID, user_id: uuid.UUID) -> uuid.UUI
         return add_membership(s, user_id=user_id)
 
 
-def client(settings: Settings, engines: Engines, **kw: Any) -> tuple[TestClient, MemoryMailer]:
-    mailer = kw.pop("mailer", None) or MemoryMailer()
+class OutboxMailer:
+    """Liest die ECHTE Mail-Outbox und stellt über den echten Versandweg (``dispatch_once``) in einen Speicher zu —
+    die Tests prüfen damit Outbox, Verschlüsselung und Versand, nicht eine Abkürzung."""
+
+    def __init__(self, settings: Settings, engines: Engines, nur: str | None = "nicht-sicherheit") -> None:
+        self.settings, self.engines, self.speicher, self.nur = settings, engines, MemoryMailer(), nur
+
+    def zustellen(self) -> None:
+        from ichq.mail.delivery import dispatch_once
+        while dispatch_once(self.engines, self.settings, self.speicher).claimed:
+            pass
+
+    def send(self, to: str, subject: str, body_text: str, body_html: str | None = None) -> None:
+        self.speicher.send(to, subject, body_text, body_html)
+
+    @property
+    def alle(self) -> list[tuple[str, str, str]]:
+        self.zustellen()
+        return self.speicher.sent
+
+    @property
+    def sent(self) -> list[tuple[str, str, str]]:
+        """Ohne Sicherheitshinweise (die prüft tests/test_mail.py) — so bleiben die M2-Tests eindeutig."""
+        return [m for m in self.alle if not self._hinweis(m[1])] if self.nur else self.alle
+
+    @staticmethod
+    def _hinweis(betreff: str) -> bool:
+        from ichq.mail.templates import MARKE, SICHERHEIT
+        return any(betreff == f"{MARKE}: {titel}" for titel, _ in SICHERHEIT.values())
+
+
+def client(settings: Settings, engines: Engines, **kw: Any) -> tuple[TestClient, OutboxMailer]:
+    mailer = kw.pop("mailer", None) or OutboxMailer(settings, engines)
     c, _ = make_client(settings, engines, mailer=mailer, **kw)
     return c, mailer
 

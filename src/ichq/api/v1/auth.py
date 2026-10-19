@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
@@ -18,6 +19,8 @@ from ichq.auth import login as auth_login
 from ichq.auth.login import Outcome
 from ichq.auth.sessions import SessionInfo
 from ichq.db.session import auth_transaction
+from ichq.mail import templates
+from ichq.mail.outbox import enqueue
 
 router = APIRouter(prefix="/api/v1/auth")
 STATUS = {"invalid_credentials": 401, "too_many_attempts": 429, "mfa_invalid": 401, "tenant_forbidden": 403,
@@ -158,18 +161,24 @@ def change_password(body: PasswordChangeIn, request: Request, current: SessionIn
 @router.post("/password-reset/request", status_code=202)
 def reset_request(body: ResetRequestIn, request: Request, tasks: BackgroundTasks,
                   _: None = Depends(public("Passwort vergessen")), state: AppState = Depends(get_state)) -> Response:
-    if state.mailer is None:
+    if not state.mail_enabled:
         return problem(503, "password_reset_unavailable",
                        detail="Passwort-Reset ist auf diesem Server nicht eingerichtet.")
     with auth_transaction(state.engines.auth) as s:
         _o, roh, email = account.request_reset(s, state.settings, body.login, ip=client_ip(request))
-    if roh and email:   # Versand NACH der Antwort: gleiche Antwortzeit für bekannte und unbekannte Konten
-        basis = (state.settings.public_origin or "http://localhost").rstrip("/")
-        text_ = (f"Hallo,\n\nfür dein Konto wurde ein neues Passwort angefordert. Der Link ist "
-                 f"{state.settings.password_reset_minutes} Minuten gültig und nur einmal verwendbar:\n\n"
-                 f"{basis}/reset#token={roh}\n\nWenn du das nicht warst, ignoriere diese Mail.\n")
-        tasks.add_task(state.mailer.send, email, "IC WARE HQ: Passwort zurücksetzen", text_)
+    if roh and email:   # Einreihen NACH der Antwort: gleiche Antwortzeit für bekannte und unbekannte Konten
+        tasks.add_task(_reset_mail_einreihen, state, email, roh)
     return Response(status_code=202)
+
+
+def _reset_mail_einreihen(state: AppState, email: str, roh: str) -> None:
+    """Token nur verschlüsselt in der Outbox; gültig so lange wie der Token selbst."""
+    basis = (state.settings.public_origin or "http://localhost").rstrip("/")
+    minuten = state.settings.password_reset_minutes
+    with auth_transaction(state.engines.auth) as s:
+        enqueue(s, kind="password_reset", to=email, mail=templates.password_reset(basis, roh, minuten),
+                secret_key=state.settings.secret_key.get_secret_value(),
+                expires_at=datetime.now(UTC) + timedelta(minutes=minuten))
 
 
 @router.post("/password-reset/confirm", status_code=204)

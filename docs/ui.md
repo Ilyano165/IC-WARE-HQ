@@ -24,8 +24,8 @@ web/js/views/*.js       anmeldung, uebersicht, aufgaben, kommentare, dokumente, 
 | --- | --- | --- |
 | Anmeldung | Login, 2FA-Code/Recovery-Code, Passwort vergessen, Firmenwahl (bei einer Firma automatisch) | — |
 | `/invite#token=…`, `/reset#token=…` | Einladung annehmen (neues oder bestehendes Konto), neues Passwort | Token |
-| `#/` | Übersicht: eigene offene Aufgaben, ungelesene Mitteilungen (**kein** Dashboard — D0 folgt) | — |
-| `#/aufgaben`, `#/aufgaben/:id` | Liste mit Filtern/Seiten, anlegen, bearbeiten, Status, Zuweisung, Kommentare | `tasks.read` |
+| `#/` | Dashboard (D0, `docs/d0-dashboard.md`): Widgets nach effektiven Rechten, jede verlinkte Zahl = Liste | — |
+| `#/aufgaben`, `#/aufgaben/:id` | Liste mit Filtern/Seiten, anlegen, bearbeiten, Status, Zuweisung, Anhänge (Dokumente), Kommentare | `tasks.read` |
 | `#/dokumente`, `#/dokumente/:id` | Liste, Hochladen, Quarantäne-Hinweis, Download nach Prüfung, Freigeben/Ablehnen, Kommentare | `files.read` |
 | `#/benachrichtigungen`, `#/suche` | Mitteilungen (gelesen markieren), globale Suche gruppiert | — |
 | `#/mitglieder`, `#/mitglieder/:id` | Mitglieder, Einladungen; Person: Rollen vergeben/entziehen, **Rechte mit Quelle**, Einzelrechte, deaktivieren | `users.read` |

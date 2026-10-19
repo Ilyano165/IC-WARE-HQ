@@ -1,0 +1,18 @@
+# IC WARE HQ — startet den Compose-Stack beim Booten (deploy/install.sh ersetzt @ROOT@).
+# Die Container haben zusätzlich restart: unless-stopped; diese Unit sorgt dafür, dass auch nach
+# "deploy/hq stop" + Neustart des Servers wieder alles läuft und Migrationen vor der App laufen.
+[Unit]
+Description=IC WARE HQ (Docker Compose)
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=@ROOT@/deploy/hq start
+ExecStop=@ROOT@/deploy/hq stop
+TimeoutStartSec=20min
+
+[Install]
+WantedBy=multi-user.target

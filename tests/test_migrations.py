@@ -153,3 +153,29 @@ def test_0005_nachtraege_mit_bestand(frische_db: str) -> None:
     command.downgrade(cfg, "0004_m3_tenancy")
     with _admin(frische_db) as c:
         assert c.execute("SELECT count(*) FROM object_grants").fetchone() == (1,)
+
+
+def test_update_von_main_0006_mit_bestand(frische_db: str) -> None:
+    """Update-Kompatibilität (Launch): eine Installation auf 0006 (Stand main) mit Dokumenten in Quarantäne kommt auf
+    head, Daten und Zustände bleiben; 0007/0008 lassen sich wieder zurückrollen."""
+    cfg = _alembic(url("ichq_owner", frische_db))
+    command.upgrade(cfg, "0006_m4_rbac")
+    t, o = "00000000-0000-7000-8000-0000000000a1", "00000000-0000-7000-8000-0000000000d1"
+    with _admin(frische_db) as c:
+        c.execute(f"""
+          INSERT INTO tenants(id, slug, name, status) VALUES ('{t}', 'altfirma', 'Alt GmbH', 'active');
+          INSERT INTO objects(id, tenant_id, type, public_id, title) VALUES ('{o}', '{t}', 'document', repeat('d', 32),
+                 'Beleg');
+          INSERT INTO documents(id, tenant_id, filename, content_type, size_bytes, sha256, storage_key) VALUES
+                 ('{o}', '{t}', 'b.pdf', 'application/pdf', 3, repeat('0', 64), 't/{t}/f/{o}/v/1');""")
+    command.upgrade(cfg, "head")
+    with _admin(frische_db) as c:
+        assert c.execute("SELECT scan_status, review_status FROM documents").fetchall() == [("quarantined", "pending")]
+        assert c.execute("SELECT count(*) FROM mail_outbox").fetchone() == (0,)
+        with pytest.raises(psycopg.errors.RaiseException):   # Übergangsregel gilt auch für Bestand
+            c.execute("UPDATE documents SET scan_status = 'clean'; UPDATE documents SET scan_status = 'quarantined'")
+    command.downgrade(cfg, "0006_m4_rbac")
+    with _admin(frische_db) as c:
+        assert c.execute("SELECT count(*) FROM documents").fetchone() == (1,)
+        assert c.execute("SELECT to_regclass('mail_outbox')").fetchone() == (None,)
+    command.upgrade(cfg, "head")

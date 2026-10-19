@@ -6,17 +6,29 @@ import { get, query } from "../api.js";
 import { state } from "../state.js";
 
 const LISTE = { tasks: "/aufgaben", documents: "/dokumente", questions: "/rueckfragen", members: "/mitglieder",
-  notifications: "/benachrichtigungen", activities: "/aktivitaet" };
-const OBJEKT = { task: "/aufgaben", document: "/dokumente" };
+  notifications: "/benachrichtigungen", activities: "/aktivitaet", invoices: "/rechnungen", receipts: "/belege",
+  deadlines: "/fristen", projects: "/projekte", contracts_notice: "/vertraege", travels: "/reisen", trips: "/fahrtenbuch",
+  inquiries: "/anfragen", liquidity: "/liquiditaet", periods: "/abschluss" };
+const OBJEKT = { task: "/aufgaben", document: "/dokumente", invoice: "/rechnungen", receipt: "/belege", deadline: "/fristen",
+  project: "/projekte", contract: "/vertraege", travel: "/reisen" };
+// Filter der API-Liste → Ansicht der Oberflächen-Liste (dieselbe Menge; die Zahl prüft der Server-Test gegen die API)
+const ANSICHT = {
+  invoices: (f) => ({ ansicht: f.overdue ? "overdue" : f.open ? "open" : "draft" }),
+  receipts: (f) => ({ ansicht: f.follow_up_due ? "wiedervorlage" : "fehlend" }),
+  deadlines: (f) => ({ ansicht: f.overdue ? "ueberfaellig" : "erinnerung" }),
+  contracts_notice: () => ({ ansicht: "kuendigung" }),
+  inquiries: (f) => (f.follow_up_before ? { follow_up_before: f.follow_up_before } : {}),
+};
 
 function listenLink(liste, filter) {
   const basis = LISTE[liste];
   if (!basis) return null;
-  return `#${basis}${query(filter || {})}`;
+  const f = ANSICHT[liste] ? ANSICHT[liste](filter || {}) : filter;
+  return `#${basis}${query(f || {})}`;
 }
 
 function kennzahl(w, m) {
-  const ziel = listenLink(w.list, m.filter);
+  const ziel = m.linked === false ? null : listenLink(w.list, m.filter);
   const inhalt = [h("span", { class: "metric-value" }, String(m.value)), h("span", { class: "metric-label" }, m.label)];
   const art = `metric metric--${m.tone}`;
   return ziel ? h("a", { class: art, href: ziel, "aria-label": `${m.label}: ${m.value}` }, inhalt) : h("div", { class: art }, inhalt);

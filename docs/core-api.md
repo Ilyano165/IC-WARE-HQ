@@ -85,7 +85,7 @@ Mitglieder, Einladungen, Firmenprofil: `docs/m3-mandanten.md`.
 | Methode | Pfad | Eingabe |
 | --- | --- | --- |
 | POST | `/documents?filename=…` | Rohdaten im Body, `Content-Type`: pdf, png, jpeg, xml, txt, csv; ≤ 20 MiB |
-| GET | `/documents` | `review_status`, `sort` = `created_at`\|`title`, `order`, `cursor`, `limit` |
+| GET | `/documents` | `review_status`, `scan_status`, `since`, `unlinked`, `sort` = `created_at`\|`title`, `order`, `cursor`, `limit` |
 | GET | `/documents/{ref}` | — |
 | GET | `/documents/{ref}/content` | — (nur `scan_status = clean`, sonst 409) |
 | POST | `/documents/{ref}/review` | `{decision: approved\|rejected}` — einmalig |
@@ -105,3 +105,8 @@ Dokument: Objektfelder + `{filename, content_type, size_bytes, sha256, scan_stat
 
 Suche: Präfixsuche je Wort (`tank bel` findet „Tankbeleg"), PostgreSQL-Konfiguration `simple` (keine
 Stammformen), sortiert nach Relevanz. Personen = Mitglieder (`users.read`) + Objekte vom Typ `employee`.
+
+**Ergänzungen 1.0.0rc1:** Kommentare tragen `own` (ob die anfragende Person sie verfasst hat — nur für die Anzeige von
+„Bearbeiten"; entscheiden tut der Server). Dashboard-Kennzahlen tragen `linked`: `false`, wenn es keine Liste mit genau
+diesem Filter gibt — dann zeigt die Oberfläche die Zahl ohne Link (Regel „Zahl = Liste"). Freigabe eines Dokuments
+(`decision=approved`) erst nach `scan_status = clean` (sonst 409).

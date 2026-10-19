@@ -82,8 +82,19 @@ def main(argv: list[str] | None = None) -> int:
                                              "löschen (auth_events bleiben)")
     ac.add_argument("--days", type=int, default=30, help="Aufbewahrung in Tagen (Standard 30)")
     sub.add_parser("routes-doc", help="Tabelle der geschützten Endpunkte aus dem Code ausgeben (docs/authorization.md)")
-    w = sub.add_parser("worker", help="Outbox-Worker starten")
+    ds = sub.add_parser("documents-scan", help="Dokumente in Quarantäne mit ClamAV prüfen (ICHQ_CLAMD_HOST)")
+    ds.add_argument("--loop", type=float, default=0, help="Sekunden zwischen Läufen; 0 = einmal")
+    ds.add_argument("--limit", type=int, default=50, help="höchstens so viele Dokumente je Firma und Lauf")
+    w = sub.add_parser("worker", help="Outbox-Worker starten (versendet auch E-Mails, wenn SMTP eingerichtet ist)")
     w.add_argument("--once", action="store_true")
+    sub.add_parser("mail-status", help="E-Mail-Outbox: Zahl je Status (Exitcode 1 bei fehlgeschlagenen)")
+    mr = sub.add_parser("mail-retry", help="Fehlgeschlagene E-Mails erneut zustellen")
+    mr.add_argument("--id", help="nur diese Mail (sonst alle fehlgeschlagenen)")
+    al = sub.add_parser("alert", help="Betreiberwarnung an ICHQ_ALERT_EMAIL senden")
+    al.add_argument("--subject", required=True)
+    al.add_argument("--message", required=True)
+    al.add_argument("--dedup", help="gleicher Schlüssel ⇒ nur eine Mail")
+    sub.add_parser("ops-check", help="Zustand von Outbox, Mail, Virenprüfung als JSON (für deploy/hq check)")
     sv = sub.add_parser("serve", help="API-Server starten (Produktion: hinter Reverse Proxy)")
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8000)
@@ -145,16 +156,33 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             print(" · ".join(f"{k} {v}" for k, v in bericht.deleted.items()))
             return 0
+        if args.cmd == "documents-scan":
+            return _virenscan(settings, engines, args.loop, args.limit)
         if args.cmd == "worker":
             from ichq.jobs.worker import run_forever, run_once
+            from ichq.mail.delivery import build_provider, dispatch_once
+            provider = build_provider(settings)
             if args.once:
                 r = run_once(engines)
+                mail = dispatch_once(engines, settings, provider) if provider else None
                 print(f"abgeholt {r.claimed} · erledigt {r.done} · wird wiederholt {r.retrying} · "
-                      f"endgültig gescheitert {r.failed}")
-                return 0 if r.ok else 1
-            else:
-                run_forever(engines)
+                      f"endgültig gescheitert {r.failed}"
+                      + (f" · Mails gesendet {mail.sent} · Mails gescheitert {mail.failed}" if mail else ""))
+                return 0 if r.ok and (mail is None or mail.failed == 0) else 1
+            if provider is None:
+                print("Hinweis: SMTP nicht eingerichtet — E-Mails bleiben in der Outbox.", file=sys.stderr)
+            run_forever(engines, nebenher=(lambda: dispatch_once(engines, settings, provider).claimed)
+                        if provider else None)
             return 0
+        if args.cmd in ("mail-status", "mail-retry", "alert", "ops-check"):
+            from ichq import betrieb
+            if args.cmd == "mail-status":
+                return betrieb.mail_status(engines)
+            if args.cmd == "mail-retry":
+                return betrieb.mail_retry(engines, args.id)
+            if args.cmd == "alert":
+                return betrieb.alert(settings, engines, args.subject, args.message, args.dedup)
+            return betrieb.print_ops_check(settings, engines)
         if args.cmd.startswith(("user-", "membership-")) or args.cmd == "tenant-admin":
             return _konten(args, settings, engines)
         if args.cmd == "tenant-feature":
@@ -189,6 +217,28 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     finally:
         engines.dispose()
+
+
+def _virenscan(settings: Any, engines: Any, pause: float, limit: int) -> int:
+    """Exitcodes: 0 ok, 1 Firma gescheitert, 2 kein Scanner konfiguriert. Mit --loop endlos (Dienst „scanner")."""
+    import time
+
+    from ichq.documents.scan import ClamdClient, scan_pending
+    from ichq.storage import build_storage
+    if not settings.clamd_host:
+        print("Fehler: ICHQ_CLAMD_HOST fehlt — ohne Virenscanner bleiben Dokumente in Quarantäne.", file=sys.stderr)
+        return 2
+    client, storage = ClamdClient(settings.clamd_host, settings.clamd_port), build_storage(settings)
+    from ichq.jobs.worker import heartbeat
+    while True:
+        lauf = scan_pending(engines, storage, client, limit)
+        heartbeat("/tmp/ichq-scanner.heartbeat")   # noqa: S108 — Lebenszeichen für den Container-Healthcheck
+        if lauf.clean or lauf.infected or lauf.pending or not pause:
+            print(f"sauber {lauf.clean} · infiziert {lauf.infected} · wartend {lauf.pending} · "
+                  f"Firmen fehlgeschlagen {len(lauf.failed_tenants)}", flush=True)
+        if not pause:
+            return 1 if lauf.failed_tenants else 0
+        time.sleep(pause)
 
 
 def _scan(engines: Any, stichtag: str | None) -> int:

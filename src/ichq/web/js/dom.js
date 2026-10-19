@@ -111,3 +111,18 @@ export function groesse(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+// Doppelklick-Schutz: solange die Aktion läuft, sind die Knöpfe gesperrt und weitere Auslöser werden ignoriert
+export function einmal(fn) {
+  let laeuft = false;
+  return async (e) => {
+    if (e && e.type === "submit") e.preventDefault();
+    if (laeuft) return;
+    laeuft = true;
+    const ziel = e && (e.currentTarget || e.target);
+    const knoepfe = ziel && ziel.tagName === "FORM" ? [...ziel.querySelectorAll("button[type=submit]")]
+      : ziel && ziel.tagName === "BUTTON" ? [ziel] : [];
+    for (const k of knoepfe) k.disabled = true;
+    try { await fn(e); } finally { laeuft = false; for (const k of knoepfe) k.disabled = false; }
+  };
+}

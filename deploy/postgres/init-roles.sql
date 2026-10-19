@@ -18,6 +18,14 @@ SELECT format('CREATE ROLE ichq_worker LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROL
 SELECT format('CREATE ROLE ichq_auth LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB PASSWORD %L', :'auth_pw')
  WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ichq_auth') \gexec
 
+-- Passwörter bei jedem Lauf an die Secret-Dateien angleichen (Wiederherstellung, Rotation): die Dateien sind die
+-- einzige Quelle. Nur Rollen, die es gibt — CREATE oben hat fehlende gerade angelegt.
+SELECT format('ALTER ROLE ichq_owner PASSWORD %L', :'owner_pw') \gexec
+SELECT format('ALTER ROLE ichq_app PASSWORD %L', :'app_pw') \gexec
+SELECT format('ALTER ROLE ichq_platform PASSWORD %L', :'platform_pw') \gexec
+SELECT format('ALTER ROLE ichq_worker PASSWORD %L', :'worker_pw') \gexec
+SELECT format('ALTER ROLE ichq_auth PASSWORD %L', :'auth_pw') \gexec
+
 SELECT format('CREATE DATABASE %I OWNER ichq_owner', :'dbname')
  WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'dbname') \gexec
 

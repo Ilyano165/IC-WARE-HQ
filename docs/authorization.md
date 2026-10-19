@@ -143,18 +143,70 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/comments/{ref}/tasks` | POST | permission | `tasks.create` |
 | `/api/v1/company` | GET | permission | `company.read` |
 | `/api/v1/company` | PATCH | permission | `company.update` |
+| `/api/v1/contracts` | GET | permission | `contracts.read` |
+| `/api/v1/contracts` | POST | permission | `contracts.create` |
+| `/api/v1/contracts/notice-due` | GET | permission | `contracts.read` |
+| `/api/v1/contracts/{ref}` | GET | permission | `contracts.read` |
+| `/api/v1/contracts/{ref}` | PATCH | permission | `contracts.update` |
+| `/api/v1/contracts/{ref}/terminate` | POST | permission | `contracts.update` |
+| `/api/v1/customers` | GET | permission | `customers.read` |
+| `/api/v1/customers` | POST | permission | `customers.create` |
+| `/api/v1/customers/duplicates` | GET | permission | `customers.read` |
+| `/api/v1/customers/{ref}` | GET | permission | `customers.read` |
+| `/api/v1/customers/{ref}` | PATCH | permission | `customers.update` |
+| `/api/v1/customers/{ref}/contacts` | POST | permission | `customers.update` |
+| `/api/v1/customers/{ref}/contacts/{contact}` | DELETE | permission | `customers.update` |
+| `/api/v1/customers/{ref}/contacts/{contact}` | PATCH | permission | `customers.update` |
+| `/api/v1/customers/{ref}/merge` | POST | permission | `customers.delete` |
 | `/api/v1/dashboard` | GET | permission | `dashboard.read` |
+| `/api/v1/deadlines` | GET | permission | `finance.read` |
+| `/api/v1/deadlines` | POST | permission | `finance.create` |
+| `/api/v1/deadlines/{ref}` | GET | permission | `finance.read` |
+| `/api/v1/deadlines/{ref}` | PATCH | permission | `finance.update` |
+| `/api/v1/deadlines/{ref}/cancel` | POST | permission | `finance.update` |
+| `/api/v1/deadlines/{ref}/complete` | POST | permission | `finance.update` |
 | `/api/v1/documents` | GET | permission | `files.read` |
 | `/api/v1/documents` | POST | permission | `files.upload` |
 | `/api/v1/documents/{ref}` | GET | permission | `files.read` |
 | `/api/v1/documents/{ref}/content` | GET | permission | `files.read` |
 | `/api/v1/documents/{ref}/review` | POST | permission | `files.update` |
+| `/api/v1/exports` | GET | permission | `finance.export` |
+| `/api/v1/exports` | POST | permission | `finance.export` |
+| `/api/v1/exports/{ref}` | GET | permission | `finance.export` |
+| `/api/v1/exports/{ref}/download` | GET | permission | `finance.export` |
+| `/api/v1/exports/{ref}/repeat` | POST | permission | `finance.export` |
+| `/api/v1/inquiries` | GET | permission | `customers.read` |
+| `/api/v1/inquiries` | POST | permission | `customers.create` |
+| `/api/v1/inquiries/{ref}` | GET | permission | `customers.read` |
+| `/api/v1/inquiries/{ref}` | PATCH | permission | `customers.update` |
 | `/api/v1/invitations` | GET | permission | `users.read` |
 | `/api/v1/invitations` | POST | permission | `users.create` |
 | `/api/v1/invitations/accept` | POST | public | öffentlich — Einladung annehmen — neues Konto |
 | `/api/v1/invitations/accept-existing` | POST | signed_in | angemeldet |
 | `/api/v1/invitations/{ref}` | DELETE | permission | `users.create` |
+| `/api/v1/invoices` | GET | permission | `invoices.read` |
+| `/api/v1/invoices` | POST | permission | `invoices.create` |
+| `/api/v1/invoices/{ref}` | GET | permission | `invoices.read` |
+| `/api/v1/invoices/{ref}` | PATCH | permission | `invoices.update` |
+| `/api/v1/invoices/{ref}/cancel` | POST | permission | `invoices.approve` |
+| `/api/v1/invoices/{ref}/dispatches` | POST | permission | `invoices.update` |
+| `/api/v1/invoices/{ref}/followups` | POST | permission | `invoices.update` |
+| `/api/v1/invoices/{ref}/issue` | POST | permission | `invoices.approve` |
+| `/api/v1/invoices/{ref}/lines` | POST | permission | `invoices.update` |
+| `/api/v1/invoices/{ref}/lines/{line}` | DELETE | permission | `invoices.update` |
+| `/api/v1/invoices/{ref}/lines/{line}` | PATCH | permission | `invoices.update` |
+| `/api/v1/invoices/{ref}/payments` | POST | permission | `finance.create` |
+| `/api/v1/invoices/{ref}/payments/{payment}/reverse` | POST | permission | `finance.update` |
 | `/api/v1/links/{ref}` | DELETE | authenticated | angemeldet + Firma |
+| `/api/v1/liquidity` | GET | permission | `finance.read` |
+| `/api/v1/liquidity/accounts` | GET | permission | `finance.read` |
+| `/api/v1/liquidity/accounts` | POST | permission | `finance.update` |
+| `/api/v1/liquidity/accounts/{account}` | GET | permission | `finance.read` |
+| `/api/v1/liquidity/accounts/{account}` | PATCH | permission | `finance.update` |
+| `/api/v1/liquidity/accounts/{account}/balances` | POST | permission | `finance.update` |
+| `/api/v1/liquidity/forecasts` | GET | permission | `finance.read` |
+| `/api/v1/liquidity/forecasts` | POST | permission | `finance.update` |
+| `/api/v1/liquidity/forecasts/{item}` | PATCH | permission | `finance.update` |
 | `/api/v1/me` | GET | authenticated | angemeldet + Firma |
 | `/api/v1/me/permissions` | GET | authenticated | angemeldet + Firma |
 | `/api/v1/members` | GET | permission | `users.read` |
@@ -170,6 +222,7 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/notifications/{ref}/read` | POST | authenticated | angemeldet + Firma |
 | `/api/v1/objects/{ref}` | GET | authenticated | angemeldet + Firma |
 | `/api/v1/objects/{ref}/activities` | GET | permission | `activity.read` |
+| `/api/v1/objects/{ref}/archive` | POST | authenticated | angemeldet + Firma |
 | `/api/v1/objects/{ref}/comments` | GET | permission | `comments.read` |
 | `/api/v1/objects/{ref}/comments` | POST | permission | `comments.create` |
 | `/api/v1/objects/{ref}/denies` | GET | permission | `objects.share` |
@@ -180,9 +233,30 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/objects/{ref}/grants/{member}` | DELETE | permission | `objects.share` |
 | `/api/v1/objects/{ref}/links` | GET | authenticated | angemeldet + Firma |
 | `/api/v1/objects/{ref}/links` | POST | authenticated | angemeldet + Firma |
+| `/api/v1/objects/{ref}/restore` | POST | authenticated | angemeldet + Firma |
 | `/api/v1/objects/{ref}/tasks` | POST | permission | `tasks.create` |
+| `/api/v1/periods` | GET | permission | `finance.read` |
+| `/api/v1/periods/check` | GET | permission | `finance.read` |
+| `/api/v1/periods/close` | POST | permission | `finance.approve` |
+| `/api/v1/periods/reopen` | POST | permission | `finance.approve` |
 | `/api/v1/permissions` | GET | permission | `roles.read` |
+| `/api/v1/projects` | GET | permission | `projects.read` |
+| `/api/v1/projects` | POST | permission | `projects.create` |
+| `/api/v1/projects/{ref}` | GET | permission | `projects.read` |
+| `/api/v1/projects/{ref}` | PATCH | permission | `projects.update` |
+| `/api/v1/projects/{ref}/members/{member}` | DELETE | permission | `projects.assign` |
+| `/api/v1/projects/{ref}/members/{member}` | PUT | permission | `projects.assign` |
+| `/api/v1/projects/{ref}/profitability` | GET | permission | `projects.read` + `finance.read` |
+| `/api/v1/projects/{ref}/time-entries` | GET | permission | `projects.read` |
+| `/api/v1/projects/{ref}/time-entries` | POST | permission | `projects.read` |
+| `/api/v1/projects/{ref}/time-entries/{entry}` | DELETE | permission | `projects.read` |
 | `/api/v1/questions` | GET | permission | `comments.read` |
+| `/api/v1/receipts` | GET | permission | `finance.read` |
+| `/api/v1/receipts` | POST | permission | `finance.create` |
+| `/api/v1/receipts/{ref}` | GET | permission | `finance.read` |
+| `/api/v1/receipts/{ref}` | PATCH | permission | `finance.update` |
+| `/api/v1/receipts/{ref}/document` | PUT | permission | `finance.update` |
+| `/api/v1/receipts/{ref}/void` | POST | permission | `finance.update` |
 | `/api/v1/roles` | GET | permission | `roles.read` |
 | `/api/v1/roles` | POST | permission | `roles.create` |
 | `/api/v1/roles/{role}` | DELETE | permission | `roles.delete` |
@@ -197,6 +271,21 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/tasks/{ref}` | GET | permission | `tasks.read` |
 | `/api/v1/tasks/{ref}` | PATCH | permission | `tasks.update` |
 | `/api/v1/tasks/{ref}/attachments` | POST | permission | `tasks.update` |
+| `/api/v1/travels` | GET | permission | `travel.read` |
+| `/api/v1/travels` | POST | permission | `travel.create` |
+| `/api/v1/travels/{ref}` | GET | permission | `travel.read` |
+| `/api/v1/travels/{ref}` | PATCH | permission | `travel.update` |
+| `/api/v1/travels/{ref}/cancel` | POST | permission | `travel.update` |
+| `/api/v1/travels/{ref}/decision` | POST | permission | `travel.approve` |
+| `/api/v1/travels/{ref}/submit` | POST | permission | `travel.update` |
+| `/api/v1/trips` | GET | permission | `vehicles.read` |
+| `/api/v1/trips` | POST | permission | `vehicles.update` |
+| `/api/v1/trips/{ref}` | GET | permission | `vehicles.read` |
+| `/api/v1/trips/{ref}/corrections` | POST | permission | `vehicles.update` |
+| `/api/v1/trips/{ref}/void` | POST | permission | `vehicles.update` |
+| `/api/v1/vehicles` | GET | permission | `vehicles.read` |
+| `/api/v1/vehicles` | POST | permission | `vehicles.create` |
+| `/api/v1/vehicles/{vehicle}` | PATCH | permission | `vehicles.create` |
 | `/app` | GET | public | öffentlich — Weiterleitung zur Oberfläche |
 | `/app/{pfad:path}` | GET | public | öffentlich — Oberfläche: statische Dateien, keine Daten |
 | `/health` | GET | public | öffentlich — Liveness für Orchestrierung |

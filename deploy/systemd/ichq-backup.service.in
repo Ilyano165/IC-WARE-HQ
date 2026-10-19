@@ -1,0 +1,11 @@
+# IC WARE HQ — verschlüsselte Sicherung (restic, ADR-016) nach HQ_BACKUP_REPOSITORY. Fehler ⇒ Alarm-Mail.
+[Unit]
+Description=IC WARE HQ: Sicherung
+After=docker.service ichq.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=@ROOT@/deploy/hq backup
+TimeoutStartSec=3h
+Nice=10
