@@ -57,8 +57,8 @@ Fahrtversionen. Hoch/Runter/Hoch und der Abgleich Modell ↔ Migration laufen in
 | Gesamtsuite nach E4 / E5 / E6 / E7 / E8 / E9 | 656 / 661 / 667 + 1 Doku-Fehler, behoben / 673 / 678 / **681 passed** |
 | ruff, mypy (196 Dateien), lint-imports | grün |
 | Mutationen Fachmodule, Teilläufe je Modul | CRM 6, Projekte 7, Rechnungen 12, Belege 7, Liquidität 11, Fristen/Verträge 13, Abschluss/Export 15, Fahrtenbuch/Reisen 14, E9 12. **Alle erkannt.** 14 davon waren zunächst unbemerkt und haben zu geschärften Tests geführt |
-| Gesamter Mutationslauf `scripts/mutation-check.sh` | siehe Abschnitt 4a |
-| CI (GitHub) | `checks`, `betrieb` und `windows / installer` grün bis E8. `mutation` war seit E2 rot (ein Muster passte nicht mehr), mit E7 repariert. Das Ergebnis auf dem aktuellen Kopf steht noch aus |
+| Gesamter Mutationslauf `scripts/mutation-check.sh` | 313 erkannt · 0 unbemerkt · 1 ungültig (Muster angepasst, erkannt), siehe 4a |
+| CI (GitHub) | E7 (`e5de0e7`) und E8 (`0ddf3f3`) vollständig grün inkl. `mutation`. E9/E10: `checks`, `betrieb` und `windows / installer` grün, `mutation` wegen des ungültigen D0-Musters rot, behoben in `0d8ed0f` (CI läuft) |
 
 Geprüft wird, was CLAUDE.md verlangt:
 * CRUD und Statusübergänge,
@@ -71,7 +71,16 @@ Geprüft wird, was CLAUDE.md verlangt:
 
 ### 4a. Gesamter Mutationslauf
 
-Wird nach Abschluss des Laufs eingetragen.
+* **Lokal** (`scripts/mutation-check.sh`, 19.10.2026): Der Lauf lief in mein Zeitlimit von 7000 s, nachdem 304
+  Mutationen erkannt waren. Die restlichen 9 (4 aus E9, 5 Windows-Launcher) liefen einzeln: 9 erkannt.
+  **Summe: 313 erkannt · 0 unbemerkt · 1 ungültig.**
+* **CI** auf `208b6f2`: **erkannt 313 · unbemerkt 0 · ungültig 1**. Auf `e5de0e7` (E7) war der Job grün mit 288 · 0 · 0.
+* Die eine ungültige Mutation („D0 Kennzahl-Link ohne Filter“) passte seit E9 nicht mehr, weil `dashboard.js` jetzt
+  API-Filter in Ansichten übersetzt. Das Muster ist in `0d8ed0f` angepasst und wird lokal wieder erkannt. Damit sind es
+  **314 von 314** Mutationen. Der CI-Lauf auf diesem Stand steht noch aus.
+* Schon vorher war der CI-Job `mutation` von E2 bis E6 rot, ebenfalls wegen eines veralteten Musters („3b
+  Neuzuweisung“, in E7 behoben). Muster veralten, wenn Code umgebaut wird. Der ungültige Zähler macht das sichtbar,
+  bevor eine Schutzregel unbemerkt ungeprüft bleibt.
 
 ## 5. Fehlende Integrationen (nicht gebaut, nicht behauptet)
 
@@ -108,7 +117,7 @@ Benachrichtigungen läuft wie bisher über `ichq notifications-scan` (systemd-Ti
 
 ## 8. Nächste Schritte (Vorschlag)
 
-1. CI-Mutationsjob auf dem aktuellen Kopf grün sehen (Ergebnis steht aus), danach Review von PR #2. **Kein Merge ohne
+1. CI-Mutationsjob auf `0d8ed0f` bzw. dem Kopf grün sehen, danach Review von PR #2. **Kein Merge ohne
    Prüfung.**
 2. Vorlagenrechte und Abläufe (Abschluss, Fahrtenbuch, Reisen) mit einem Pilotkunden durchgehen.
 3. Steuerwerte nur mit Fundstelle als versionierte Daten (`docs/steuerwerte-pruefung.md`), danach Tor S.
