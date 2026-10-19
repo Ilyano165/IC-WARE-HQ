@@ -204,7 +204,7 @@ mutation "D0 Gelöschte Antwort schließt Rückfrage" "comments/questions.py" "a
 mutation "D0 Überfällig schließt heute ein" "tasks/service.py" "        teile.append(Task.due_date < f.due_before)|||        teile.append(Task.due_date <= f.due_before)" "$D0A"
 mutation "D0 Ohne-Zuständige-Filter wirkungslos" "tasks/service.py" "    if f.unassigned:|||    if False:" "$D0A"
 mutation "D0 Dokumentfilter nicht zugeordnet wirkungslos" "documents/service.py" "    if f.unlinked:|||    if False:" "$D0A"
-mutation "D0 Kennzahl-Link ohne Filter" "web/js/views/dashboard.js" "  return \`#\${basis}\${query(filter || {})}\`;|||  return \`#\${basis}\`;" "$D0B"
+mutation "D0 Kennzahl-Link ohne Filter" "web/js/views/dashboard.js" "  return \`#\${basis}\${query(f || {})}\`;|||  return \`#\${basis}\`;" "$D0B"
 # ---------- Betrieb: Virenprüfung + Installer/Launcher (ADR-015) ----------
 SCAN="tests/test_documents_scan.py"
 mutation "Scan: Fund gilt als sauber" "documents/scan.py" "        if antwort == \"stream: OK\":|||        if antwort == \"stream: OK\" or antwort.endswith(\" FOUND\"):" "$SCAN"
