@@ -23,6 +23,7 @@ from ichq.authz.service import Principal
 from ichq.core.errors import Conflict, NotFound, ValidationFailed
 from ichq.db.paging import SortKey, keyset
 from ichq.documents.models import Document
+from ichq.finance import sperre
 from ichq.finance.models_receipts import MAX_TEXT, Receipt
 from ichq.objects.models import ObjectRow
 from ichq.objects.service import ARCHIVE_GUARDS, clean_title, create_object, member, resolve
@@ -36,6 +37,8 @@ SORTS: dict[str, SortKey] = {
     "created_at": SortKey("created_at", ObjectRow.created_at, "ts"),
     "amount": SortKey("amount", Receipt.amount_minor, "int"),
 }
+BUCHUNG = {"expense_date", "amount_minor", "currency", "tax_rate_bp", "supplier_name", "category", "description",
+           "project"}                               # in einem abgeschlossenen Monat gesperrt (wie Trigger 0015)
 ARCHIVE_GUARDS["receipt"] = lambda _s, _o: "Ausgaben werden nicht archiviert — Fehlerfassung bitte stornieren"
 
 
@@ -85,6 +88,7 @@ def create(session: Session, principal: Principal, *, title: str, werte: dict[st
     r = Receipt(id=o.id, tenant_id=o.tenant_id, expense_date=werte.get("expense_date") or today,
                 amount_minor=werte["amount_minor"], currency=werte.get("currency") or currency)
     _setze(session, principal, r, werte, today)
+    sperre.pruefe(session, r.expense_date, r.paid_on)
     session.add(r)
     session.flush()
     if werte.get("document"):
@@ -115,7 +119,12 @@ def update(session: Session, principal: Principal, ref: str, changes: dict[str, 
     _pruefe(changes)
     if "title" in changes:
         o.title = clean_title(changes["title"])
+    alt_datum, alt_bezahlt = r.expense_date, r.paid_on
     _setze(session, principal, r, changes, today)
+    if BUCHUNG & changes.keys():
+        sperre.pruefe(session, alt_datum, r.expense_date)
+    if r.paid_on != alt_bezahlt:
+        sperre.pruefe(session, alt_bezahlt, r.paid_on)
     session.flush()
     activity(session, o.id, "receipt.updated", actor_membership_id=principal.membership_id,
              data={"fields": sorted(changes)})
@@ -149,6 +158,7 @@ def void(session: Session, principal: Principal, ref: str, reason: str) -> tuple
     grund = " ".join(reason.split())[:500]
     if not grund:
         raise ValidationFailed("Grund für das Stornieren fehlt")
+    sperre.pruefe(session, r.expense_date)
     jetzt = session.scalar(select(func.now()))
     r.voided_at, r.void_reason = jetzt, grund
     session.flush()

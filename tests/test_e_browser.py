@@ -240,3 +240,22 @@ def test_frist_ohne_quelle_und_vertrag_mit_kuendigungstermin(browser: Any, serve
     s.page.get_by_text("keine rechtliche Prüfung").first.wait_for()
     assert s.page.evaluate("window.__xss") is None
     s.sauber()
+
+
+def test_monatsabschluss_und_export(browser: Any, server: str, leute: dict[str, Any]) -> None:  # noqa: F811
+    s = Seite(browser, server)
+    s.anmelden("chefin@alpha.test")
+    s.gehe("Abschluss & Export")
+    s.page.get_by_text("kein DATEV-Format").wait_for()
+    s.page.get_by_role("button", name="Monat abschließen").click()
+    d = _dialog(s)
+    if d.locator("input[name=confirm_warnings]").count():
+        d.locator("input[name=confirm_warnings]").check()
+    d.get_by_role("button", name="Abschließen").click()
+    s.page.get_by_role("button", name="Wiedereröffnen").wait_for()
+    s.page.get_by_role("button", name="Export erstellen").click()
+    s.page.get_by_role("link", name="CSV").first.wait_for()
+    with s.page.expect_download() as laden:
+        s.page.get_by_role("link", name="CSV").first.click()
+    assert laden.value.suggested_filename.startswith("ichq-buchungen_")
+    s.sauber()

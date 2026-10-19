@@ -77,3 +77,24 @@ mutation "Vertrag: gekündigt änderbar" "contracts/service.py" "    if c.status
         raise Conflict(\"Gekündigter Vertrag" "$FV"
 mutation "Vertrag: Status über PATCH kündbar" "contracts/service.py" "    if w.get(\"status\") == \"terminated\":|||    if False:" "$FV"
 mutation "Vertrag: verpasster Termin in Kündigungsliste" "contracts/service.py" "if t.notice_deadline is not None and 0 <= (t.notice_deadline - today).days <= days:|||if t.notice_deadline is not None and (t.notice_deadline - today).days <= days:" "$FV"
+
+AB="tests/test_e7_closing_export.py"
+mutation "Abschluss: Sperre Ausgaben (Trigger)" "migrations/versions/0015_month_close_export.py" "          RAISE EXCEPTION 'ichq: Monat % ist abgeschlossen', to_char(OLD.expense_date, 'YYYY-MM');|||          NULL;" "$AB"
+mutation "Abschluss: Sperre Rechnungsdatum (Trigger)" "migrations/versions/0015_month_close_export.py" "        RAISE EXCEPTION 'ichq: Monat % ist abgeschlossen', to_char(NEW.issue_date, 'YYYY-MM');|||        NULL;" "$AB"
+mutation "Abschluss: Sperre Zahlungen (Trigger)" "migrations/versions/0015_month_close_export.py" "        RAISE EXCEPTION 'ichq: Monat der Zahlung ist abgeschlossen';
+      END IF;
+      IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;|||        NULL;
+      END IF;
+      IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;" "$AB"
+mutation "Abschluss: Sperre auch andere Firma" "migrations/versions/0015_month_close_export.py" "      SELECT d IS NOT NULL AND EXISTS (SELECT 1 FROM month_closes m WHERE m.tenant_id = t|||      SELECT d IS NOT NULL AND EXISTS (SELECT 1 FROM month_closes m WHERE true" "$AB"
+mutation "Abschluss: wiedereröffnet sperrt weiter" "migrations/versions/0015_month_close_export.py" "        AND m.period = date_trunc('month', d)::date AND m.reopened_at IS NULL)|||        AND m.period = date_trunc('month', d)::date)" "$AB"
+mutation "Abschluss: löschbar (Trigger)" "migrations/versions/0015_month_close_export.py" "        RAISE EXCEPTION 'ichq: Monatsabschlüsse werden nicht gelöscht';|||        RETURN OLD;" "$AB"
+mutation "Abschluss: Beleg nachreichen gesperrt (Service)" "finance/receipts.py" "    if BUCHUNG & changes.keys():|||    if True:" "$AB"
+mutation "Abschluss: Service prüft Sperre nicht" "finance/sperre.py" "        if geschlossen(session, d):|||        if False:" "$AB"
+mutation "Abschluss: Warnungen ohne Bestätigung" "finance/closing.py" "    if pruefung[\"warnings\"] and not confirm_warnings:|||    if False:" "$AB"
+mutation "Abschluss: laufender Monat abschließbar" "finance/closing.py" "    if p >= today.replace(day=1):|||    if False:" "$AB"
+mutation "Abschluss: Wiedereröffnen ohne Grund" "finance/closing.py" "    if len(grund) < 10:|||    if False:" "$AB"
+mutation "Export: CSV-Injection" "finance/export.py" "    return \"'\" + t if t.startswith(_GEFAEHRLICH) else t|||    return t" "$AB"
+mutation "Export: veränderbar (Trigger)" "migrations/versions/0015_month_close_export.py" "      RAISE EXCEPTION 'ichq: Exporte sind Historie und unveränderlich';|||      RETURN NEW;" "$AB"
+mutation "Export: Download ohne Protokoll" "api/v1/closing.py" "        audit(s, \"export.downloaded\"|||        (lambda *a, **k: None)(s, \"export.downloaded\"" "$AB"
+mutation "Export: Storno als fehlender Beleg" "finance/export.py" "        if not r.voided_at and beleg != \"complete\":|||        if beleg != \"complete\":" "$AB"

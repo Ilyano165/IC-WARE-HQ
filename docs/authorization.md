@@ -170,6 +170,11 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/documents/{ref}` | GET | permission | `files.read` |
 | `/api/v1/documents/{ref}/content` | GET | permission | `files.read` |
 | `/api/v1/documents/{ref}/review` | POST | permission | `files.update` |
+| `/api/v1/exports` | GET | permission | `finance.export` |
+| `/api/v1/exports` | POST | permission | `finance.export` |
+| `/api/v1/exports/{ref}` | GET | permission | `finance.export` |
+| `/api/v1/exports/{ref}/download` | GET | permission | `finance.export` |
+| `/api/v1/exports/{ref}/repeat` | POST | permission | `finance.export` |
 | `/api/v1/inquiries` | GET | permission | `customers.read` |
 | `/api/v1/inquiries` | POST | permission | `customers.create` |
 | `/api/v1/inquiries/{ref}` | GET | permission | `customers.read` |
@@ -230,6 +235,10 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/objects/{ref}/links` | POST | authenticated | angemeldet + Firma |
 | `/api/v1/objects/{ref}/restore` | POST | authenticated | angemeldet + Firma |
 | `/api/v1/objects/{ref}/tasks` | POST | permission | `tasks.create` |
+| `/api/v1/periods` | GET | permission | `finance.read` |
+| `/api/v1/periods/check` | GET | permission | `finance.read` |
+| `/api/v1/periods/close` | POST | permission | `finance.approve` |
+| `/api/v1/periods/reopen` | POST | permission | `finance.approve` |
 | `/api/v1/permissions` | GET | permission | `roles.read` |
 | `/api/v1/projects` | GET | permission | `projects.read` |
 | `/api/v1/projects` | POST | permission | `projects.create` |

@@ -20,6 +20,7 @@ import * as belege from "./views/belege.js";
 import * as liquiditaet from "./views/liquiditaet.js";
 import * as fristen from "./views/fristen.js";
 import * as vertraege from "./views/vertraege.js";
+import * as abschluss from "./views/abschluss.js";
 
 const app = $("#app");
 
@@ -45,6 +46,7 @@ route("/fristen", fristen.liste, "finance.read");
 route("/fristen/:ref", fristen.detail, "finance.read");
 route("/vertraege", vertraege.liste, "contracts.read");
 route("/vertraege/:ref", vertraege.detail, "contracts.read");
+route("/abschluss", abschluss.seite, "finance.read");
 route("/benachrichtigungen", inbox.benachrichtigungen);
 route("/suche", inbox.suche);
 route("/mitglieder", mitglieder.liste, "users.read");
@@ -69,6 +71,7 @@ const NAV = [
   { pfad: "/liquiditaet", text: "Liquidität", recht: "finance.read" },
   { pfad: "/fristen", text: "Fristen", recht: "finance.read" },
   { pfad: "/vertraege", text: "Verträge", recht: "contracts.read" },
+  { pfad: "/abschluss", text: "Abschluss & Export", recht: "finance.read" },
   { pfad: "/kunden", text: "Kunden", recht: "customers.read" },
   { pfad: "/anfragen", text: "Anfragen", recht: "customers.read" },
   { gruppe: "Verwaltung" },

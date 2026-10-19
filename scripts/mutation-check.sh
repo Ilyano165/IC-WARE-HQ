@@ -120,7 +120,7 @@ mutation "M3 Route mandantenblind (RLS) → IDOR-Generator" "migrations/versions
                            WITH CHECK" "tests/test_core_security.py"
 mutation "3a Fahrt über finance.read lesbar" "objects/registry.py" "_T(\"trip\", \"Fahrt\", \"receipts\", \"vehicles.read\",|||_T(\"trip\", \"Fahrt\", \"receipts\", \"finance.read\"," "tests/test_core_followups.py"
 mutation "3b Neuzuweisung behält automatische Freigabe" "tasks/service.py" "            drop_assignment_grant(session, principal, obj, alt_assignee)|||            pass" "tests/test_core_followups.py"
-mutation "3b Neuzuweisung entzieht auch manuelle Freigabe" "relations/service.py" "        ObjectGrant.source == AUTO)).rowcount|||        True)).rowcount" "tests/test_core_followups.py"
+mutation "3b Neuzuweisung entzieht auch manuelle Freigabe" "relations/service.py" "        ObjectGrant.source == source)).rowcount|||        True)).rowcount" "tests/test_core_followups.py"
 mutation "3b API-Entzug entfernt automatische Freigabe" "relations/service.py" "                                                  ObjectGrant.source == MANUAL)).rowcount|||                                                  True)).rowcount" "tests/test_core_followups.py"
 mutation "3c Historie-Trigger fehlt" "migrations/versions/0005_core_followups.py" "    CREATE TRIGGER trg_comments_history AFTER INSERT OR UPDATE ON comments
       FOR EACH ROW EXECUTE FUNCTION ichq_comment_history();|||    SELECT 1;" "tests/test_core_followups.py"

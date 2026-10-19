@@ -19,7 +19,7 @@ from ichq.activity.service import record as activity
 from ichq.audit.service import record as audit
 from ichq.authz.service import Principal
 from ichq.core.errors import Conflict, NotFound, ValidationFailed
-from ichq.finance import invoices
+from ichq.finance import invoices, sperre
 from ichq.finance.models_invoices import INVOICE_OPEN, Invoice, InvoiceFollowup, Payment
 from ichq.objects.models import ObjectRow
 from ichq.objects.service import create_object, resolve
@@ -53,6 +53,7 @@ def record(session: Session, principal: Principal, ref: str, *, amount_minor: in
                                "Überzahlungen sind nicht vorgesehen")
     if paid_on > today:
         raise ValidationFailed("paid_on darf nicht in der Zukunft liegen")
+    sperre.pruefe(session, paid_on)
     po = create_object(session, type_="payment", title=f"Zahlung zu {inv.number}",
                        actor_membership_id=principal.membership_id)
     pay = Payment(id=po.id, tenant_id=inv.tenant_id, invoice_id=inv.id, paid_on=paid_on, amount_minor=amount_minor,

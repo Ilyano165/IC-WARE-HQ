@@ -218,3 +218,38 @@ fälliger Wiedervorlage. Ein Kunde wird in der Antwort nur genannt, wenn der Auf
   gibt es nicht. Ein gekündigter Vertrag ist danach unveränderlich (409).
 * Neues Recht `contracts.create` (ADR-020 Nr. 14). Lesen und Ändern laufen über `contracts.read` / `contracts.update`
   und die Objektsichtbarkeit.
+
+## Monatsabschluss und Export
+
+| Methode | Pfad | Recht |
+| --- | --- | --- |
+| `GET` | `/api/v1/periods` | finance.read |
+| `GET` | `/api/v1/periods/check` | finance.read |
+| `POST` | `/api/v1/periods/close` | finance.approve |
+| `POST` | `/api/v1/periods/reopen` | finance.approve |
+| `GET` | `/api/v1/exports` | finance.export |
+| `POST` | `/api/v1/exports` | finance.export |
+| `GET` | `/api/v1/exports/{ref}` | finance.export |
+| `POST` | `/api/v1/exports/{ref}/repeat` | finance.export |
+| `GET` | `/api/v1/exports/{ref}/download` | finance.export |
+
+* **Prüfliste vor dem Abschluss** (`/periods/check?month=YYYY-MM`) zählt über alle Datensätze der Firma:
+  * Ausgaben im Monat und davon ohne geprüften Beleg,
+  * ausgestellte Rechnungen und Zahlungen,
+  * Rechnungsentwürfe,
+  * Dokumente in der Virenprüfung.
+
+  Warnungen blockieren nicht, müssen aber bestätigt werden (`confirm_warnings`, sonst 409). Sie werden mit dem
+  Abschluss gespeichert. Abschließen geht nur für vergangene Monate.
+* **Sperre in der Datenbank** (Trigger, Migration 0015): Im abgeschlossenen Monat lassen sich keine Rechnungsdaten
+  setzen oder ändern und keine Zahlungen erfassen oder ändern. Bei Ausgaben sind die Buchungsfelder gesperrt (Datum,
+  Betrag, Währung, Steuersatz, Lieferant, Kategorie, Beschreibung, Projekt, Storno). **Erlaubt bleibt:** Beleg
+  nachreichen, Vermerk/Wiedervorlage und im offenen Monat bezahlen. Statusänderungen ausgestellter Rechnungen durch
+  spätere Zahlungen sind ebenfalls erlaubt. Der Service lehnt vorher mit 409 und verständlichem Text ab.
+* **Wiedereröffnen** braucht `finance.approve` und einen Grund (mindestens 10 Zeichen) und landet im Audit
+  (`period.reopened`). Abschlüsse werden nie gelöscht. Ein erneuter Abschluss ist eine neue Zeile, die Historie zeigt
+  beide.
+* **Export:** Format in [`docs/export-format.md`](export-format.md), internes CSV, **keine DATEV-Kompatibilität**
+  (`datev_compatible: false`). Zeitraum höchstens 400 Tage. Exportiert wird über alle Datensätze der Firma.
+* Monate werden als Abfrage- bzw. Body-Parameter `month` übergeben, nicht als Pfad-ID. Sie sind keine Objekte und
+  unterliegen nur der Mandantentrennung (RLS).
