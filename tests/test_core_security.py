@@ -37,8 +37,43 @@ def _bestand(cw: CoreWorld, mid: Any) -> dict[str, str]:
         inv, _roh = invite(s, p, email=f"neu-{mid.hex[:8]}@extern.test", title=None)
     rolle = ok(c.post("/api/v1/roles", json={"name": f"IDOR {mid.hex[:6]}", "rank": 5,
                                              "permissions": ["tasks.read"]}), 201)
-    return {"task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"],
-            "member": cw.public_id(mid), "invitation": inv.public_id, "role": rolle["id"]}
+    kunde = ok(c.post("/api/v1/customers", json={"name": f"Geheim Kunde {mid.hex[:6]}", "allow_duplicate": True}), 201)
+    kontakt = ok(c.post(f"/api/v1/customers/{kunde['id']}/contacts", json={"name": "Geheim Kontakt"}), 201)
+    anfrage = ok(c.post("/api/v1/inquiries", json={"title": f"Geheim Anfrage {mid.hex[:6]}",
+                                                   "customer": kunde["id"]}), 201)
+    projekt = ok(c.post("/api/v1/projects", json={"name": f"Geheim Projekt {mid.hex[:6]}", "customer": kunde["id"]}), 201)
+    ok(c.put(f"/api/v1/projects/{projekt['id']}/members/{cw.public_id(mid)}", json={}))
+    zeit = ok(c.post(f"/api/v1/projects/{projekt['id']}/time-entries", json={"work_date": "2026-10-01",
+                                                                            "minutes": 30}), 201)
+    rech = ok(c.post("/api/v1/invoices", json={"customer": kunde["id"], "title": f"Geheim Rechnung {mid.hex[:6]}"}), 201)
+    pos = ok(c.post(f"/api/v1/invoices/{rech['id']}/lines", json={"description": "Geheim", "quantity_milli": 1000,
+                                                                  "unit_price_minor": 100, "tax_rate_bp": 0}), 201)
+    ausgestellt = ok(c.post("/api/v1/invoices", json={"customer": kunde["id"]}), 201)
+    ok(c.post(f"/api/v1/invoices/{ausgestellt['id']}/lines", json={"description": "x", "quantity_milli": 1000,
+                                                                   "unit_price_minor": 10000, "tax_rate_bp": 0}), 201)
+    ausgestellt = ok(c.post(f"/api/v1/invoices/{ausgestellt['id']}/issue", json={"due_date": "2099-01-01"}))
+    zahlung = ok(c.post(f"/api/v1/invoices/{ausgestellt['id']}/payments",
+                        json={"amount_minor": 100, "paid_on": ausgestellt["issue_date"]}), 201)["payments"][0]["id"]
+    ausgabe = ok(c.post("/api/v1/receipts", json={"title": f"Geheim Ausgabe {mid.hex[:6]}", "amount_minor": 100}), 201)
+    konto = ok(c.post("/api/v1/liquidity/accounts", json={"name": f"Geheim Konto {mid.hex[:6]}"}), 201)
+    ok(c.post(f"/api/v1/liquidity/accounts/{konto['id']}/balances", json={"as_of": "2026-10-01",
+                                                                         "balance_minor": 4242}), 201)
+    plan = ok(c.post("/api/v1/liquidity/forecasts", json={"expected_on": "2026-12-01", "amount_minor": 100,
+                                                          "label": f"Geheim Plan {mid.hex[:6]}"}), 201)
+    vertrag = ok(c.post("/api/v1/contracts", json={"title": f"Geheim Vertrag {mid.hex[:6]}"}), 201)
+    frist = ok(c.post("/api/v1/deadlines", json={"title": f"Geheim Frist {mid.hex[:6]}", "due_on": "2026-12-01"}), 201)
+    export = ok(c.post("/api/v1/exports", json={"period_from": "2026-10-01", "period_to": "2026-10-31"}), 201)
+    auto = ok(c.post("/api/v1/vehicles", json={"name": "Geheim", "license_plate": f"K-{mid.hex[:6]}"}), 201)
+    fahrt = ok(c.post("/api/v1/trips", json={"vehicle": auto["id"], "trip_date": "2026-10-01", "start_km": 1,
+                                             "end_km": 2, "purpose": "private"}), 201)
+    reise = ok(c.post("/api/v1/travels", json={"title": f"Geheim Reise {mid.hex[:6]}", "destination": "Bonn",
+                                               "start_date": "2026-11-01", "end_date": "2026-11-02"}), 201)
+    ok(c.post(f"/api/v1/travels/{reise['id']}/submit"))
+    return {"vehicle": auto["id"], "trip": fahrt["id"], "travel": reise["id"], "export": export["id"], "account": konto["id"], "item": plan["id"], "contract": vertrag["id"], "deadline": frist["id"], "task": t["id"], "document": d["id"], "comment": k["id"], "link": link["id"], "receipt": ausgabe["id"],
+            "invoice": rech["id"], "line": pos["id"], "issued": ausgestellt["id"], "payment": zahlung,
+            "member": cw.public_id(mid), "invitation": inv.public_id, "role": rolle["id"],
+            "customer": kunde["id"], "contact": kontakt["id"], "inquiry": anfrage["id"], "project": projekt["id"],
+            "entry": zeit["id"]}
 
 
 def _notification(cw: CoreWorld, engines: Engines, empfaenger: Any, tid: Any, absender: Any) -> str:
@@ -71,18 +106,65 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("PUT", "/api/v1/members/{member}/roles/{role}"): {},
     ("PUT", "/api/v1/members/{member}/overrides/{permission}"): {"effect": "deny"},
     ("PUT", "/api/v1/objects/{ref}/denies/{member}"): {},
+    ("POST", "/api/v1/objects/{ref}/archive"): {},
+    ("POST", "/api/v1/objects/{ref}/restore"): {},
+    # Fachmodule (ADR-020)
+    ("PATCH", "/api/v1/customers/{ref}"): {"name": "Übernommen"},
+    ("POST", "/api/v1/customers/{ref}/contacts"): {"name": "Eingeschleust"},
+    ("PATCH", "/api/v1/customers/{ref}/contacts/{contact}"): {"name": "Übernommen"},
+    ("POST", "/api/v1/customers/{ref}/merge"): {},                               # into wird eingesetzt
+    ("PATCH", "/api/v1/inquiries/{ref}"): {"title": "Übernommen", "status": "won"},
+    ("PATCH", "/api/v1/projects/{ref}"): {"name": "Übernommen", "status": "cancelled"},
+    ("PUT", "/api/v1/projects/{ref}/members/{member}"): {},
+    ("POST", "/api/v1/projects/{ref}/time-entries"): {"work_date": "2026-10-02", "minutes": 15},
+    ("PATCH", "/api/v1/invoices/{ref}"): {"notes": "Übernommen"},
+    ("POST", "/api/v1/invoices/{ref}/lines"): {"description": "x", "quantity_milli": 1000, "unit_price_minor": 1,
+                                               "tax_rate_bp": 0},
+    ("PATCH", "/api/v1/invoices/{ref}/lines/{line}"): {"unit_price_minor": 1},
+    ("POST", "/api/v1/invoices/{ref}/issue"): {"due_date": "2099-01-01"},
+    ("POST", "/api/v1/invoices/{ref}/dispatches"): {"action": "sent"},
+    ("POST", "/api/v1/invoices/{ref}/cancel"): {},
+    ("POST", "/api/v1/invoices/{ref}/payments"): {"amount_minor": 1, "paid_on": "2026-01-01"},
+    ("POST", "/api/v1/invoices/{ref}/payments/{payment}/reverse"): {},
+    ("POST", "/api/v1/invoices/{ref}/followups"): {"kind": "note"},
+    ("PATCH", "/api/v1/receipts/{ref}"): {"title": "Übernommen"},
+    ("PUT", "/api/v1/receipts/{ref}/document"): {},                              # document wird eingesetzt
+    ("POST", "/api/v1/receipts/{ref}/void"): {"reason": "Eingeschleust"},
+    ("PATCH", "/api/v1/liquidity/accounts/{account}"): {"name": "Übernommen"},
+    ("POST", "/api/v1/liquidity/accounts/{account}/balances"): {"as_of": "2026-10-01", "balance_minor": 1},
+    ("PATCH", "/api/v1/liquidity/forecasts/{item}"): {"label": "Übernommen"},
+    ("PATCH", "/api/v1/contracts/{ref}"): {"title": "Übernommen"},
+    ("POST", "/api/v1/contracts/{ref}/terminate"): {"terminated_on": "2026-10-01", "effective_on": "2026-12-31"},
+    ("PATCH", "/api/v1/deadlines/{ref}"): {"title": "Übernommen"},
+    ("POST", "/api/v1/deadlines/{ref}/complete"): {},
+    ("POST", "/api/v1/deadlines/{ref}/cancel"): {"note": "Eingeschleust"},
+    ("POST", "/api/v1/exports/{ref}/repeat"): {},
+    ("PATCH", "/api/v1/vehicles/{vehicle}"): {"name": "Übernommen"},
+    ("POST", "/api/v1/trips/{ref}/corrections"): {"end_km": 3, "change_reason": "Eingeschleust"},
+    ("POST", "/api/v1/trips/{ref}/void"): {"reason": "Eingeschleust"},
+    ("PATCH", "/api/v1/travels/{ref}"): {"destination": "Übernommen"},
+    ("POST", "/api/v1/travels/{ref}/submit"): {},
+    ("POST", "/api/v1/travels/{ref}/decision"): {"approve": True},
+    ("POST", "/api/v1/travels/{ref}/cancel"): {},
 }
 
 
 def _ref_fuer(pfad: str, param: str, refs: dict[str, str]) -> str:
-    if param in ("member", "role"):
+    if param in ("member", "role", "contact", "entry", "line", "payment", "account", "item", "vehicle"):
         return refs[param]
+    if re.search(r"/invoices/\{ref\}/(payments|followups|dispatches|cancel)", pfad):
+        return refs["issued"]                          # nur auf ausgestellte Rechnungen sinnvoll
     if param == "permission":
         return "tasks.read"
     for praefix, art in (("/api/v1/invitations/", "invitation"), ("/api/v1/tasks/", "task"),
                          ("/api/v1/comments/", "comment"),
                          ("/api/v1/documents/", "document"), ("/api/v1/notifications/", "notification"),
-                         ("/api/v1/links/", "link"), ("/api/v1/objects/", "task")):
+                         ("/api/v1/links/", "link"), ("/api/v1/objects/", "task"),
+                         ("/api/v1/customers/", "customer"), ("/api/v1/inquiries/", "inquiry"),
+                         ("/api/v1/projects/", "project"), ("/api/v1/invoices/", "invoice"),
+                         ("/api/v1/receipts/", "receipt"), ("/api/v1/contracts/", "contract"),
+                         ("/api/v1/deadlines/", "deadline"), ("/api/v1/exports/", "export"),
+                         ("/api/v1/trips/", "trip"), ("/api/v1/travels/", "travel")):
         if pfad.startswith(praefix):
             return refs[art]
     raise AssertionError(f"Route {pfad} ist im IDOR-Test nicht abgedeckt — Zuordnung ergänzen")
@@ -102,7 +184,8 @@ def _aufrufe(settings: Settings, engines: Engines, refs: dict[str, str], ziel: d
             body = dict(BODIES.get((m, pfad), {}))
             if m in ("POST", "PATCH", "PUT") and (m, pfad) not in BODIES and not pfad.endswith("/read"):
                 raise AssertionError(f"{m} {pfad}: gültiger Body für den IDOR-Test fehlt")
-            body.update({k: ziel[v] for k, v in (("target", "task"), ("member", "member"), ("document", "document"))
+            body.update({k: ziel[v] for k, v in (("target", "task"), ("member", "member"), ("document", "document"),
+                                                 ("into", "customer"))
                          if (m, pfad) in BODIES and k in _felder(m, pfad)})
             faelle.append((m, pfad, url, body))
     return faelle
@@ -110,7 +193,9 @@ def _aufrufe(settings: Settings, engines: Engines, refs: dict[str, str], ziel: d
 
 def _felder(m: str, pfad: str) -> set[str]:
     return {("POST", "/api/v1/objects/{ref}/links"): {"target"}, ("POST", "/api/v1/objects/{ref}/grants"): {"member"},
-            ("POST", "/api/v1/tasks/{ref}/attachments"): {"document"}}.get((m, pfad), set())
+            ("POST", "/api/v1/tasks/{ref}/attachments"): {"document"},
+            ("POST", "/api/v1/customers/{ref}/merge"): {"into"},
+            ("PUT", "/api/v1/receipts/{ref}/document"): {"document"}}.get((m, pfad), set())
 
 
 def test_idor_jede_route_mit_id_liefert_404_fuer_fremde_firma(cw: CoreWorld, settings: Settings,
@@ -152,7 +237,14 @@ def test_fremde_ids_in_listen_filtern_und_suche_unsichtbar(cw: CoreWorld) -> Non
     c = cw.client(cw.admin_a)
     for pfad in ("/api/v1/tasks?limit=100", "/api/v1/documents?limit=100", "/api/v1/activities?limit=100",
                  "/api/v1/audit?limit=100", "/api/v1/notifications", "/api/v1/members?limit=100",
-                 "/api/v1/search?q=Geheim&per_group=20"):
+                 "/api/v1/search?q=Geheim&per_group=20", "/api/v1/customers?limit=100", "/api/v1/inquiries?limit=100",
+                 "/api/v1/customers?q=Geheim", "/api/v1/customers/duplicates?name=Geheim%20Kunde",
+                 "/api/v1/projects?limit=100", "/api/v1/projects?member=me", "/api/v1/invoices?limit=100",
+                 "/api/v1/invoices?open=true", "/api/v1/invoices?q=Geheim", "/api/v1/receipts?limit=100",
+                 "/api/v1/receipts?evidence=missing", "/api/v1/liquidity", "/api/v1/liquidity/accounts",
+                 "/api/v1/liquidity/forecasts", "/api/v1/contracts?limit=100", "/api/v1/contracts/notice-due",
+                 "/api/v1/deadlines?limit=100", "/api/v1/exports", "/api/v1/periods",
+                 "/api/v1/vehicles", "/api/v1/trips", "/api/v1/travels", "/api/v1/search?q=Vertrag&per_group=20"):
         r = ok(c.get(pfad))
         text = str(r)
         for wert in fremde.values():

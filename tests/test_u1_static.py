@@ -100,3 +100,21 @@ def test_symlink_aus_dem_app_ordner_wird_nicht_ausgeliefert(c, tmp_path: Path) -
         assert r.status_code == 404 and "GEHEIMNIS" not in r.text
     finally:
         link.unlink()
+
+
+def test_web_app_manifest_installierbar(c) -> None:  # type: ignore[no-untyped-def]
+    """„App installieren" in Edge/Chrome, Startbildschirm auf Handy/Tablet (ADR-017): Manifest + Icons ausgeliefert."""
+    import json
+    assert '<link rel="manifest" href="manifest.webmanifest">' in c.get("/app/").text
+    r = c.get("/app/manifest.webmanifest")
+    assert r.status_code == 200 and r.headers["content-type"] == "application/manifest+json"
+    m = json.loads(r.text)
+    assert m["start_url"] == m["scope"] == "/app/" and m["display"] == "standalone" and m["name"] == "IC WARE HQ"
+    groessen = set()
+    for icon in m["icons"]:
+        bild = c.get(f"/app/{icon['src']}")
+        assert bild.status_code == 200 and bild.headers["content-type"] == "image/png", icon
+        breite, hoehe = int.from_bytes(bild.content[16:20], "big"), int.from_bytes(bild.content[20:24], "big")
+        assert icon["sizes"] == f"{breite}x{hoehe}", icon                  # Angabe = echte Bildgröße (PNG-Kopf)
+        groessen.add(icon["sizes"])
+    assert {"192x192", "512x512"} <= groessen

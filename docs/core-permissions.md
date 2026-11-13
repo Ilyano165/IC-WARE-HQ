@@ -60,6 +60,8 @@ Bestehende Rechte werden für Objekttypen wiederverwendet (Tabelle in `docs/core
 | Methode | Pfad | Marke / Recht |
 | --- | --- | --- |
 | `GET` | `/api/v1/objects/{ref}` | authenticated (+ Sichtbarkeit) |
+| `POST` | `/api/v1/objects/{ref}/archive` | authenticated (+ Änderungsrecht des Typs; Fachmodule können es verbieten) |
+| `POST` | `/api/v1/objects/{ref}/restore` | authenticated (+ Änderungsrecht des Typs) |
 | `GET` | `/api/v1/objects/{ref}/links` | authenticated (+ Sichtbarkeit beider Seiten) |
 | `POST` | `/api/v1/objects/{ref}/links` | authenticated (+ Änderungsrecht Quelle) |
 | `DELETE` | `/api/v1/links/{ref}` | authenticated (+ Änderungsrecht Quelle) |

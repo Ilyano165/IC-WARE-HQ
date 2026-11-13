@@ -119,8 +119,9 @@ def test_ueberfaellige_aufgaben_regel(cw: CoreWorld, engines: Engines) -> None:
     ok(c.post("/api/v1/tasks", json={"title": "Alt", "due_date": "2026-01-01", "assignee": cw.public_id(cw.leser)}), 201)
     ok(c.post("/api/v1/tasks", json={"title": "Neu", "due_date": "2027-01-01", "assignee": cw.public_id(cw.leser)}), 201)
     with tenant_transaction(engines.app, cw.a) as s:
-        assert handlers.scan(s, date(2026, 10, 8)) == {"task.overdue": 1}
-        assert handlers.scan(s, date(2026, 10, 8)) == {"task.overdue": 0}          # dedup je Fälligkeit
+        leer = {"invoice.overdue": 0, "contract.expiring": 0, "deadline.reminder": 0, "travel.submitted": 0}
+        assert handlers.scan(s, date(2026, 10, 8)) == {"task.overdue": 1, **leer}
+        assert handlers.scan(s, date(2026, 10, 8)) == {"task.overdue": 0, **leer}  # dedup je Fälligkeit
     assert [n["title"] for n in _inbox(cw, cw.leser) if n["kind"] == "task.overdue"] == ["Überfällig: Alt"]
 
 

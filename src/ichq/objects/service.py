@@ -8,17 +8,18 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ichq.authz.service import Principal
-from ichq.core.errors import NotFound, ValidationFailed
+from ichq.core.errors import Conflict, NotFound, PermissionDenied, ValidationFailed
 from ichq.db.session import current_tenant_id
 from ichq.objects.models import ObjectRow
 from ichq.objects.registry import OBJECT_TYPES
-from ichq.objects.visibility import visible_clause
+from ichq.objects.visibility import can_update, visible_clause
 
 PUBLIC_ID = re.compile(r"^[0-9a-f]{32}$")
 MAX_TITLE = 300
@@ -107,3 +108,24 @@ def member_refs(session: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, dict[s
         SELECT m.id, m.public_id, u.display_name FROM memberships m JOIN users u ON u.id = m.user_id
         WHERE m.id = ANY(:ids)"""), {"ids": list(ids)}).all()
     return {r.id: {"id": r.public_id, "display_name": r.display_name} for r in rows}
+
+
+# Fachmodule dürfen das Archivieren ihres Typs verbieten (z. B. ausgestellte Rechnung) — sie registrieren sich beim
+# Import (höhere Schicht → niedrigere Registry). Rückgabe: Begründung oder None.
+ARCHIVE_GUARDS: dict[str, Callable[[Session, ObjectRow], str | None]] = {}
+
+
+def set_archived(session: Session, principal: Principal, ref: str, archived: bool) -> ObjectRow:
+    """Archivieren = aus den Standardlisten nehmen, nichts löschen. Braucht das Änderungsrecht des Typs."""
+    obj = resolve(session, principal, ref)
+    if not can_update(principal, obj):
+        raise PermissionDenied(f"Fehlendes Recht: {OBJECT_TYPES[obj.type].update}")
+    if archived == (obj.archived_at is not None):
+        return obj
+    waechter = ARCHIVE_GUARDS.get(obj.type)
+    grund = waechter(session, obj) if (waechter and archived) else None
+    if grund:
+        raise Conflict(grund)
+    obj.archived_at = session.scalar(select(func.now())) if archived else None
+    session.flush()
+    return obj

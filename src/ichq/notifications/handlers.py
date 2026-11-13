@@ -17,6 +17,7 @@ from ichq.authz.service import decide
 from ichq.comments.models import Comment
 from ichq.comments.service import mentions_of
 from ichq.jobs.worker import HANDLERS, Job, handler
+from ichq.notifications import fach
 from ichq.notifications.service import deliver
 from ichq.objects.service import by_id
 from ichq.objects.visibility import principal_for_membership
@@ -94,9 +95,8 @@ def _ueberfaellige_aufgaben(session: Session, heute: date) -> int:
     return n
 
 
-# Regeln für „Rechnung seit 14 Tagen überfällig" und „Vertrag läuft in 30 Tagen aus" werden hier ergänzt,
-# sobald es Rechnungen und Verträge gibt (Arten in KINDS sind reserviert).
-RULES: dict[str, Rule] = {"task.overdue": _ueberfaellige_aufgaben}
+# Fachmodule (Rechnungen, Verträge, Fristen, Reisen): notifications/fach.py
+RULES: dict[str, Rule] = {"task.overdue": _ueberfaellige_aufgaben, **fach.RULES}
 
 
 def scan(session: Session, heute: date) -> dict[str, int]:

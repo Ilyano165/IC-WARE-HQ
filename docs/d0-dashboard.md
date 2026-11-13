@@ -64,7 +64,7 @@ bestehende Vorlagen-Rollen werden nie überschrieben (Firmen passen sie selbst a
 | `chat` | create, moderate, read | create, moderate, read | create, read | — |
 | `comments` | create, moderate, read | create, moderate, read | create, read | create, read |
 | `company` | read, update | read, update | read | read |
-| `contracts` | read, update | read, update | — | read |
+| `contracts` | create, read, update | create, read, update | — | read |
 | `customers` | create, delete, export, read, update | create, delete, export, read, update | — | — |
 | `dashboard` | read | read | read | read |
 | `files` | delete, read, share, update, upload | delete, read, share, update, upload | read, upload | read |
@@ -77,9 +77,9 @@ bestehende Vorlagen-Rollen werden nie überschrieben (Firmen passen sie selbst a
 | `settings` | read, update | read, update | — | — |
 | `suppliers` | read, update | read, update | — | read |
 | `tasks` | assign, create, delete, read, update | assign, create, delete, read, update | create, read, update | create, read |
-| `travel` | read, update | read, update | read, update | read |
+| `travel` | approve, create, read, update | approve, create, read, update | create, read, update | read |
 | `users` | create, deactivate, override, read, update | create, read | — | — |
-| `vehicles` | read, update | read, update | read, update | read |
+| `vehicles` | create, read, update | create, read, update | read, update | read |
 <!-- vorlagen:end -->
 
 Begründung je Vorlage (D0-Auftrag, Abschnitt 2):

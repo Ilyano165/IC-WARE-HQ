@@ -120,8 +120,28 @@ def run_once(engines: Engines, limit: int = 20) -> RunResult:
     return RunResult(claimed=len(jobs), **zaehler)
 
 
-def run_forever(engines: Engines, poll_seconds: float = 1.0) -> None:  # pragma: no cover - Endlosschleife
+def run_forever(engines: Engines, poll_seconds: float = 1.0,
+                nebenher: Callable[[], int] | None = None) -> None:  # pragma: no cover - Endlosschleife
+    """``nebenher``: weitere Arbeit je Runde (Mailversand), gibt die Zahl erledigter Einträge zurück."""
     log.info("worker_gestartet")
     while True:
-        if run_once(engines).claimed == 0:
+        arbeit = run_once(engines).claimed
+        if nebenher is not None:
+            try:
+                arbeit += nebenher()
+            except Exception as e:   # Mailversand darf die Outbox-Verarbeitung nie anhalten
+                log.error("worker_nebenarbeit_fehler", extra={"exc_type": e.__class__.__name__})
+        heartbeat()
+        if arbeit == 0:
             time.sleep(poll_seconds)
+
+
+HEARTBEAT = "/tmp/ichq-worker.heartbeat"   # noqa: S108 — nur Lebenszeichen für den Container-Healthcheck
+
+
+def heartbeat(pfad: str = HEARTBEAT) -> None:
+    try:
+        with open(pfad, "w") as f:
+            f.write(str(int(time.time())))
+    except OSError:
+        pass

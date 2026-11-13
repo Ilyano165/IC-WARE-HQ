@@ -12,6 +12,17 @@ import * as mitglieder from "./views/mitglieder.js";
 import * as rollen from "./views/rollen.js";
 import * as verwaltung from "./views/verwaltung.js";
 import * as konto from "./views/konto.js";
+import * as kunden from "./views/kunden.js";
+import * as anfragen from "./views/anfragen.js";
+import * as projekte from "./views/projekte.js";
+import * as rechnungen from "./views/rechnungen.js";
+import * as belege from "./views/belege.js";
+import * as liquiditaet from "./views/liquiditaet.js";
+import * as fristen from "./views/fristen.js";
+import * as vertraege from "./views/vertraege.js";
+import * as abschluss from "./views/abschluss.js";
+import * as fahrtenbuch from "./views/fahrtenbuch.js";
+import * as reisen from "./views/reisen.js";
 
 const app = $("#app");
 
@@ -21,6 +32,27 @@ route("/aufgaben", aufgaben.liste, "tasks.read");
 route("/aufgaben/:ref", aufgaben.detail, "tasks.read");
 route("/dokumente", dokumente.liste, "files.read");
 route("/dokumente/:ref", dokumente.detail, "files.read");
+route("/kunden", kunden.liste, "customers.read");
+route("/kunden/:ref", kunden.detail, "customers.read");
+route("/anfragen", anfragen.liste, "customers.read");
+route("/anfragen/:ref", anfragen.detail, "customers.read");
+route("/projekte", projekte.liste, "projects.read");
+route("/projekte/:ref", projekte.detail, "projects.read");
+route("/rechnungen", rechnungen.liste, "invoices.read");
+route("/rechnungen/:ref", rechnungen.detail, "invoices.read");
+route("/rechnungen/:ref/druck", rechnungen.druck, "invoices.read");
+route("/belege", belege.liste, "finance.read");
+route("/belege/:ref", belege.detail, "finance.read");
+route("/liquiditaet", liquiditaet.seite, "finance.read");
+route("/fristen", fristen.liste, "finance.read");
+route("/fristen/:ref", fristen.detail, "finance.read");
+route("/vertraege", vertraege.liste, "contracts.read");
+route("/vertraege/:ref", vertraege.detail, "contracts.read");
+route("/abschluss", abschluss.seite, "finance.read");
+route("/fahrtenbuch", fahrtenbuch.liste, "vehicles.read");
+route("/fahrtenbuch/:ref", fahrtenbuch.detail, "vehicles.read");
+route("/reisen", reisen.liste, "travel.read");
+route("/reisen/:ref", reisen.detail, "travel.read");
 route("/benachrichtigungen", inbox.benachrichtigungen);
 route("/suche", inbox.suche);
 route("/mitglieder", mitglieder.liste, "users.read");
@@ -38,6 +70,18 @@ const NAV = [
   { pfad: "/dokumente", text: "Dokumente", recht: "files.read" },
   { pfad: "/rueckfragen", text: "Rückfragen", recht: "comments.read" },
   { pfad: "/benachrichtigungen", text: "Benachrichtigungen" },
+  { gruppe: "Geschäft" },
+  { pfad: "/projekte", text: "Projekte", recht: "projects.read" },
+  { pfad: "/rechnungen", text: "Rechnungen", recht: "invoices.read" },
+  { pfad: "/belege", text: "Ausgaben & Belege", recht: "finance.read" },
+  { pfad: "/liquiditaet", text: "Liquidität", recht: "finance.read" },
+  { pfad: "/fristen", text: "Fristen", recht: "finance.read" },
+  { pfad: "/vertraege", text: "Verträge", recht: "contracts.read" },
+  { pfad: "/abschluss", text: "Abschluss & Export", recht: "finance.read" },
+  { pfad: "/fahrtenbuch", text: "Fahrtenbuch", recht: "vehicles.read" },
+  { pfad: "/reisen", text: "Dienstreisen", recht: "travel.read" },
+  { pfad: "/kunden", text: "Kunden", recht: "customers.read" },
+  { pfad: "/anfragen", text: "Anfragen", recht: "customers.read" },
   { gruppe: "Verwaltung" },
   { pfad: "/mitglieder", text: "Mitglieder", recht: "users.read" },
   { pfad: "/rollen", text: "Rollen & Rechte", recht: "roles.read" },
@@ -70,16 +114,23 @@ function shell() {
   const glocke = h("a", { class: "btn btn--ghost btn--sm bell", href: "#/benachrichtigungen", "aria-label": "Benachrichtigungen" },
     "Mitteilungen", h("span", { class: "badge", id: "ungelesen", hidden: true }, "0"));
   const name = state.sitzung.user.display_name;
+  const schliessen = () => { huelle.classList.remove("nav-open"); menue.setAttribute("aria-expanded", "false"); };
+  const menue = h("button", { class: "btn btn--ghost btn--sm menu-btn", type: "button", "aria-controls": "seite",
+    "aria-expanded": "false", on: { click: () => {
+      const offen = huelle.classList.toggle("nav-open"); menue.setAttribute("aria-expanded", String(offen)); } } }, "Menü");
   const huelle = h("div", { class: "shell" },
-    h("aside", { class: "side", id: "seite" }, marke("HQ"), navigation(),
+    h("div", { class: "nav-backdrop", on: { click: () => schliessen() } }),
+    h("aside", { class: "side", id: "seite" },
+      h("button", { class: "btn btn--ghost btn--sm menu-close", type: "button", "aria-label": "Menü schließen",
+        on: { click: () => schliessen() } }, "Schließen"),
+      marke("HQ"), navigation(),
       h("div", { class: "tenant" }, h("div", { class: "muted small" }, "Firma"), h("div", {}, state.firma || "—"),
         state.sitzung.memberships.length > 1
           ? h("button", { class: "btn btn--ghost btn--sm", type: "button", on: { click: () => anmeldung.firmenwahl(app, state.sitzung, start, true) } }, "Firma wechseln")
           : null)),
     h("div", { class: "main" },
       h("header", { class: "top" },
-        h("button", { class: "btn btn--ghost btn--sm menu-btn", type: "button", "aria-controls": "seite",
-          on: { click: () => huelle.classList.toggle("nav-open") } }, "Menü"),
+        menue,
         state.sitzung.memberships.length > 1
           ? h("button", { class: "btn btn--ghost btn--sm firma", type: "button", title: "Firma wechseln",
             on: { click: () => anmeldung.firmenwahl(app, state.sitzung, start, true) } }, state.firma || "Firma")
@@ -89,7 +140,8 @@ function shell() {
         h("a", { class: "who-name small", href: "#/konto", title: "Konto & Sicherheit" }, name),
         h("button", { class: "btn btn--ghost btn--sm", type: "button", on: { click: abmelden } }, "Abmelden")),
       h("div", { class: "content", id: "inhalt" })));
-  huelle.addEventListener("click", (e) => { if (e.target.closest(".nav a")) huelle.classList.remove("nav-open"); });
+  huelle.addEventListener("click", (e) => { if (e.target.closest(".nav a")) schliessen(); });
+  huelle.addEventListener("keydown", (e) => { if (e.key === "Escape" && huelle.classList.contains("nav-open")) { schliessen(); menue.focus(); } });
   ersetze(app, huelle);
 }
 
@@ -115,7 +167,8 @@ async function zeige() {
   const r = finde(pfad);
   if (!r) { ersetze(inhalt, h("div", { class: "view" }, h("h1", {}, "Nicht gefunden"), h("p", { class: "muted" }, "Diese Seite gibt es nicht."))); return; }
   if (r.recht && !darf(r.recht)) {
-    ersetze(inhalt, h("div", { class: "view" }, h("h1", {}, "Keine Berechtigung"), h("p", { class: "muted" }, `Dafür fehlt das Recht ${r.recht}.`)));
+    ersetze(inhalt, h("div", { class: "view" }, h("h1", {}, "Keine Berechtigung"),
+      h("p", { class: "muted" }, "Für diese Seite fehlt die Berechtigung. Wende dich an den Administrator deiner Firma.")));
     return;
   }
   // Jeder Seitenwechsel rendert in einen EIGENEN Container. Kommt eine langsame, ältere Ansicht erst nach einem
@@ -130,7 +183,15 @@ async function zeige() {
   if (ziel.isConnected) ungelesen();
 }
 
+let startLaeuft = false;   // Ereignisse aus start() selbst lösen keinen zweiten Start aus
+
 export async function start() {
+  if (startLaeuft) return;
+  startLaeuft = true;
+  try { await starte(); } finally { startLaeuft = false; }
+}
+
+async function starte() {
   const art = new URLSearchParams(location.search).get("v");
   const token = (/token=([A-Za-z0-9_-]+)/.exec(location.hash) || [])[1];
   if ((art === "einladung" || art === "passwort-neu") && token) {
@@ -159,5 +220,6 @@ export async function start() {
 
 window.addEventListener("hashchange", zeige);
 window.addEventListener("ichq:ungelesen", ungelesen);
+window.addEventListener("ichq:firma-weg", () => { if ($("#inhalt")) { toast("Kein Zugang mehr zu dieser Firma.", "error"); start(); } });
 window.addEventListener("ichq:abgemeldet", () => { if ($("#inhalt")) { toast("Sitzung beendet — bitte neu anmelden.", "error"); start(); } });
 start().catch((e) => ersetze(app, h("div", { class: "gate" }, alertBox(meldung(e)))));

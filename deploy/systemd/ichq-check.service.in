@@ -1,0 +1,10 @@
+# IC WARE HQ — Betriebsprüfung (Dienste, HTTPS/Zertifikat, Speicher, Jobs, Mail, Sicherung). Probleme ⇒ Alarm-Mail.
+[Unit]
+Description=IC WARE HQ: Betriebsprüfung
+After=docker.service ichq.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=@ROOT@/deploy/hq check --alert
+TimeoutStartSec=10min

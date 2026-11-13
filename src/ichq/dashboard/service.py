@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+import ichq.dashboard.fach  # registriert die Widgets der Fachmodule
 import ichq.dashboard.loaders  # noqa: F401  — registriert die Widgets
 from ichq.authz.service import Principal, decide
 from ichq.core.errors import NotFound
@@ -17,8 +18,9 @@ from ichq.dashboard.registry import PLANNED, WIDGETS, Context
 
 log = logging.getLogger("ichq.dashboard")
 
-REIHENFOLGE = ("warnings", "my_tasks", "questions", "notifications", "documents", "team_tasks", "company",
-               "activity")
+REIHENFOLGE = ("warnings", "my_tasks", "questions", "notifications", "liquidity", "open_invoices", "missing_receipts",
+               "tax_deadlines", "month_close", "travel", "contracts", "projects", "project_profitability", "crm",
+               "trips", "documents", "team_tasks", "company", "activity")
 
 
 def erlaubt(p: Principal, requires: tuple[str, ...]) -> bool:

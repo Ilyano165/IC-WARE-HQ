@@ -1,0 +1,57 @@
+# Reverse Proxy im Tunnel-Betrieb (ADR-018): Cloudflare beendet TLS für die Besucher, cloudflared bringt die Anfragen
+# über eine AUSGEHENDE Verbindung hierher. Kein offener Port am Router, kein Zertifikat auf diesem Rechner.
+# Umgebung: ICHQ_DOMAIN. Nur cloudflared (feste Adresse im Netz „tunnel", docker-compose.yml) gilt als vertrauenswürdig:
+# nur von dort wird die echte Besucher-IP aus Cf-Connecting-Ip übernommen — sonst wäre die Drosselung umgehbar.
+{
+	http_port {$ICHQ_HTTP_PORT:80}
+	admin off
+	auto_https off
+	servers {
+		trusted_proxies static 172.31.250.10/32
+		client_ip_headers Cf-Connecting-Ip
+	}
+	log default {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "\?.*$" "?[REDACTED]"
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+			}
+		}
+	}
+}
+
+http://{$ICHQ_DOMAIN} {
+	# Besucher kam per http:// bei Cloudflare an → auf https:// umleiten (Cookies sind „Secure")
+	@unverschluesselt header X-Forwarded-Proto http
+	redir @unverschluesselt https://{host}{uri} 308
+	encode zstd gzip
+	request_body {
+		max_size 25MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	reverse_proxy {$ICHQ_UPSTREAM:app:8000} {
+		# Genau EINE Adresse an die App: die geprüfte Besucher-IP (von cloudflared) bzw. die direkte Gegenstelle
+		header_up X-Forwarded-For {client_ip}
+		header_up X-Forwarded-Proto https
+		health_uri /readiness
+		health_interval 5s
+		health_timeout 3s
+	}
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "\?.*$" "?[REDACTED]"
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+			}
+		}
+	}
+}

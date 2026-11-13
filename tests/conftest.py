@@ -122,7 +122,7 @@ def _clean(request: pytest.FixtureRequest) -> Iterator[None]:
     with _admin(name) as c:
         # replica-Modus schaltet die Nur-anhängen-Trigger nur für diese Bereinigung ab
         c.execute("SET session_replication_role = replica")
-        c.execute("TRUNCATE outbox_events, audit_events, platform_audit_events, membership_roles, "
+        c.execute("TRUNCATE mail_outbox, outbox_events, audit_events, platform_audit_events, membership_roles, "
                   "role_permissions, roles, memberships, auth_sessions, password_reset_tokens, recovery_codes, "
                   "login_attempts, auth_events, users, tenants CASCADE")
 

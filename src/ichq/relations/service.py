@@ -91,7 +91,8 @@ def links_of(session: Session, principal: Principal, obj: ObjectRow) -> list[dic
     return ergebnis[:MAX_LINKS]
 
 
-MANUAL, AUTO = "manual", "task_assignment"
+MANUAL, AUTO, TEAM = "manual", "task_assignment", "project_team"
+AUTOMATISCH = (AUTO, TEAM)
 
 
 def grant(session: Session, principal: Principal, obj: ObjectRow, m: Member) -> bool:
@@ -108,27 +109,33 @@ def grant(session: Session, principal: Principal, obj: ObjectRow, m: Member) -> 
     return True
 
 
-def grant_for_assignment(session: Session, principal: Principal, obj: ObjectRow, m: Member) -> None:
-    """Automatische Freigabe, gebunden an die aktuelle Zuweisung. Unabhängig von manuellen Freigaben."""
-    if session.get(ObjectGrant, (obj.id, m.id, AUTO)) is not None:
+def grant_for_assignment(session: Session, principal: Principal, obj: ObjectRow, m: Member,
+                         source: str = AUTO) -> None:
+    """Automatische Freigabe, gebunden an die aktuelle Zuweisung (Aufgabe) bzw. Teamzugehörigkeit (Projekt).
+    Unabhängig von manuellen Freigaben."""
+    if source not in AUTOMATISCH:
+        raise ValueError(f"Keine automatische Freigabequelle: {source}")
+    if session.get(ObjectGrant, (obj.id, m.id, source)) is not None:
         return
     session.add(ObjectGrant(tenant_id=current_tenant_id(session), object_id=obj.id, membership_id=m.id,
-                            source=AUTO, granted_by_membership_id=principal.membership_id))
+                            source=source, granted_by_membership_id=principal.membership_id))
     session.flush()
     audit(session, "object.shared", actor_membership_id=principal.membership_id, target_type=obj.type,
-          target_id=obj.public_id, data={"member": m.public_id, "source": AUTO})
+          target_id=obj.public_id, data={"member": m.public_id, "source": source})
 
 
 def drop_assignment_grant(session: Session, principal: Principal, obj: ObjectRow,
-                          membership_id: uuid.UUID) -> bool:
-    """Bei Neuzuweisung/Entzug: NUR die automatische Freigabe der bisherigen Person entfernen.
+                          membership_id: uuid.UUID, source: str = AUTO) -> bool:
+    """Bei Neuzuweisung/Entzug: NUR die automatische Freigabe dieser Quelle entfernen.
     Eine manuelle Freigabe derselben Person bleibt bestehen."""
+    if source not in AUTOMATISCH:
+        raise ValueError(f"Keine automatische Freigabequelle: {source}")
     n = session.execute(delete(ObjectGrant).where(
         ObjectGrant.object_id == obj.id, ObjectGrant.membership_id == membership_id,
-        ObjectGrant.source == AUTO)).rowcount  # type: ignore[attr-defined]
+        ObjectGrant.source == source)).rowcount  # type: ignore[attr-defined]
     if n:
         audit(session, "object.unshared", actor_membership_id=principal.membership_id, target_type=obj.type,
-              target_id=obj.public_id, data={"source": AUTO, "reason": "reassigned"})
+              target_id=obj.public_id, data={"source": source, "reason": "reassigned"})
     return bool(n)
 
 

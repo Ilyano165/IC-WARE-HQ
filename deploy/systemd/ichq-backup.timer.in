@@ -1,0 +1,11 @@
+# IC WARE HQ — Sicherung alle 6 Stunden (höchstens 6 h Datenverlust; ADR-016). Verpasste Läufe werden nachgeholt.
+[Unit]
+Description=IC WARE HQ: Sicherung alle 6 Stunden
+
+[Timer]
+OnCalendar=*-*-* 00/6:15:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

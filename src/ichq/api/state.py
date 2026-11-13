@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from fastapi import Request
 
-from ichq.auth.mailer import Mailer
 from ichq.core.config import Settings
 from ichq.db.engine import Engines
 from ichq.storage import Storage
@@ -15,7 +14,7 @@ class AppState:
     settings: Settings
     engines: Engines
     storage: Storage
-    mailer: Mailer | None = None
+    mail_enabled: bool = False   # SMTP eingerichtet (oder Test-Zustellweg) — sonst 503 für Reset/Einladung
 
 
 def get_state(request: Request) -> AppState:

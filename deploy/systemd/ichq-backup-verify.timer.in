@@ -1,0 +1,11 @@
+# IC WARE HQ — wöchentlicher automatischer Wiederherstellungstest (M0: „wöchentlicher automatischer Restore-Test").
+[Unit]
+Description=IC WARE HQ: wöchentlicher Wiederherstellungstest
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

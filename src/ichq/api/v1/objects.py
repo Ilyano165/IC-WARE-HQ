@@ -10,6 +10,7 @@ from pydantic import Field
 from ichq.activity import service as activities
 from ichq.api.security import TenantDB, authenticated, require, tenant_db
 from ichq.api.v1.common import DEFAULT, Cursor, Limit, Strict, object_out, refs_for, writing
+from ichq.audit.service import record as audit
 from ichq.authz.service import Principal
 from ichq.core.errors import ValidationFailed
 from ichq.objects import service as objects
@@ -34,6 +35,28 @@ def get_object(ref: str, p: Principal = Depends(authenticated()), db: TenantDB =
     """Jedes sichtbare Fachobjekt per öffentlicher ID. Unsichtbar/fremd/unbekannt → 404."""
     with db() as s:
         return object_out(s, objects.resolve(s, p, ref))
+
+
+@router.post("/objects/{ref}/archive")
+def archive_object(ref: str, p: Principal = Depends(authenticated()),
+                   db: TenantDB = Depends(tenant_db)) -> dict[str, Any]:
+    """Archivieren (nicht löschen). Braucht das Änderungsrecht des Objekttyps; Fachmodule können es verbieten."""
+    return _archiv(ref, p, db, True)
+
+
+@router.post("/objects/{ref}/restore")
+def restore_object(ref: str, p: Principal = Depends(authenticated()),
+                   db: TenantDB = Depends(tenant_db)) -> dict[str, Any]:
+    return _archiv(ref, p, db, False)
+
+
+def _archiv(ref: str, p: Principal, db: TenantDB, archiviert: bool) -> dict[str, Any]:
+    with writing(db) as s:
+        o = objects.set_archived(s, p, ref, archiviert)
+        verb = "object.archived" if archiviert else "object.restored"
+        activities.record(s, o.id, verb, actor_membership_id=p.membership_id)
+        audit(s, verb, actor_membership_id=p.membership_id, target_type=o.type, target_id=o.public_id)
+        return object_out(s, o)
 
 
 @router.get("/objects/{ref}/links")

@@ -1,0 +1,223 @@
+﻿<#
+IC WARE HQ Server auf diesem Windows-PC einrichten oder aktualisieren (ADR-018). Ruft der Installer auf; erneut
+ausführen ist sicher (Startmenü „IC WARE HQ Server – Einrichtung wiederholen"): vorhandene Daten bleiben.
+
+Ablauf: Prüfen → WSL2 (ggf. Neustart, danach automatisch weiter) → eigene Ubuntu-Distribution „IC-WARE-HQ"
+(Download von ubuntu.com, SHA-256 geprüft) → systemd → Quelltext → deploy/install.sh --tunnel (Docker, Stack,
+Sicherung, Zeitpläne) → Autostart → Energiesparmodus (optional). Protokoll: %ProgramData%\IC-WARE-HQ\einrichten.log
+#>
+[CmdletBinding()]
+param(
+    [string]$Domain,
+    [string]$Email,
+    [string]$TokenDatei,          # Datei mit dem Cloudflare-Tunnel-Token (wird nach dem Lesen gelöscht)
+    [string]$Quelle,              # quelle.tar (Inhalt des Repositorys, vom Installer mitgeliefert)
+    [switch]$EnergieAus,
+    [switch]$Schnell,             # Schnellstart OHNE Cloudflare-Konto: zufällige Adresse <…>.trycloudflare.com (ADR-019)
+    [switch]$Fortsetzen,          # nach Neustart (WSL-Installation) — Werte aus fortsetzen.json
+    [switch]$NurPruefen,          # nur Eingaben und Voraussetzungen prüfen, nichts ändern (Test/CI)
+    [switch]$OhnePause            # bei Fehlern nicht auf Eingabetaste warten (stille Installation)
+)
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+Import-Module (Join-Path $PSScriptRoot 'IchqServer.psm1') -Force
+$K = Get-IchqKonstante
+$null = New-Item -ItemType Directory -Force -Path $K.Basis
+$tokenAblage = Join-Path $K.Basis 'token.tmp'
+$fortsetzenDatei = Join-Path $K.Basis 'fortsetzen.json'
+$protokoll = Join-Path $K.Basis 'einrichten.log'
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { $null = $_ }   # Umlaute aus wsl.exe lesbar
+
+function Schritt([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Green }
+# Fehler bleiben sichtbar — sonst schließt sich das Fenster sofort (beim Tester passiert)
+$script:Pausieren = -not $OhnePause -and -not $NurPruefen -and [Environment]::UserInteractive
+function Warten {
+    if ($script:Pausieren) {
+        Read-Host "`nFenster schließen mit Eingabetaste" | Out-Null
+    }
+}
+function Abbruch([string]$Text) {
+    Write-Host "`nFEHLER: $Text" -ForegroundColor Red
+    if (-not $NurPruefen) { Write-Host "Protokoll: $protokoll" }
+    Warten; exit 1
+}
+trap {   # jeder unerwartete Fehler: Meldung + Stelle + Protokoll, Fenster bleibt offen
+    Write-Host "`nFEHLER (unerwartet): $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Stelle: einrichten.ps1, Zeile $($_.InvocationInfo.ScriptLineNumber): $("$($_.InvocationInfo.Line)".Trim())"
+    if (-not $NurPruefen) { Write-Host "Protokoll: $protokoll  — bitte bei Rückfragen mitschicken." }
+    Warten; exit 1
+}
+
+if ($Fortsetzen) {
+    if (-not (Test-Path $fortsetzenDatei)) { Abbruch 'Keine unterbrochene Einrichtung gefunden.' }
+    $w = Get-Content $fortsetzenDatei -Raw | ConvertFrom-Json
+    $Domain = $w.Domain; $Email = $w.Email; $Quelle = $w.Quelle; $EnergieAus = [bool]$w.EnergieAus
+    $Schnell = [bool]$w.Schnell
+}
+if (-not $NurPruefen) { Start-Transcript -Path $protokoll -Append | Out-Null; Write-Host "Protokoll: $protokoll" }
+
+# ---- 1. Eingaben und Voraussetzungen ------------------------------------------------------------------------------
+Schritt 'Eingaben und Voraussetzungen prüfen'
+$Domain = "$Domain".Trim().ToLowerInvariant()
+if ($Schnell) { $Domain = '' }       # Cloudflare vergibt die Adresse selbst
+elseif (-not (Test-IchqDomain $Domain)) { Abbruch "Ungültige Domain „$Domain“ (nur Hostname, z. B. hq.meine-firma.de)." }
+if (-not (Test-IchqEmail $Email)) { Abbruch "Ungültige E-Mail-Adresse „$Email“." }
+$token = ''
+if ($TokenDatei) {
+    $token = ConvertTo-IchqToken ((Get-Content -LiteralPath $TokenDatei -Raw -ErrorAction SilentlyContinue) + '')
+    if (-not $NurPruefen) { Remove-Item -LiteralPath $TokenDatei -Force -ErrorAction SilentlyContinue }
+} elseif (Test-Path $tokenAblage) {
+    $token = (Get-Content -LiteralPath $tokenAblage -Raw).Trim()
+}
+if ($token -and -not (Test-IchqToken $token)) {
+    Abbruch 'Das ist kein Cloudflare-Tunnel-Token (Zero Trust → Networks → Tunnels → Ihr Tunnel → Token kopieren).'
+}
+$distroDa = (Get-IchqWslListe) -contains $K.Distro
+if (-not $Schnell -and -not $token -and -not $distroDa) {
+    Abbruch 'Für die Ersteinrichtung mit eigener Domain wird das Cloudflare-Tunnel-Token benötigt (oder Schnellstart wählen).'
+}
+if ([Environment]::OSVersion.Version.Build -lt 19041) { Abbruch 'Windows 10 Version 2004 (Build 19041) oder neuer nötig.' }
+if (-not [Environment]::Is64BitOperatingSystem) { Abbruch '64-Bit-Windows nötig.' }
+$ramGb = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
+if ($ramGb -lt 8) { Write-Warning "Nur $ramGb GB RAM — empfohlen sind 8 GB (WSL nutzt bis zur Hälfte, ClamAV braucht ~1,5 GB)." }
+if (-not $NurPruefen -and -not (Test-Path -LiteralPath "$Quelle")) { Abbruch "Quelltext fehlt: $Quelle" }
+$frei = Get-IchqFreierPlatzGb $K.Basis
+if ($frei -lt 15) { Abbruch "Nur $frei GB frei auf dem Laufwerk von $($K.Basis) — nötig sind mindestens 15 GB (Ubuntu, Docker-Images, Daten)." }
+if ($NurPruefen) { Write-Host 'Prüfung bestanden (nichts geändert).'; exit 0 }
+
+if ($token) {   # bis zur Übergabe an Linux nur für Administratoren lesbar (überlebt ggf. den Neustart)
+    Set-Content -LiteralPath $tokenAblage -Value $token -NoNewline -Encoding ascii
+    Set-IchqAdminZugriff $tokenAblage
+}
+
+# ---- 2. WSL2 ------------------------------------------------------------------------------------------------------
+function NeustartUndWeiter([string]$Grund) {   # Werte merken, nach der Anmeldung automatisch weiter (RunOnce)
+    @{ Domain = $Domain; Email = $Email; Quelle = $Quelle; EnergieAus = [bool]$EnergieAus; Schnell = [bool]$Schnell } |
+        ConvertTo-Json | Set-Content -LiteralPath $fortsetzenDatei -Encoding utf8
+    $befehl = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Fortsetzen"
+    Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'IC-WARE-HQ-Einrichtung' -Value $befehl
+    Write-Host "`n$Grund`nBitte Windows jetzt NEU STARTEN. Nach der Anmeldung geht die Einrichtung automatisch weiter." -ForegroundColor Yellow
+    Warten; exit 3010
+}
+$biosText = 'Virtualisierung im BIOS/UEFI einschalten (Intel: „VT-x"/„Intel Virtualization Technology", AMD: „SVM"/„AMD-V"), ' +
+            'speichern, neu starten, dann Startmenü → IC WARE HQ Server → „Einrichtung wiederholen".'
+
+Schritt 'WSL2 prüfen'
+$virt = Get-IchqVirtualisierung
+Write-Host "Virtualisierung: $virt"
+if ($virt -eq 'aus') { Abbruch "Die Virtualisierung ist im BIOS/UEFI abgeschaltet — ohne sie läuft WSL2 nicht. $biosText" }
+$fehlend = @(Get-IchqFehlendeWslFunktion)
+if (-not (Test-IchqWslBereit) -or $fehlend.Count) {
+    if ($Fortsetzen) {   # schon einmal neu gestartet — keine Endlosschleife
+        Abbruch "WSL2 ist auch nach dem Neustart nicht bereit (aus: $($fehlend -join ', ')). $biosText"
+    }
+    if (-not (Test-IchqWslBereit)) {
+        Write-Host 'WSL wird installiert (aktuelle WSL von Microsoft).'
+        & wsl.exe --install --no-distribution
+        if ($LASTEXITCODE -ne 0) { Abbruch "wsl --install scheiterte ($LASTEXITCODE). $biosText" }
+    }
+    Write-Host 'Windows-Funktionen für WSL2 einschalten (VM-Plattform, Windows-Subsystem für Linux) …'
+    Enable-IchqWslFunktion
+    NeustartUndWeiter 'WSL2 ist eingerichtet, Windows braucht dafür einen Neustart.'
+}
+& wsl.exe --update 2>&1 | Out-Host        # aktuelle WSL (Fehler hier sind nicht fatal, z. B. ohne Store)
+
+# ---- 3. Eigene Ubuntu-Distribution --------------------------------------------------------------------------------
+if (-not $distroDa) {
+    Schritt "Ubuntu 24.04 für IC WARE HQ laden (≈ 390 MB, Prüfsumme $($K.UbuntuSha256.Substring(0, 12))…)"
+    $download = Join-Path $K.Basis 'download'
+    $null = New-Item -ItemType Directory -Force -Path $download
+    $datei = Join-Path $download 'ubuntu-24.04-wsl.tar.gz'
+    $vorhanden = $false
+    if (Test-Path -LiteralPath $datei) {   # von einem abgebrochenen Versuch — Prüfsumme entscheidet (falsch ⇒ gelöscht)
+        try { Assert-IchqPruefsumme -Pfad $datei -Sha256 $K.UbuntuSha256; $vorhanden = $true } catch { $vorhanden = $false }
+    }
+    if ($vorhanden) { Write-Host 'Schon geladen, Prüfsumme stimmt — kein erneuter Download.' }
+    else {
+        $weg = Save-IchqDownload -Url $K.UbuntuUrl -Ziel $datei
+        Write-Host "Geladen ($weg), Prüfsumme wird geprüft …"
+        Assert-IchqPruefsumme -Pfad $datei -Sha256 $K.UbuntuSha256
+    }
+    Schritt "Distribution „$($K.Distro)“ anlegen"
+    $ordner = Join-Path $K.Basis 'wsl'
+    $platte = Join-Path $ordner 'ext4.vhdx'
+    if (Test-Path -LiteralPath $platte) {   # Rest eines gescheiterten Imports (Distribution ist nicht registriert) — nie löschen
+        $alt = "$platte.alt-$(Get-Date -Format yyyyMMdd-HHmmss)"
+        Write-Warning "Unregistrierte Linux-Platte gefunden — beiseitegelegt als $alt"
+        Move-Item -LiteralPath $platte -Destination $alt
+    }
+    $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'   # PS 5.1: stderr von wsl.exe ist kein Abbruch
+    $aus = @(& wsl.exe --import $K.Distro $ordner $datei --version 2 2>&1 | ForEach-Object { "$_" })
+    $code = $LASTEXITCODE; $ErrorActionPreference = $eap
+    $aus | Out-Host
+    if ($code -ne 0) {
+        $f = Resolve-IchqWslFehler ($aus -join "`n")
+        if ($f.Funktionen -and -not $Fortsetzen) {
+            Write-Host "`n$($f.Text)" -ForegroundColor Yellow
+            Write-Host 'Windows-Funktionen für WSL2 werden eingeschaltet …'
+            Enable-IchqWslFunktion
+            NeustartUndWeiter 'Die Ubuntu-Datei bleibt gespeichert und wird nicht erneut geladen.'
+        }
+        if ($f.Funktionen) { Abbruch "wsl --import scheiterte ($code). $($f.Text) $biosText" }
+        Abbruch "wsl --import scheiterte ($code). $($f.Text)"
+    }
+    Remove-Item -LiteralPath $datei -Force
+}
+
+Schritt 'Linux-Umgebung einstellen (systemd, root, ohne Windows-PATH)'
+$wslConf = "cat > /etc/wsl.conf <<'ENDE'`n[boot]`nsystemd=true`n[user]`ndefault=root`n[interop]`nappendWindowsPath=false`nENDE"
+if ((Invoke-IchqLinux $wslConf) -ne 0) { Abbruch '/etc/wsl.conf nicht schreibbar.' }
+& wsl.exe --terminate $K.Distro | Out-Null                 # Neustart der Distribution — jetzt mit systemd
+$null = Invoke-IchqLinux 'systemctl is-system-running --wait >/dev/null 2>&1; true'
+if ((Invoke-IchqLinux 'test "$(ps -p 1 -o comm=)" = systemd') -ne 0) { Abbruch 'systemd startet nicht (WSL zu alt? wsl --update).' }
+
+# ---- 4. Quelltext + Server-Einrichtung (geprüfter Linux-Weg) -------------------------------------------------------
+Schritt 'Programm in die Linux-Umgebung kopieren'
+$tar = ConvertTo-IchqWslPfad (Resolve-Path -LiteralPath $Quelle).Path
+if ((Invoke-IchqLinux "mkdir -p $($K.LinuxQuelle) && tar -xf '$tar' -C $($K.LinuxQuelle)") -ne 0) { Abbruch 'Entpacken scheiterte.' }
+if ($distroDa) {
+    Schritt 'Bestehende Installation: Sicherung vor dem Update'
+    if ((Invoke-IchqLinux 'deploy/hq backup') -ne 0) { Write-Warning 'Sicherung vor dem Update scheiterte — Meldung oben lesen.' }
+}
+Schritt 'Pakete für die Einrichtung (python3, curl, git)'
+if ((Invoke-IchqLinux 'apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -yq python3 curl ca-certificates git') -ne 0) {
+    Abbruch 'apt-get scheiterte — Internetverbindung?'
+}
+Schritt 'IC WARE HQ einrichten: Docker, Datenbank, Virenscanner, Tunnel, Sicherung (dauert 10–20 Minuten)'
+# Token nur über STDIN (Invoke-IchqLinux) — geprüft: nur [A-Za-z0-9+/_=-], also sicher in einfachen Anführungszeichen
+if ($Schnell) { $installieren = "deploy/install.sh --email '$Email' --schnell" }
+else { $installieren = "deploy/install.sh --domain '$Domain' --email '$Email' --tunnel" }
+if ($token -and -not $Schnell) { $installieren = "export HQ_TUNNEL_TOKEN='$token'`n$installieren" }
+$rc = Invoke-IchqLinux $installieren
+Remove-Item -LiteralPath $tokenAblage -Force -ErrorAction SilentlyContinue   # liegt jetzt nur noch als Secret in Linux
+if ($rc -ne 0) { Abbruch "deploy/install.sh scheiterte ($rc) — Meldung oben; danach Startmenü → Einrichtung wiederholen." }
+
+# ---- 5. Autostart, Energie ----------------------------------------------------------------------------------------
+Schritt 'Autostart einrichten (Aufgabenplanung „IC WARE HQ Server")'
+$aktion = New-ScheduledTaskAction -Execute 'wsl.exe' -Argument "-d $($K.Distro) -u root -- /bin/sh -c `"exec sleep infinity`""
+$ausloeser = @((New-ScheduledTaskTrigger -AtStartup), (New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"))
+$einst = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) `
+    -MultipleInstances IgnoreNew -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
+$wer = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType S4U -RunLevel Highest
+Register-ScheduledTask -TaskName 'IC WARE HQ Server' -Action $aktion -Trigger $ausloeser -Settings $einst -Principal $wer -Force | Out-Null
+Start-ScheduledTask -TaskName 'IC WARE HQ Server'
+if ($EnergieAus) {
+    Schritt 'Energiesparmodus im Netzbetrieb aus (der PC ist jetzt ein Server)'
+    & powercfg.exe /change standby-timeout-ac 0; & powercfg.exe /change hibernate-timeout-ac 0
+}
+Remove-Item -LiteralPath $fortsetzenDatei -Force -ErrorAction SilentlyContinue
+New-Item -Path 'HKLM:\SOFTWARE\IC WARE HQ Server' -Force | Out-Null
+Set-ItemProperty 'HKLM:\SOFTWARE\IC WARE HQ Server' -Name Eingerichtet -Value 1
+Set-ItemProperty 'HKLM:\SOFTWARE\IC WARE HQ Server' -Name Zugang -Value $(if ($Schnell) { 'schnell' } else { 'tunnel' })
+
+Schritt 'Fertig'
+$Domain = Get-IchqDomain
+Write-Host "IC WARE HQ: https://$Domain/app/"
+if ($Schnell) {
+    Write-Host 'SCHNELLSTART: Die Adresse ist zufällig und ändert sich bei jedem Neustart des PCs bzw. des Tunnels.' -ForegroundColor Yellow
+    Write-Host 'Aktuelle Adresse jederzeit: Startmenü → „Adresse anzeigen“. Nur zum Ausprobieren — für den Dauerbetrieb'
+    Write-Host 'Startmenü → „Domain ändern“ (eigene Domain mit kostenlosem Cloudflare-Konto).'
+}
+Write-Host 'Nächste Schritte (Startmenü „IC WARE HQ Server"): „Erste Firma anlegen", dann „Diagnose".'
+Write-Host 'WICHTIG: Den angezeigten SICHERUNGSSCHLÜSSEL getrennt von diesem PC aufbewahren (Passwortmanager).'
+Warten; exit 0

@@ -11,3 +11,4 @@ var/
 build/
 dist/
 .import_linter_cache/
+secrets.vor-restore-*/

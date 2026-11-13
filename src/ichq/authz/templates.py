@@ -45,7 +45,7 @@ TEMPLATES: tuple[Template, ...] = (
              _LESEN_BASIS | {
                  "tasks.read", "tasks.create", "tasks.update", "projects.read", "files.read", "files.upload",
                  "chat.read", "chat.create", "calendar.read", "calendar.create", "calendar.update",
-                 "vehicles.read", "vehicles.update", "travel.read", "travel.update", "activity.read"}),
+                 "vehicles.read", "vehicles.update", "travel.read", "travel.update", "travel.create", "activity.read"}),
     # Steuerlich relevante Daten lesen und exportieren, Rückfragen stellen/beantworten (Kommentare). Keine Mitglieder-,
     # Rollen- oder Prüf-/Freigaberechte (files.update) — Freigaben entscheidet die Firma. Ohne objects.read_all.
     Template("Steuerberater", 30, "Extern: Rückfragen, Belege, Export — nur Freigegebenes (ohne objects.read_all)",

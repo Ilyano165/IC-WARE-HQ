@@ -1,0 +1,11 @@
+# IC WARE HQ — Wiederherstellungstest: neueste Sicherung in Wegwerf-PostgreSQL, Prüfsummen, jede Datei vorhanden.
+[Unit]
+Description=IC WARE HQ: Wiederherstellungstest der Sicherung
+After=docker.service ichq.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=@ROOT@/deploy/hq backup-verify
+TimeoutStartSec=3h
+Nice=15

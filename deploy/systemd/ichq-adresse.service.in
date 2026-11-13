@@ -1,0 +1,7 @@
+[Unit]
+Description=IC WARE HQ — Schnellstart-Adresse nachführen (nur ohne Cloudflare-Konto, ADR-019; sonst ohne Wirkung)
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=@ROOT@/deploy/hq adresse --still

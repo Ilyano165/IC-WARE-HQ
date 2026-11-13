@@ -74,8 +74,14 @@ def _einloesen(engines: Engines, inv: Found, user_id: uuid.UUID) -> str:
             mid = s.execute(text("""INSERT INTO memberships(id, tenant_id, user_id, status, title)
                                     VALUES (:id, :t, :u, 'active', :ti) RETURNING id"""),
                             {"id": uuid7(), "t": inv.tenant_id, "u": user_id, "ti": titel.title}).scalar_one()
-        else:   # früher ausgetreten ('left' / 'invited'): wieder aktiv
+        else:   # früher ausgetreten ('left' / 'invited'): wieder aktiv — aber OHNE alte Rechte (Audit B1)
             mid = vorhanden.id
+            # Wer einlädt, braucht nur users.create; alte Rollen (bis Company Admin), Einzelrechte und manuelle
+            # Freigaben dürfen so nicht zurückkommen. Rechte vergibt danach jemand mit roles.assign (Delegation).
+            for sql in ("DELETE FROM membership_roles WHERE membership_id = :m",
+                        "DELETE FROM permission_overrides WHERE membership_id = :m",
+                        "DELETE FROM object_grants WHERE membership_id = :m AND source = 'manual'"):
+                s.execute(text(sql), {"m": mid})
             s.execute(text("UPDATE memberships SET status = 'active' WHERE id = :m"), {"m": mid})
         s.execute(text("UPDATE invitations SET accepted_membership_id = :m WHERE id = :i"), {"m": mid, "i": inv.id})
         pid = str(s.execute(text("SELECT public_id FROM memberships WHERE id = :m"), {"m": mid}).scalar_one())
@@ -93,15 +99,43 @@ def accept_new(engines: Engines, settings: Settings, token: str, *, display_name
     verstoss = check_policy(password, email=inv.email)
     if verstoss:
         raise ValidationFailed(verstoss.message)
+    _vorab_pruefen(engines, inv)   # Firma aktiv, Einladung offen — bevor ein Konto entsteht (Audit F7)
     with platform_transaction(engines.platform) as s:
-        if s.execute(text("SELECT 1 FROM users WHERE lower(email) = :e"), {"e": inv.email}).scalar():
+        vorhanden = s.execute(text("SELECT id FROM users WHERE lower(email) = :e"), {"e": inv.email}).scalar()
+        if vorhanden is not None and not _verwaist(engines, vorhanden):
             raise AccountExists("Für diese E-Mail gibt es schon ein Konto. Bitte anmelden und dort annehmen.")
-        uid = create_user(s, email=inv.email, display_name=display_name)
+        if vorhanden is None:
+            uid = create_user(s, email=inv.email, display_name=display_name)
+        else:   # Rest eines gescheiterten Annehmens (ohne Passwort, ohne Firma): weiterverwenden
+            uid = vorhanden
+            s.execute(text("UPDATE users SET display_name = :n WHERE id = :u"), {"n": display_name, "u": uid})
     with auth_transaction(engines.auth) as s:
         o = account.set_password_from_invitation(s, settings, uid, password)
     if not o.ok:
         raise ValidationFailed(str(o.data.get("message") or "Passwort erfüllt die Regeln nicht"))
-    return _einloesen(engines, inv, uid)
+    try:
+        return _einloesen(engines, inv, uid)
+    except Exception:   # Wettlauf (Widerruf, Pause): kein aktives Konto ohne Firma zurücklassen
+        with auth_transaction(engines.auth) as s:
+            s.execute(text("UPDATE users SET password_hash = NULL, status = 'pending' WHERE id = :u"), {"u": uid})
+        raise
+
+
+def _vorab_pruefen(engines: Engines, inv: Found) -> None:
+    with tenant_transaction(engines.app, inv.tenant_id) as s:
+        offen = s.execute(text("""SELECT 1 FROM invitations i, tenants t
+                                  WHERE i.id = :i AND t.status = 'active' AND i.accepted_at IS NULL
+                                    AND i.revoked_at IS NULL AND i.expires_at > now()"""), {"i": inv.id}).scalar()
+    if not offen:
+        raise InvalidInvitation("Die Einladung ist ungültig oder abgelaufen.")
+
+
+def _verwaist(engines: Engines, uid: uuid.UUID) -> bool:
+    """Konto ohne Passwort, im Status pending und ohne jede Mitgliedschaft."""
+    with auth_transaction(engines.auth, user_id=uid) as s:
+        return bool(s.execute(text("""SELECT u.status = 'pending' AND u.password_hash IS NULL
+                                             AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = u.id)
+                                      FROM users u WHERE u.id = :u"""), {"u": uid}).scalar())
 
 
 def accept_existing(engines: Engines, token: str, *, user_id: uuid.UUID) -> str:
