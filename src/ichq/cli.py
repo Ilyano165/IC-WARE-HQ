@@ -75,6 +75,9 @@ def main(argv: list[str] | None = None) -> int:
     ma = sub.add_parser("membership-add", help="Konto einer Firma zuordnen (ohne Rollen)")
     ma.add_argument("--email", required=True)
     ma.add_argument("--tenant", required=True, help="Slug der Firma")
+    sub.add_parser("setup-code", help="Einmaligen Einrichtungscode ausgeben (nur solange es keinen Betreiber gibt)")
+    oa = sub.add_parser("operator-add", help="Bestehendes Konto zum Betreiber machen (Firmen in der Oberfläche)")
+    oa.add_argument("--email", required=True)
     ns = sub.add_parser("notifications-scan", help="Geplante Benachrichtigungsregeln (z. B. überfällige Aufgaben) "
                                                    "für alle aktiven Firmen ausführen")
     ns.add_argument("--date", help="Stichtag JJJJ-MM-TT (Standard: heute, UTC)")
@@ -183,6 +186,19 @@ def main(argv: list[str] | None = None) -> int:
             if args.cmd == "alert":
                 return betrieb.alert(settings, engines, args.subject, args.message, args.dedup)
             return betrieb.print_ops_check(settings, engines)
+        if args.cmd in ("setup-code", "operator-add"):
+            from ichq.control import service as control
+            with platform_transaction(engines.platform) as s:
+                if args.cmd == "setup-code":
+                    print(control.new_setup_code(s, actor=_actor()))
+                    return 0
+                konto = control.user_by_email(s, args.email)
+                if konto is None or konto.status != "active":
+                    print("Fehler (not_found): kein aktives Konto mit dieser E-Mail", file=sys.stderr)
+                    return 1
+                neu = control.add_operator(s, konto.id, actor=_actor())
+            print(f"Betreiber → {konto.email}" + ("" if neu else " (war schon Betreiber)"))
+            return 0
         if args.cmd.startswith(("user-", "membership-")) or args.cmd == "tenant-admin":
             return _konten(args, settings, engines)
         if args.cmd == "tenant-feature":

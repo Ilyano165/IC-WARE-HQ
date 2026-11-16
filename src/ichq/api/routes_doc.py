@@ -11,7 +11,7 @@ from ichq.api.security import _markierungen, iter_api_routes
 
 START, ENDE = "<!-- routen:start -->", "<!-- routen:end -->"
 _MARKEN = {"mfa_challenge": "2FA-Zwischenschritt", "any_session": "jede Sitzung", "signed_in": "angemeldet",
-           "authenticated": "angemeldet + Firma"}
+           "authenticated": "angemeldet + Firma", "operator": "Betreiber der Installation"}
 
 
 def _regel(art: str, wert: object) -> str:

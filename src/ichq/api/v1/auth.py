@@ -18,7 +18,8 @@ from ichq.auth import account
 from ichq.auth import login as auth_login
 from ichq.auth.login import Outcome
 from ichq.auth.sessions import SessionInfo
-from ichq.db.session import auth_transaction
+from ichq.control import service as control
+from ichq.db.session import auth_transaction, platform_transaction
 from ichq.mail import templates
 from ichq.mail.outbox import enqueue
 
@@ -132,7 +133,10 @@ def session_info(current: SessionInfo = Depends(signed_in()), state: AppState = 
         u = s.execute(text("SELECT id, email, username, display_name, totp_enabled_at IS NOT NULL AS totp "
                            "FROM users WHERE id = :id"), {"id": current.user_id}).one()
         firmen = auth_login.memberships(s)
-    return {"user": {"id": u.id, "email": u.email, "username": u.username, "display_name": u.display_name,
+    with platform_transaction(state.engines.platform) as s:
+        betreiber = control.is_operator(s, current.user_id)
+    return {"operator": betreiber,
+            "user": {"id": u.id, "email": u.email, "username": u.username, "display_name": u.display_name,
                      "totp_enabled": u.totp},
             "session": {"expires_at": current.expires_at, "idle_expires_at": current.idle_expires_at,
                         "active_tenant_id": current.active_tenant_id},

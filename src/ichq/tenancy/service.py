@@ -155,6 +155,32 @@ def update_profile(session: Session, changes: dict[str, str | None], *,
     return TenantInfo.of(t)
 
 
+def update_by_platform(session: Session, tenant_id: uuid.UUID, changes: dict[str, str | None], *,
+                       actor: str) -> TenantInfo:
+    """ADR-021: Betreiber ändert Stammdaten einer Firma (Plattform-Transaktion). Gleiche Regeln wie überall;
+    das Kürzel bleibt unveränderlich (Links, Audit)."""
+    unbekannt = set(changes) - set(PROFILFELDER)
+    if unbekannt:
+        raise ValidationFailed(f"Nicht änderbar: {sorted(unbekannt)}")
+    t = session.get(Tenant, tenant_id, with_for_update=True)
+    if t is None:
+        raise NotFound("Firma nicht gefunden")
+    neu = {f: getattr(t, f) for f in PROFILFELDER}
+    neu.update(changes)
+    name, legal = (neu["name"] or "").strip(), (neu["legal_name"] or "").strip() or None
+    if legal is not None and len(legal) > 200:
+        raise ValidationFailed("legal_name: höchstens 200 Zeichen")
+    _pruefen(t.slug, name, str(neu["timezone"]), str(neu["language"]), str(neu["currency"]))
+    alt = {f: getattr(t, f) for f in PROFILFELDER}
+    t.name, t.legal_name = name, legal
+    t.timezone, t.language, t.currency = str(neu["timezone"]), str(neu["language"]), str(neu["currency"])
+    session.flush()
+    geaendert = sorted(f for f in PROFILFELDER if alt[f] != getattr(t, f))
+    if geaendert:
+        record_platform(session, "tenant.updated", actor=actor, tenant_id=t.id, data={"fields": geaendert})
+    return TenantInfo.of(t)
+
+
 def company_today(session: Session) -> date:
     """„Heute" in der Zeitzone der Firma der laufenden Mandanten-Transaktion (Fälligkeit = Kalendertag der Firma)."""
     heute = session.execute(text("SELECT (now() AT TIME ZONE timezone)::date FROM tenants "

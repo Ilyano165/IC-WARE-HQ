@@ -7,6 +7,7 @@ Jede Route MUSS genau eine dieser Markierungen tragen, sonst startet die Anwendu
 * ``mfa_challenge()``   — nur im 2FA-Zwischenschritt nach korrektem Passwort
 * ``any_session()``     — irgendeine gültige Sitzung (nur für Abmelden)
 * ``signed_in()``       — angemeldet (inkl. 2FA), Firma noch egal — eigenes Konto verwalten
+* ``operator()``        — angemeldet UND Betreiber der Installation (Firmen verwalten, ADR-021) — keine Firma nötig
 * ``authenticated()``   — angemeldet UND Firma gewählt (Principal)
 * ``require(*rechte)``  — wie authenticated() UND alle genannten Rechte
 
@@ -29,8 +30,9 @@ from ichq.api.state import AppState, get_state
 from ichq.auth import sessions as auth_sessions
 from ichq.authz.registry import is_known, module_of
 from ichq.authz.service import Principal, decide, principal_for
+from ichq.control import service as control
 from ichq.core.errors import AuthenticationRequired, FeatureDisabled, PermissionDenied, TenantPaused, TenantRequired
-from ichq.db.session import TenantSession, auth_transaction, tenant_transaction
+from ichq.db.session import TenantSession, auth_transaction, platform_transaction, tenant_transaction
 from ichq.tenancy.service import TenantInfo, current_tenant
 
 _KEIN = object()
@@ -115,6 +117,21 @@ def mfa_challenge() -> Callable[..., auth_sessions.SessionInfo]:
 
 def any_session() -> Callable[..., auth_sessions.SessionInfo]:
     return _sitzung_marke("any_session", ("full", "mfa_pending"))
+
+
+def operator() -> Callable[..., auth_sessions.SessionInfo]:
+    """Betreiber der Installation (ADR-021): bei JEDER Anfrage aus der Datenbank geprüft, nie aus der Sitzung.
+    Gibt keine Rechte in einer Firma — dort zählt weiter nur die Mitgliedschaft."""
+    def _dep(info: auth_sessions.SessionInfo | None = Depends(current_session),
+             state: AppState = Depends(get_state)) -> auth_sessions.SessionInfo:
+        if info is None or info.stage != "full":
+            raise AuthenticationRequired()
+        with platform_transaction(state.engines.platform) as s:
+            if not control.is_operator(s, info.user_id):
+                raise PermissionDenied("Nur für Betreiber dieser Installation")
+        return info
+    setattr(_dep, MARKE, ("operator", ()))
+    return _dep
 
 
 def authenticated() -> Callable[..., Principal]:

@@ -49,7 +49,7 @@ ignore = ["S101", "RUF001", "RUF002", "RUF003"]
 # FastAPI-Abhängigkeiten werden bewusst als Standardwert notiert
 extend-immutable-calls = ["fastapi.Depends", "ichq.api.security.require", "ichq.api.security.authenticated",
                           "ichq.api.security.public", "ichq.api.security.signed_in", "ichq.api.security.mfa_challenge",
-                          "ichq.api.security.any_session"]
+                          "ichq.api.security.any_session", "ichq.api.security.operator"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S105", "S106", "S108", "S603", "S608", "S607", "SIM117", "E501"]
@@ -79,6 +79,7 @@ layers = [
   "ichq.app",
   "ichq.api",
   "ichq.models",
+  "ichq.control",
   "ichq.dashboard",
   "ichq.search | ichq.notifications",
   "ichq.finance | ichq.contracts | ichq.travel",
