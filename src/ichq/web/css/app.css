@@ -193,3 +193,20 @@ a.metric:hover{text-decoration:none;border-color:rgba(25,229,110,.45);background
   .card.druck{border:0;box-shadow:none;background:#fff;color:#000}
   .druck th,.druck td{color:#000}
 }
+
+/* ---------- Assistent (Ersteinrichtung, Firma anlegen — ADR-021) ---------- */
+.gate .card--wide{width:min(620px,100%)}
+.steps{list-style:none;display:flex;gap:.4rem;flex-wrap:wrap;margin:0 0 1.2rem;padding:0;counter-reset:none}
+.steps li{display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--muted);padding:.3rem .7rem .3rem .3rem;
+  border:1px solid var(--line);border-radius:999px}
+.steps li span{display:inline-grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:50%;background:var(--glass);font-weight:600}
+.steps li.done{color:var(--ink)}
+.steps li.done span{background:var(--brand-soft);color:var(--brand)}
+.steps li[aria-current=step]{color:var(--ink);border-color:var(--brand)}
+.steps li[aria-current=step] span{background:var(--brand);color:var(--on-brand)}
+.summary{display:grid;grid-template-columns:minmax(120px,auto) 1fr;gap:.45rem 1rem;margin:0}
+.summary dt{color:var(--muted2);font-size:.85rem}
+.summary dd{margin:0;overflow-wrap:anywhere}
+fieldset{border:1px solid var(--line);border-radius:12px;padding:1rem;margin:0}
+legend{padding:0 .4rem;font-size:.82rem;color:var(--muted2)}
+@media (max-width:520px){.summary{grid-template-columns:1fr}.summary dd{margin-bottom:.4rem}}

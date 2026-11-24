@@ -23,6 +23,8 @@ import * as vertraege from "./views/vertraege.js";
 import * as abschluss from "./views/abschluss.js";
 import * as fahrtenbuch from "./views/fahrtenbuch.js";
 import * as reisen from "./views/reisen.js";
+import * as einrichtung from "./views/einrichtung.js";
+import * as plattform from "./views/plattform.js";
 
 const app = $("#app");
 
@@ -63,6 +65,11 @@ route("/firma", verwaltung.firma, "company.read");
 route("/aktivitaet", verwaltung.aktivitaet, "activity.read");
 route("/audit", verwaltung.audit, "audit.read");
 route("/konto", konto.ansicht);
+// Unternehmensverwaltung (ADR-021): „@betreiber“ ist kein Recht einer Firma, sondern die Betreiber-Eigenschaft der Sitzung
+route("/plattform/firmen", plattform.liste, "@betreiber");
+route("/plattform/neue-firma", plattform.neu, "@betreiber");   // eigener Pfad: „neu“ wäre ein gültiges Kürzel
+route("/plattform/firmen/:slug", plattform.detail, "@betreiber");
+route("/plattform/betreiber", plattform.betreiber, "@betreiber");
 
 const NAV = [
   { pfad: "/", text: "Übersicht" },
@@ -88,12 +95,18 @@ const NAV = [
   { pfad: "/firma", text: "Firma", recht: "company.read" },
   { pfad: "/aktivitaet", text: "Aktivität", recht: "activity.read" },
   { pfad: "/audit", text: "Audit", recht: "audit.read" },
+  { gruppe: "Installation" },
+  { pfad: "/plattform/firmen", text: "Firmen verwalten", recht: "@betreiber" },
+  { pfad: "/plattform/betreiber", text: "Betreiber", recht: "@betreiber" },
   { gruppe: "Persönlich" },
   { pfad: "/konto", text: "Konto & Sicherheit" },
 ];
 
+// Nur Anzeige: „@betreiber“ kommt aus /auth/session, Rechte aus /me. Der Server prüft beides bei jeder Anfrage.
+const erlaubt = (recht) => !recht || (recht === "@betreiber" ? !!(state.sitzung && state.sitzung.operator) : !state.nurPlattform && darf(recht));
+
 function navigation() {
-  const eintraege = NAV.filter((n) => !n.recht || darf(n.recht));
+  const eintraege = NAV.filter((n) => (n.pfad === "/" ? !state.nurPlattform : erlaubt(n.recht)));
   // Gruppenüberschriften nur, wenn danach noch Einträge folgen
   const sichtbar = eintraege.filter((n, i) => !n.gruppe || (eintraege[i + 1] && !eintraege[i + 1].gruppe));
   return h("nav", { class: "nav", "aria-label": "Hauptnavigation" },
@@ -124,8 +137,8 @@ function shell() {
       h("button", { class: "btn btn--ghost btn--sm menu-close", type: "button", "aria-label": "Menü schließen",
         on: { click: () => schliessen() } }, "Schließen"),
       marke("HQ"), navigation(),
-      h("div", { class: "tenant" }, h("div", { class: "muted small" }, "Firma"), h("div", {}, state.firma || "—"),
-        state.sitzung.memberships.length > 1
+      h("div", { class: "tenant" }, h("div", { class: "muted small" }, "Firma"), h("div", {}, state.firma || (state.nurPlattform ? "keine geöffnet" : "—")),
+        state.sitzung.memberships.length > 1 || (state.nurPlattform && state.sitzung.memberships.length)
           ? h("button", { class: "btn btn--ghost btn--sm", type: "button", on: { click: () => anmeldung.firmenwahl(app, state.sitzung, start, true) } }, "Firma wechseln")
           : null)),
     h("div", { class: "main" },
@@ -135,8 +148,8 @@ function shell() {
           ? h("button", { class: "btn btn--ghost btn--sm firma", type: "button", title: "Firma wechseln",
             on: { click: () => anmeldung.firmenwahl(app, state.sitzung, start, true) } }, state.firma || "Firma")
           : h("span", { class: "firma small" }, state.firma || ""),
-        h("form", { class: "search", role: "search", on: { submit: (e) => { e.preventDefault(); gehe(`/suche?q=${encodeURIComponent(suche.value.trim())}`); } } }, suche),
-        glocke,
+        state.nurPlattform ? h("span", { class: "search" }) : h("form", { class: "search", role: "search", on: { submit: (e) => { e.preventDefault(); gehe(`/suche?q=${encodeURIComponent(suche.value.trim())}`); } } }, suche),
+        state.nurPlattform ? null : glocke,
         h("a", { class: "who-name small", href: "#/konto", title: "Konto & Sicherheit" }, name),
         h("button", { class: "btn btn--ghost btn--sm", type: "button", on: { click: abmelden } }, "Abmelden")),
       h("div", { class: "content", id: "inhalt" })));
@@ -166,7 +179,8 @@ async function zeige() {
   }
   const r = finde(pfad);
   if (!r) { ersetze(inhalt, h("div", { class: "view" }, h("h1", {}, "Nicht gefunden"), h("p", { class: "muted" }, "Diese Seite gibt es nicht."))); return; }
-  if (r.recht && !darf(r.recht)) {
+  if (state.nurPlattform && !pfad.startsWith("/plattform") && pfad !== "/konto") { gehe("/plattform/firmen"); return; }
+  if (r.recht && !erlaubt(r.recht)) {
     ersetze(inhalt, h("div", { class: "view" }, h("h1", {}, "Keine Berechtigung"),
       h("p", { class: "muted" }, "Für diese Seite fehlt die Berechtigung. Wende dich an den Administrator deiner Firma.")));
     return;
@@ -183,6 +197,8 @@ async function zeige() {
   if (ziel.isConnected) ungelesen();
 }
 
+const hatFirma = (s) => s.memberships.some((m) => m.membership_status === "active" && ["active", "paused"].includes(m.tenant_status));
+
 let startLaeuft = false;   // Ereignisse aus start() selbst lösen keinen zweiten Start aus
 
 export async function start() {
@@ -191,7 +207,21 @@ export async function start() {
   try { await starte(); } finally { startLaeuft = false; }
 }
 
+function nurPlattform() {
+  setzeMe(null);
+  state.firma = null;
+  state.nurPlattform = true;
+  shell();
+  zeige();
+}
+
 async function starte() {
+  state.nurPlattform = false;
+  const { pfad, query: q } = aktuell();
+  if (pfad === "/einrichtung") {                     // vor jeder Sitzungsprüfung: Ersteinrichtung mit Code im Fragment
+    einrichtung.seite(app, q.get("code"), () => { location.hash = "#/"; start(); });
+    return;
+  }
   const art = new URLSearchParams(location.search).get("v");
   const token = (/token=([A-Za-z0-9_-]+)/.exec(location.hash) || [])[1];
   if ((art === "einladung" || art === "passwort-neu") && token) {
@@ -201,15 +231,22 @@ async function starte() {
   try {
     state.sitzung = await get("/auth/session");
   } catch (e) {
-    if (e instanceof ApiError && e.status === 401) { anmeldung.login(app, start); return; }
+    if (e instanceof ApiError && e.status === 401) {
+      let offen = false;
+      try { offen = (await get("/setup")).needed; } catch { /* nur ein Hinweis */ }
+      anmeldung.login(app, start, offen);
+      return;
+    }
     ersetze(app, h("div", { class: "gate" }, alertBox(meldung(e))));
     return;
   }
-  if (!state.sitzung.session.active_tenant_id) { anmeldung.firmenwahl(app, state.sitzung, start); return; }
+  const ohneFirma = () => (state.sitzung.operator && (aktuell().pfad.startsWith("/plattform") || !hatFirma(state.sitzung))
+    ? nurPlattform() : anmeldung.firmenwahl(app, state.sitzung, start, false, state.sitzung.operator ? nurPlattform : null));
+  if (!state.sitzung.session.active_tenant_id) { ohneFirma(); return; }
   try {
     setzeMe(await get("/me"));
   } catch (e) {
-    if (e instanceof ApiError && e.code === "tenant_required") { anmeldung.firmenwahl(app, state.sitzung, start); return; }
+    if (e instanceof ApiError && e.code === "tenant_required") { ohneFirma(); return; }
     throw e;
   }
   const aktiv = state.sitzung.memberships.find((m) => m.tenant_id === state.sitzung.session.active_tenant_id);
@@ -218,7 +255,8 @@ async function starte() {
   await zeige();
 }
 
-window.addEventListener("hashchange", zeige);
+// Außerhalb der App-Shell (Anmeldung) führt nur der Wechsel zur Einrichtung zu einem neuen Start
+window.addEventListener("hashchange", () => (!$("#inhalt") && aktuell().pfad === "/einrichtung" ? start() : zeige()));
 window.addEventListener("ichq:ungelesen", ungelesen);
 window.addEventListener("ichq:firma-weg", () => { if ($("#inhalt")) { toast("Kein Zugang mehr zu dieser Firma.", "error"); start(); } });
 window.addEventListener("ichq:abgemeldet", () => { if ($("#inhalt")) { toast("Sitzung beendet — bitte neu anmelden.", "error"); start(); } });

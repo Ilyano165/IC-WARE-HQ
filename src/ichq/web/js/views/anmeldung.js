@@ -29,14 +29,16 @@ function formular(onSubmit, felder, knopf) {
 
 const eingabe = (name, typ, extra = {}) => h("input", { name, type: typ, required: true, ...extra });
 
-export function login(app, weiter) {
+export function login(app, weiter, einrichtungOffen = false) {
   const anmelden = formular(async (d) => {
     const r = await post("/auth/login", { login: d.login, password: d.password });
     if (r.status === "mfa_required") mfa(app, weiter);
     else weiter();
   }, [feld("E-Mail oder Benutzername", eingabe("login", "text", { autocomplete: "username", autofocus: true })),
     feld("Passwort", eingabe("password", "password", { autocomplete: "current-password" }))], "Anmelden");
-  karte(app, "Anmelden", h("p", { class: "muted" }, "Willkommen zurück."), anmelden,
+  const einrichten = einrichtungOffen ? alertBox("Diese Installation ist noch nicht eingerichtet. Mit dem Einrichtungscode vom Server legen Sie die erste Firma und Ihren Zugang an.", "info") : null;
+  const zurEinrichtung = einrichtungOffen ? h("a", { class: "btn btn--ghost btn--block", href: "#/einrichtung" }, "Installation einrichten") : null;
+  karte(app, "Anmelden", einrichten, zurEinrichtung, h("p", { class: "muted" }, "Willkommen zurück."), anmelden,
     h("p", { class: "small" }, h("a", { href: "#", on: { click: (e) => { e.preventDefault(); vergessen(app, weiter); } } },
       "Passwort vergessen?")));
 }
@@ -58,7 +60,7 @@ function vergessen(app, weiter) {
     h("p", { class: "small" }, h("a", { href: "#", on: { click: (e) => { e.preventDefault(); login(app, weiter); } } }, "Zur Anmeldung")));
 }
 
-export function firmenwahl(app, sitzung, weiter, wechsel = false) {
+export function firmenwahl(app, sitzung, weiter, wechsel = false, verwalten = null) {
   const aktiv = sitzung.memberships.filter((m) => m.membership_status === "active"
     && ["active", "paused"].includes(m.tenant_status));
   const waehle = async (id) => { await post("/auth/tenant", { tenant_id: id }); location.hash = "#/"; weiter(); };
@@ -69,7 +71,8 @@ export function firmenwahl(app, sitzung, weiter, wechsel = false) {
     return;
   }
   const fehler = h("div");
-  karte(app, "Firma wählen", fehler, h("div", { class: "list" }, aktiv.map((m) =>
+  const zurVerwaltung = verwalten ? h("button", { class: "btn btn--ghost btn--block", type: "button", on: { click: () => { location.hash = "#/plattform/firmen"; verwalten(); } } }, "Firmen verwalten") : null;
+  karte(app, "Firma wählen", fehler, zurVerwaltung, h("div", { class: "list" }, aktiv.map((m) =>
     h("button", { class: "item", type: "button", on: { click: () => waehle(m.tenant_id).catch((e) => ersetze(fehler, alertBox(meldung(e)))) } },
       h("span", {}, h("b", {}, m.name), h("div", { class: "meta" }, m.slug)),
       m.tenant_status === "paused" ? h("span", { class: "tag tag--warn" }, "pausiert") : h("span", { class: "tag" }, "öffnen")))));

@@ -1,7 +1,7 @@
 // Sitzungszustand im Speicher (nichts in localStorage — Rechte kommen bei jedem Laden frisch vom Server).
 // Die Oberfläche blendet nur aus; ENTSCHIEDEN wird immer serverseitig.
 
-export const state = { sitzung: null, me: null, rechte: new Set(), firma: null };
+export const state = { sitzung: null, me: null, rechte: new Set(), firma: null, nurPlattform: false };
 
 export function darf(...rechte) {
   return rechte.every((r) => state.rechte.has(r));
