@@ -17,7 +17,7 @@ from ichq.core.config import Settings
 from ichq.core.errors import Conflict
 from ichq.db.engine import Engines
 from ichq.db.session import auth_transaction, platform_transaction, tenant_transaction
-from tests.auth_helpers import PASSWORT, db, login, make_user
+from tests.auth_helpers import PASSWORT, db, enable_totp, login, make_user
 from tests.auth_helpers import client as auth_client
 from tests.conftest import World
 from tests.core_helpers import ok
@@ -199,3 +199,15 @@ def test_betreiber_verwalten(settings: Settings, engines: Engines) -> None:
         ("chef@ic-ware.test", False), ("zwei@ic-ware.test", True)]
     ok(c.post("/api/v1/platform/operators/remove", json={"email": "zwei@ic-ware.test"}))
     assert z.get("/api/v1/platform/companies").status_code == 403           # wirkt sofort, ohne neue Anmeldung
+
+
+def test_halbe_anmeldung_reicht_nicht(settings: Settings, engines: Engines) -> None:
+    """Betreiber mit 2FA: nach dem Passwort (Stufe mfa_pending) ist /platform noch zu — erst nach dem Code offen."""
+    c, _ = auth_client(settings, engines)
+    _einrichten(c, engines)
+    enable_totp(c, STARK)
+    ok(c.post("/api/v1/auth/logout"), 204)
+    r = login(c, "chef@ic-ware.test", STARK)
+    assert r.status_code == 200 and r.json() == {"status": "mfa_required"}, r.text
+    assert c.get("/api/v1/platform/companies").status_code == 401
+    assert c.post("/api/v1/platform/operators", json={"email": "x@y.test"}).status_code == 401

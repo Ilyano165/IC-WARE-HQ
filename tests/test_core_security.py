@@ -177,6 +177,8 @@ def _aufrufe(settings: Settings, engines: Engines, refs: dict[str, str], ziel: d
         params = re.findall(r"{(\w+)}", pfad)
         if not params or not pfad.startswith("/api/v1/"):
             continue
+        if pfad.startswith("/api/v1/platform/"):       # keine Mandantenroute: Betreiber-Marke, 401/403 für JEDE
+            continue                                   # Route in tests/test_control.py (ADR-021)
         for m in sorted(methoden - {"HEAD"}):
             url = pfad
             for name in params:

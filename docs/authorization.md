@@ -240,6 +240,18 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/periods/close` | POST | permission | `finance.approve` |
 | `/api/v1/periods/reopen` | POST | permission | `finance.approve` |
 | `/api/v1/permissions` | GET | permission | `roles.read` |
+| `/api/v1/platform/accounts` | GET | operator | Betreiber der Installation |
+| `/api/v1/platform/companies` | GET | operator | Betreiber der Installation |
+| `/api/v1/platform/companies` | POST | operator | Betreiber der Installation |
+| `/api/v1/platform/companies/{slug}` | GET | operator | Betreiber der Installation |
+| `/api/v1/platform/companies/{slug}` | PATCH | operator | Betreiber der Installation |
+| `/api/v1/platform/companies/{slug}/admins` | POST | operator | Betreiber der Installation |
+| `/api/v1/platform/companies/{slug}/modules/{module}` | PUT | operator | Betreiber der Installation |
+| `/api/v1/platform/companies/{slug}/status` | POST | operator | Betreiber der Installation |
+| `/api/v1/platform/operators` | GET | operator | Betreiber der Installation |
+| `/api/v1/platform/operators` | POST | operator | Betreiber der Installation |
+| `/api/v1/platform/operators/remove` | POST | operator | Betreiber der Installation |
+| `/api/v1/platform/slug-suggestion` | GET | operator | Betreiber der Installation |
 | `/api/v1/projects` | GET | permission | `projects.read` |
 | `/api/v1/projects` | POST | permission | `projects.create` |
 | `/api/v1/projects/{ref}` | GET | permission | `projects.read` |
@@ -266,6 +278,8 @@ Die Zusatzregeln der Services (Sichtbarkeit, Rang, Obergrenze …) stehen in den
 | `/api/v1/roles/{role}/duplicate` | POST | permission | `roles.create` |
 | `/api/v1/roles/{role}/restore` | POST | permission | `roles.delete` |
 | `/api/v1/search` | GET | authenticated | angemeldet + Firma |
+| `/api/v1/setup` | GET | public | öffentlich — Ersteinrichtung: sagt nur, ob sie noch offen ist |
+| `/api/v1/setup` | POST | public | öffentlich — Ersteinrichtung: nur mit einmaligem Einrichtungscode |
 | `/api/v1/tasks` | GET | permission | `tasks.read` |
 | `/api/v1/tasks` | POST | permission | `tasks.create` |
 | `/api/v1/tasks/{ref}` | GET | permission | `tasks.read` |

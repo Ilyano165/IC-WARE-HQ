@@ -196,8 +196,8 @@ def main(argv: list[str] | None = None) -> int:
                 if konto is None or konto.status != "active":
                     print("Fehler (not_found): kein aktives Konto mit dieser E-Mail", file=sys.stderr)
                     return 1
-                neu = control.add_operator(s, konto.id, actor=_actor())
-            print(f"Betreiber → {konto.email}" + ("" if neu else " (war schon Betreiber)"))
+                hinzu = control.add_operator(s, konto.id, actor=_actor())
+            print(f"Betreiber → {konto.email}" + ("" if hinzu else " (war schon Betreiber)"))
             return 0
         if args.cmd.startswith(("user-", "membership-")) or args.cmd == "tenant-admin":
             return _konten(args, settings, engines)

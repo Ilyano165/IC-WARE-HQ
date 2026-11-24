@@ -153,12 +153,15 @@ def test_archivierte_rolle_nicht_vergebbar_aber_entziehbar(rw: RbacWorld) -> Non
 
 # ---------- Bypass ----------
 def test_keine_plattform_rechte_und_keine_flag_route(rw: RbacWorld) -> None:
-    from ichq.api.security import iter_api_routes
+    from ichq.api.security import _markierungen, iter_api_routes
     from ichq.app import create_app
     from ichq.authz.registry import PERMISSIONS
     assert not [p for p in PERMISSIONS if p.startswith(("platform.", "system."))]
-    pfade = {p for p, _, _ in iter_api_routes(create_app(rw.settings, engines=rw.engines))}
-    assert not [p for p in pfade if any(w in p for w in ("platform", "feature", "flag", "superuser"))]
+    routen = [(p, _markierungen(d)[0][0]) for p, _, d in iter_api_routes(create_app(rw.settings, engines=rw.engines))]
+    assert not [p for p, _ in routen if any(w in p for w in ("feature", "flag", "superuser"))]
+    # ADR-021: /platform gibt es, aber NUR mit Betreiber-Marke — nie über ein Rollenrecht einer Firma erreichbar
+    plattform = [(p, m) for p, m in routen if "platform" in p]
+    assert len(plattform) >= 12 and {m for _, m in plattform} == {"operator"}, plattform
     admin = rw.client(rw.admin)
     assert admin.put(f"/api/v1/members/{rw.pid(rw.ma)}/overrides/platform.admin",
                      json={"effect": "allow"}).status_code in (400, 422)
