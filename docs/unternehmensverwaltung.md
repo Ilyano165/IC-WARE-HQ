@@ -77,8 +77,20 @@ Notweg am Server: `hq ichq operator-add --email …`.
 | `POST` | `/api/v1/platform/operators` | operator |
 | `POST` | `/api/v1/platform/operators/remove` | operator (+ nie der letzte) |
 
+### Windows
+
+Startmenü **Erste Firma anlegen** fragt nichts mehr in der Konsole ab: es holt `deploy/hq setup-code --nur-code`,
+prüft das Format (gleiche Regel wie Bash, Test `test_einrichtungscode_gleiche_regel_in_bash_powershell_und_app`) und
+öffnet den Assistenten im Standardbrowser. Der Code wird zusätzlich angezeigt, falls der Browser das Fragment verliert.
+Ist die Installation schon eingerichtet, öffnet es „Firmen verwalten“.
+
+Hinweis: Die Adresse mit Code steht danach im Browserverlauf und kurz in der Prozessliste des Browsers. Das ist
+vertretbar, weil der Code nur einmal und höchstens 24 Stunden gilt und nach der Einrichtung kein neuer mehr ausgestellt wird.
+
 ## Was nicht geprüft ist
 
-- Auf einem echten Windows-PC wurde der Ablauf **nicht** ausgeführt (nur automatisierte Tests gegen PostgreSQL und
-  Browsertests mit Chromium).
+- Auf einem echten Windows-PC wurde der Ablauf **nicht** ausgeführt (nur automatisierte Tests gegen PostgreSQL,
+  Browsertests mit Chromium, Pester-Tests für die Adressbildung im CI-Job `windows`). Ob jeder Standardbrowser das
+  Fragment `#/einrichtung?code=…` beim Öffnen über `Start-Process` behält, ist ungeprüft — deshalb steht der Code auch
+  in der Konsole.
 - 2FA für Betreiber wird empfohlen, aber nicht erzwungen.

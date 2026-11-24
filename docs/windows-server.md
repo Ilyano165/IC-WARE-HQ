@@ -43,7 +43,9 @@ Startmenü → **„Adresse anzeigen (für Nutzer kopieren)“**. Danach weiter 
    Installieren. Ein Konsolenfenster zeigt den Fortschritt (10–20 Minuten: Ubuntu laden und prüfen, Docker,
    Datenbank, Virenscanner, Tunnel). Fehlt WSL noch, verlangt Windows **einen Neustart**; danach läuft es von selbst weiter.
    Den angezeigten **SICHERUNGSSCHLÜSSEL** sofort im Passwortmanager ablegen.
-5. Startmenü → **IC WARE HQ Server → Erste Firma anlegen**, dann **Diagnose** — alles `OK`?
+5. Startmenü → **IC WARE HQ Server → Erste Firma anlegen**: holt einen Einrichtungscode (24 h, einmal) und öffnet
+   den **Einrichtungsassistenten im Browser** (Code → Firma → Zugang → Prüfen; ADR-021). Danach **Diagnose** — alles `OK`?
+   Weitere Firmen: in HQ unter **Firmen verwalten** — keine Konsole nötig.
    Danach vom **Handy ohne WLAN** `https://hq.meine-firma.de` öffnen: Erst das beweist die Erreichbarkeit für alle.
 6. Startmenü → **Externe Sicherung (S3) einrichten** (sonst liegt die Sicherung nur auf diesem PC) und
    **E-Mail-Versand einrichten**.

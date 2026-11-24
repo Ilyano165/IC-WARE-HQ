@@ -54,8 +54,10 @@ sudo HQ_SMTP_PASSWORD='…' deploy/install.sh \
 2. S3-Zugang eintragen: `sudo nano /etc/ichq/backup-s3.env`
    (`AWS_ACCESS_KEY_ID=…`, `AWS_SECRET_ACCESS_KEY=…`, `AWS_DEFAULT_REGION=…`; Modus 600).
 3. Erste Sicherung und Wiederherstellungstest: `sudo deploy/hq backup && sudo deploy/hq backup-verify`
-4. Erste Firma + Company Admin: `sudo deploy/hq setup-admin` (Kürzel z. B. `ic-ware-gbr`; reserviert sind u. a.
-   `ic-ware`, `admin`, `api`, `app`).
+4. Erste Firma + Company Admin: `sudo deploy/hq setup-code` → die angezeigte Adresse
+   `https://<domain>/app/#/einrichtung?code=…` im Browser öffnen und den Assistenten durchgehen (ADR-021). Weitere Firmen
+   legen Betreiber in HQ unter **Firmen verwalten** an. Notweg ohne Browser: `sudo deploy/hq setup-admin` (Kürzel z. B.
+   `ic-ware-gbr`; reserviert sind u. a. `ic-ware`, `admin`, `api`, `app`).
 5. Prüfen: `sudo deploy/hq check` — alles `OK` (Warnungen erklären sich selbst).
 6. Optional Totmannschalter: `HQ_HEARTBEAT_URL=https://hc-ping.com/<uuid>` in `deploy/.env` eintragen.
 

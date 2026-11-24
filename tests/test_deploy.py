@@ -138,6 +138,7 @@ def test_installer_ohne_pflichtangaben_zeigt_hilfe() -> None:
 def test_launcher_hilfe_und_unbekannter_befehl() -> None:
     r = _bash(str(DEPLOY / "hq"), "help")
     assert r.returncode == 0 and "restore" in r.stdout and "setup-admin" in r.stdout
+    assert "setup-code" in r.stdout and "beliebiger ichq-Befehl" in r.stdout          # letzte Hilfezeile nicht abgeschnitten
     r = _bash(str(DEPLOY / "smoke-test.sh"))
     assert r.returncode == 2 and "WEGWERF" in r.stdout                           # ohne --wegwerf passiert nichts
 

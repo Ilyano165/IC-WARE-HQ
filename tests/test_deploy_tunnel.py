@@ -152,6 +152,24 @@ def test_windows_server_prueft_wie_linux() -> None:
     assert "UbuntuSha256 = 'bb415d824822c4b878125729af451a5d18fb13d1cf5cbed9a7393ad64ac6039e'" in ps
 
 
+def test_einrichtungscode_gleiche_regel_in_bash_powershell_und_app() -> None:
+    """ADR-021: der Code aus ``ichq setup-code`` muss die Prüfung in deploy/hq UND in Windows bestehen; Fremdes nicht
+    (die Windows-Seite baut daraus eine Adresse für Start-Process)."""
+    import secrets
+
+    hq = (DEPLOY / "hq").read_text()
+    ps = (REPO / "windows/server/IchqServer.psm1").read_text(encoding="utf-8-sig")
+    m_bash = re.search(r'setup_code\(\) \{.*?=~ (\^\S+\$)', hq, re.S)
+    m_ps = re.search(r"Get-IchqEinrichtungsUrl \{.*?-cnotmatch '(\^[^']+\$)'", ps, re.S)
+    assert m_bash and m_ps and m_bash.group(1) == m_ps.group(1)
+    muster = re.compile(m_bash.group(1))
+    for _ in range(50):                                   # dieselbe Erzeugung wie control.new_setup_code
+        assert muster.fullmatch(secrets.token_urlsafe(24))
+    for boese in ("abc", "a" * 65, "x" * 30 + "&calc", "x" * 30 + "'; rm -rf /", "x" * 30 + "#/y", "x" * 30 + "\n"):
+        assert not muster.fullmatch(boese), boese                 # fullmatch = Bash-Semantik von „$“
+    assert "-match '\\s'" in ps                                      # .NET-„$“ ließe ein „\n“ am Ende durch
+
+
 # ---- Schnellstart ohne Cloudflare-Konto (ADR-019) --------------------------------------------------------------------
 def test_schnellstart_dienst_ohne_token_mit_gleicher_fester_adresse() -> None:
     d = _compose()["services"]["cloudflared-schnell"]

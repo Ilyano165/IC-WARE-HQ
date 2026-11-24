@@ -11,7 +11,8 @@ Entwicklung in Meilensteinen M0–M26 (Roadmap: `docs/architecture.md`, M0-Beric
 (`docs/m3-mandanten.md`); **M4 Rollen & Rechte** umgesetzt (`docs/authorization.md`, ADR-011); **U1 Oberfläche** im IC-Ware-Design (`docs/ui.md`, ADR-013); **D0 Dashboard** (`docs/d0-dashboard.md`, ADR-014); **Betrieb** mit Installer/Launcher, Virenprüfung (`docs/server-setup.md`, ADR-015); **Launch-Vorbereitung 1.0.0rc1**: E-Mail-Outbox, verschlüsselte externe Sicherung mit Wiederherstellungstest, Monitoring, Sicherheitsprüfung (ADR-016, `docs/security-review.md`); **Zugang**: öffentliche Adresse mit Diagnose, Web-App-Manifest,
 Windows-Launcher + Installer (ADR-017, `docs/windows.md`); **Server auf Windows-PC** über WSL2 + Cloudflare Tunnel,
 Domain änderbar (ADR-018, `docs/windows-server.md`), Schnellstart ohne Konto mit Zufallsadresse (ADR-019); **Fachmodule E1–E9** (ADR-020, `docs/fachmodule.md`, Bericht `docs/enterprise-bericht.md`): CRM, Projekte, Rechnungen,
-Belege, Liquidität, Fristen, Verträge, Monatsabschluss/Export, Fahrtenbuch/Reisen, Profitabilität, Dashboard; **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
+Belege, Liquidität, Fristen, Verträge, Monatsabschluss/Export, Fahrtenbuch/Reisen, Profitabilität, Dashboard; **Unternehmensverwaltung** in der Oberfläche (ADR-021,
+`docs/unternehmensverwaltung.md`): Betreiber, Ersteinrichtung mit Einmalcode, Firmen-Assistent; **Tor 1 erreicht** (CI grün auf PR #1, Commit 737db04). Reihenfolge laut Vision:
 Tor 1/M3 → C0 → U1 → D0 → S1… — **keine D0-/S-Arbeit vor Tor 1.** Produktvision v2 ist ein **unbestätigter
 Entwurf** (`docs/produktvision-v2.md`). Nichts davon ist produktionsreif.
 
@@ -28,7 +29,7 @@ etwas schönreden.
    `FORCE`, zusammengesetzte Fremdschlüssel `(tenant_id, x_id)`. Keine neue Tabelle ohne alle drei —
    Checkliste in `docs/migrations.md`.
 4. **Jede Route hat genau eine Sicherheitsmarke** (`public`, `mfa_challenge`, `any_session`,
-   `signed_in`, `authenticated`, `require`). Fehlt sie, startet die App nicht — so soll es bleiben.
+   `signed_in`, `authenticated`, `require`, `operator`). Fehlt sie, startet die App nicht — so soll es bleiben.
 5. **Authentifizierung ≠ Autorisierung.** `ichq.auth` beantwortet „wer?", `ichq.authz` „was darf er?".
    Rechte kommen ausschließlich aus Rollen der Mitgliedschaft. Keine `if role == "..."`-Abfragen.
 6. **Nie Geheimnisse loggen oder im Klartext speichern.** Tokens nur als Hash, Passwörter nur Argon2id,
@@ -73,6 +74,7 @@ src/ichq/
   activity/    C0: Benutzerverlauf (≠ Audit)
   relations/   C0: Verknüpfen, Freigeben (Services)
   comments/ tasks/ documents/   C0: Fachbausteine auf dem Objektmodell; documents/scan.py: ClamAV-Prüfung (ADR-015)
+  control/     ADR-021: Betreiber (`platform_operators`), Einrichtungscodes, Firma+Admin in einem Zug (onboarding.py)
   members/     M3: Mitglieder, Einladungen (Annehmen über auth/platform/app-Rolle), Last-Admin-Schutz
   notifications/  C0: Engine (Rechte beim Zustellen), Outbox-Handler, Regeln (`ichq notifications-scan`)
   mail/        ADR-016: Mail-Outbox (Token-Mails verschlüsselt), Versand durch den Worker, Vorlagen, Sicherheitshinweise
@@ -177,8 +179,18 @@ Noch offen aus M2: echter SMTP-Versand. (Compose-Smoke-Test erledigt: `deploy/sm
   Last-Admin-Schutz umgehbar.
 - **Delegation:** Obergrenze, keine Lücken-Löschung, Rang, kein Selbstbedienen — neue Vergabewege über
   `ichq.authz.delegation.manageable` und die Obergrenzen-Prüfung, nie daran vorbei.
-- **Company Admin** (`grants_all`) speichert keine Rechte; DB-Trigger sperren Änderungen. Plattform-Rechte gibt es nicht.
+- **Company Admin** (`grants_all`) speichert keine Rechte; DB-Trigger sperren Änderungen. Plattform-Rechte gibt es nicht (Betreiber sind kein Recht, ADR-021).
 - **Neue Route ⇒** `ichq routes-doc` neu erzeugen (`docs/authorization.md`, `tests/test_m4_docs.py`).
+
+## Regeln der Unternehmensverwaltung (ADR-021)
+
+- **Betreiber ≠ Recht.** `platform_operators` gibt nur Zugang zu `/api/v1/platform/*` (Marke `operator()`, je Anfrage aus
+  der DB), **nie** Rechte in einer Firma. Kein `platform.*`-Recht in der Registry (`test_m4_delegation`).
+- Firmen nur über `ichq.control.onboarding.create_company` anlegen: **erst alles prüfen, dann schreiben**; nach außen
+  Kürzel und E-Mail, keine UUIDs. Löschen gibt es nicht — Deaktivieren (endgültig) mit Begründung.
+- Einrichtungscode nur als Hash, 24 h, einmal, nur solange es keinen Betreiber gibt; jede Ablehnung sieht gleich aus.
+- `/platform`-Routen sind keine Mandantenrouten (nicht im IDOR-Generator); dafür prüft `test_control.py` 401/403 für JEDE.
+- Mutationen in `scripts/mutation-control.sh`.
 
 ## Regeln der Oberfläche (U1, ADR-013)
 

@@ -200,3 +200,17 @@ Describe 'einrichten.ps1 -NurPruefen (ändert nichts)' {
         Remove-Item $script:TokenDatei
     }
 }
+
+Describe 'Einrichtungsassistent (ADR-021)' {
+    It 'Adresse mit Code im Fragment' {
+        $c = 'AbCdEfGhIjKlMnOpQrStUvWxYz012345'
+        Get-IchqEinrichtungsUrl -Domain 'hq.firma.de' -Code $c | Should -Be "https://hq.firma.de/app/#/einrichtung?code=$c"
+    }
+    It 'Fremdes wird abgelehnt: <Code>' -ForEach @(
+        @{ Code = '' }, @{ Code = 'kurz' }, @{ Code = ('x' * 65) }, @{ Code = (('x' * 30) + '&calc') },
+        @{ Code = (('x' * 30) + "`n") }, @{ Code = (('x' * 30) + ' x') }, @{ Code = (('x' * 30) + '"; rm') }
+    ) { { Get-IchqEinrichtungsUrl -Domain 'hq.firma.de' -Code $Code } | Should -Throw }
+    It 'Ungültige Domain wird abgelehnt' {
+        { Get-IchqEinrichtungsUrl -Domain 'hq.firma.de/x' -Code ('x' * 32) } | Should -Throw
+    }
+}

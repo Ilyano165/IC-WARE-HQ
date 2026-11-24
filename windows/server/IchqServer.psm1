@@ -210,6 +210,30 @@ function Invoke-IchqLinux {
     return $LASTEXITCODE
 }
 
+function Get-IchqLinuxAusgabe {
+    <# Wie Invoke-IchqLinux, gibt aber die Standardausgabe als Zeilen zurück (Fehlerausgabe läuft durch).
+       Exitcode danach in $LASTEXITCODE. #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([Parameter(Mandatory)][string]$Skript)
+    $env:WSL_UTF8 = '1'
+    $OutputEncoding = [Text.UTF8Encoding]::new($false)
+    $voll = "cd $script:LinuxQuelle 2>/dev/null || true`n$Skript`n"
+    return @($voll | & wsl.exe -d $script:Distro -u root -- bash -c "tr -d '\r' | bash -s")
+}
+
+function Get-IchqEinrichtungsUrl {
+    <# Adresse des Einrichtungsassistenten (ADR-021). Der Code steht im Fragment (#…) — er geht nie an den Server-Log.
+       Nur geprüfte Domain und ein Code im Format von secrets.token_urlsafe, sonst Fehler (landet in einer Kommandozeile). #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Domain, [Parameter(Mandatory)][AllowEmptyString()][string]$Code)
+    if (-not (Test-IchqDomain $Domain)) { throw "Ungültige Domain: $Domain" }
+    # .NET: „$" passt auch vor einem letzten Zeilenumbruch — deshalb Länge zusätzlich exakt prüfen
+    if ($Code -cnotmatch '^[A-Za-z0-9_-]{20,64}$' -or $Code -match '\s') { throw 'Kein gültiger Einrichtungscode' }
+    return "https://$Domain/app/#/einrichtung?code=$Code"
+}
+
 function Get-IchqEnvWert {
     <# Wert aus deploy/.env in der Linux-Umgebung (z. B. ICHQ_DOMAIN) #>
     [CmdletBinding()]
@@ -229,4 +253,4 @@ function Get-IchqDomain {
 
 Export-ModuleMember -Function Get-IchqKonstante, Get-IchqFehlendeWslFunktion, Enable-IchqWslFunktion, Get-IchqVirtualisierung, Resolve-IchqWslFehler, Save-IchqDownload, Get-IchqFreierPlatzGb, Test-IchqDomain, Test-IchqEmail, Test-IchqToken, ConvertTo-IchqToken,
     Assert-IchqPruefsumme, ConvertTo-IchqWslPfad, Set-IchqAdminZugriff, Get-IchqWslListe, Test-IchqWslBereit,
-    Invoke-IchqLinux, Get-IchqEnvWert, Get-IchqDomain
+    Invoke-IchqLinux, Get-IchqLinuxAusgabe, Get-IchqEinrichtungsUrl, Get-IchqEnvWert, Get-IchqDomain

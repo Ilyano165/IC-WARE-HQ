@@ -17,3 +17,4 @@ mutation "Letzter Betreiber entfernbar" "control/service.py" "    if len(alle) =
 mutation "Firma vor Passwortprüfung angelegt" "control/onboarding.py" "    _pruefe_admin(admin)
     with platform_transaction|||    with platform_transaction" "$CTL"
 mutation "Betreibertabelle für Mandanten-Rolle lesbar" "migrations/versions/0017_control.py" "    GRANT SELECT, INSERT, DELETE ON platform_operators TO ichq_platform;|||    GRANT SELECT, INSERT, DELETE ON platform_operators TO ichq_platform, ichq_app;" "$CTL"
+mutation_deploy "Einrichtungscode in deploy/hq ungeprüft" "hq" "  [[ \"\$code\" =~ ^[A-Za-z0-9_-]{20,64}\$ ]] || fehler|||  [[ \"\$code\" =~ .+ ]] || fehler" "tests/test_deploy_tunnel.py"

@@ -16,7 +16,8 @@
 #   deploy/hq backup-verify          Wiederherstellungstest in Wegwerf-Umgebung (Prüfsummen, Daten, Dateien)
 #   deploy/hq backup-status          letzte Sicherung/Prüfung, Snapshots
 #   deploy/hq restore [snap] --yes   Sicherung vollständig wiederherstellen (überschreibt alles!)
-#   deploy/hq setup-admin            erste Firma + Company Admin anlegen (fragt alles ab)
+#   deploy/hq setup-code [--nur-code] Einrichtungscode für die Ersteinrichtung im Browser (ADR-021, Normalweg)
+#   deploy/hq setup-admin            Notweg ohne Browser: erste Firma + Company Admin in der Konsole
 #   deploy/hq ichq <befehl> …        beliebiger ichq-Befehl im App-Container, z. B. ichq tenant-show <slug>
 set -euo pipefail
 
@@ -118,6 +119,17 @@ eingabe() {   # eingabe <variable> <frage> [geheim]
   printf -v "$1" '%s' "$wert"
 }
 
+setup_code() {   # Einmaliger Code für #/einrichtung (24 h, nur solange es keinen Betreiber gibt) — Normalweg
+  local code
+  code="$(compose exec -T app ichq setup-code)" || return 1
+  [[ "$code" =~ ^[A-Za-z0-9_-]{20,64}$ ]] || fehler "unerwartete Ausgabe statt eines Einrichtungscodes"
+  if [ "${1:-}" = --nur-code ]; then echo "$code"; return 0; fi
+  adresse_zeigen --still
+  echo "Einrichtungscode (24 Stunden gültig, nur einmal verwendbar): $code"
+  echo "Im Browser öffnen:  https://$(env_wert ICHQ_DOMAIN)/app/#/einrichtung?code=$code"
+  echo 'Danach legen Betreiber weitere Firmen in HQ unter „Firmen verwalten“ an.'
+}
+
 setup_admin() {
   local firma slug mail name pw pw2 tid
   echo "Erste Firma und ihr Company Admin. Kürzel: Kleinbuchstaben/Ziffern/Bindestrich (z. B. ic-ware-gbr)."
@@ -148,7 +160,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 befehl="${1:-status}"; shift || true
 case "$befehl" in
-  -h|--help|help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help|help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 voraussetzungen
 case "$befehl" in
@@ -180,6 +192,7 @@ case "$befehl" in
   backup-verify) backup_verify ;;
   backup-status) backup_status ;;
   restore) restore "$@" ;;
+  setup-code) setup_code "$@" ;;
   setup-admin) setup_admin ;;
   ichq) if [ -t 0 ]; then compose exec app ichq "$@"; else compose exec -T app ichq "$@"; fi ;;
   *) fehler "unbekannter Befehl: $befehl (deploy/hq help)" ;;

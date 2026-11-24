@@ -105,18 +105,28 @@ Die Domain muss in Cloudflare verwaltet sein.
         Ende (Invoke-IchqLinux "export HQ_TUNNEL_TOKEN='$t'`ndeploy/hq tunnel-token </dev/null")
     }
     'ErsteFirma' {
-        Write-Host 'Erste Firma und ihr Administrator (Kürzel: Kleinbuchstaben/Ziffern/Bindestrich).'
-        $firma = Read-Host 'Firmenname'; $slug = Read-Host 'Kürzel (z. B. meine-firma)'
-        $mail = Read-Host 'E-Mail des Admins'; $name = Read-Host 'Name des Admins'
-        $pw = Read-Host 'Passwort (mind. 12 Zeichen)' -AsSecureString
-        $klar = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pw))
-        foreach ($w in @($firma, $slug, $mail, $name, $klar)) {
-            if ([string]::IsNullOrWhiteSpace($w) -or $w -match "[`r`n]") { Write-Host 'Leere oder mehrzeilige Eingabe.'; Ende 2 }
+        # ADR-021: kein Konsolen-Formular mehr — Einrichtungscode holen und den Assistenten im Browser öffnen
+        if ((Get-IchqEnvWert HQ_ZUGANG) -eq 'schnell') { $null = Invoke-IchqLinux 'deploy/hq adresse --still' }
+        $d = Get-IchqDomain
+        if (-not (Test-IchqDomain $d)) { Write-Host "Keine gültige Domain eingerichtet ($d)."; Ende 1 }
+        $zeilen = Get-IchqLinuxAusgabe 'deploy/hq setup-code --nur-code 2>&1'
+        $code = ((@($zeilen) | Select-Object -Last 1) + '').Trim()
+        if ($LASTEXITCODE -ne 0 -or $code -cnotmatch '^[A-Za-z0-9_-]{20,64}$') {
+            if (($zeilen -join ' ') -match 'bereits eingerichtet') {
+                Write-Host 'Die Installation ist bereits eingerichtet. Weitere Firmen legen Betreiber in HQ an: „Firmen verwalten".'
+                Start-Process "https://$d/app/#/plattform/firmen"
+                Ende 0
+            }
+            $zeilen | Out-Host
+            Write-Host 'Kein Einrichtungscode erhalten — läuft der Server? Startmenü → „Status".'
+            Ende 1
         }
-        $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((($firma, $slug, $mail, $name, $klar) -join "`n") + "`n"))
-        $klar = $null
-        # Eingaben per Base64 über STDIN-Skript an setup-admin — Passwort nie in einer Kommandozeile
-        Ende (Invoke-IchqLinux "printf '%s\n' '$b64' | base64 -d | deploy/hq setup-admin")
+        $url = Get-IchqEinrichtungsUrl -Domain $d -Code $code
+        Write-Host "Einrichtungscode (24 Stunden gültig, nur einmal):  $code" -ForegroundColor Green
+        Write-Host "Der Browser öffnet den Einrichtungsassistenten. Falls nicht:  $url"
+        Write-Host "Notweg ohne Browser: Eingabeaufforderung →  wsl -d $($K.Distro) -u root  →  cd $($K.LinuxQuelle) && deploy/hq setup-admin"
+        Start-Process $url
+        Ende 0
     }
     'SicherungExtern' {
         Write-Host 'Externe, verschlüsselte Sicherung (S3-kompatibel, z. B. Hetzner Object Storage, Backblaze B2, AWS).'
